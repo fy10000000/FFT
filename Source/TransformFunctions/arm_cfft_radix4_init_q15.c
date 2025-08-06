@@ -77,7 +77,7 @@ ARM_DSP_ATTRIBUTE arm_status arm_cfft_radix4_init_q15(
   /*  Initialise the FFT length */
   S->fftLen = fftLen;
   /*  Initialise the Twiddle coefficient pointer */
-  S->pTwiddle = (q15_t *) twiddleCoef_8192_q15; // was 4096
+  S->pTwiddle = (q15_t *) twiddleCoef_16384_q15; // was 4096
   /*  Initialise the Flag for selection of CFFT or CIFFT */
   S->ifftFlag = ifftFlag;
   /*  Initialise the Flag for calculation Bit reversal or not */
@@ -118,9 +118,9 @@ ARM_DSP_ATTRIBUTE arm_status arm_cfft_radix4_init_q15(
 
   case 1024U:
     /*  Initializations of structure parameters for 1024 point FFT */
-    S->twidCoefModifier = 8U; // was 4
-    S->bitRevFactor = 8U;
-    S->pBitRevTable = (uint16_t *) & armBitRevTable[7]; // was 3
+    S->twidCoefModifier = 16U; // was 4
+    S->bitRevFactor = 16U;
+    S->pBitRevTable = (uint16_t *) & armBitRevTable[15]; // was 3
 
     break;
 

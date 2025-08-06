@@ -145,11 +145,11 @@ ARM_DSP_ATTRIBUTE arm_status arm_cfft_radix2_init_f32(
     /*  Initializations of structure parameters for 1024 point FFT */
 
     /*  Initialise the twiddle coef modifier value */
-    S->twidCoefModifier = 8U; // was 4
+    S->twidCoefModifier = 4U; // was 4
     /*  Initialise the bit reversal table modifier */
-    S->bitRevFactor = 8U; // was 4
+    S->bitRevFactor = 4U; // was 4
     /*  Initialise the bit reversal table pointer */
-    S->pBitRevTable = (uint16_t *) & armBitRevTable[7]; // was 3
+    S->pBitRevTable = (uint16_t *) & armBitRevTable[3]; // was 3
     /*  Initialise the 1/fftLen Value */
     S->onebyfftLen = 0.0009765625f;
     break;

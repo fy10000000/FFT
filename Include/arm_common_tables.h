@@ -38,7 +38,7 @@ extern "C"
 #endif
 
   /* Double Precision Float CFFT twiddles */
-    extern const uint16_t armBitRevTable[1024*8];
+  extern const uint16_t armBitRevTable[1024 * 4]; // was 1024*4 but should be 1024*2
 
     extern const uint64_t twiddleCoefF64_16[32];
 
@@ -81,7 +81,7 @@ extern "C"
     extern const float32_t twiddleCoef_8192[16384];
 
     extern const float32_t twiddleCoef_16384[32768]; 
-    #define twiddleCoef twiddleCoef_8192 // was 8192
+    #define twiddleCoef twiddleCoef_4096 // was 8192
 
   /* Q31 */
 
@@ -125,7 +125,7 @@ extern "C"
 
     extern const q15_t twiddleCoef_4096_q15[6144];
 
-    extern const q15_t twiddleCoef_8192_q15[12288]; // 50% over head
+    extern const q15_t twiddleCoef_8192_q15[12288]; // 50% over head 1
 
     extern const q15_t twiddleCoef_16384_q15[24576]; // 50% overhead
 
