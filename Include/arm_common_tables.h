@@ -125,9 +125,9 @@ extern "C"
 
     extern const q15_t twiddleCoef_4096_q15[6144];
 
-    extern const q15_t twiddleCoef_8192_q15[12288]; // 50% over head 1
+    extern const q15_t twiddleCoef_8192_q15[12288]; 
 
-    extern const q15_t twiddleCoef_16384_q15[24576]; // 50% overhead
+    extern const q15_t twiddleCoef_16384_q15[24576]; // 1.5 xmax FFT size
 
   /* Double Precision Float RFFT twiddles */
     extern const uint64_t twiddleCoefF64_rfft_32[32];

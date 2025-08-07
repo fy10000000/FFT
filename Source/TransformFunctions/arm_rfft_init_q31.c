@@ -465,7 +465,7 @@ ARM_DSP_ATTRIBUTE arm_status arm_rfft_init_q31(
     {
     //case 16384U:
     //    status = arm_rfft_init_16384_q31( S,ifftFlagR,bitReverseFlag );
-    //    break; // fixme
+    //    break; // fixme fix compilation of RFFTINIT_Q31 before uncommenting cf arm_rfft_init_##LEN##_q31 macro
     case 8192U:
         status = arm_rfft_init_8192_q31( S,ifftFlagR,bitReverseFlag );
         break;

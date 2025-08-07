@@ -175,7 +175,7 @@ const arm_cfft_instance_q31 arm_cfft_sR_q31_len8192 ARM_DSP_TABLE_ATTRIBUTE = {
 
 const arm_cfft_instance_q31 arm_cfft_sR_q31_len16384 ARM_DSP_TABLE_ATTRIBUTE = {
   16384, twiddleCoef_16384_q31, armBitRevIndexTable_fixed_16384, ARMBITREVINDEXTABLE_FIXED_16384_TABLE_LENGTH
-}; // fixme
+}; // findme
 
 #endif 
 

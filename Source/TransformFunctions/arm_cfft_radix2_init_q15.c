@@ -78,7 +78,7 @@ ARM_DSP_ATTRIBUTE arm_status arm_cfft_radix2_init_q15(
   S->fftLen = fftLen;
 
   /*  Initialise the Twiddle coefficient pointer */
-  S->pTwiddle = (q15_t *) twiddleCoef_16384_q15; //fixme was 4096
+  S->pTwiddle = (q15_t *) twiddleCoef_16384_q15; // was 4096
   /*  Initialise the Flag for selection of CFFT or CIFFT */
   S->ifftFlag = ifftFlag;
   /*  Initialise the Flag for calculation Bit reversal or not */

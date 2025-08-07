@@ -149,7 +149,7 @@ ARM_DSP_ATTRIBUTE arm_status arm_rfft_init_##LEN##_q15( arm_rfft_instance_q15 * 
                     This function also initializes Twiddle factor table.
 
   */
-RFFTINIT_Q15(16384, 8192, 1) // fixme is 1 OK?
+RFFTINIT_Q15(16384, 8192, 1) 
 
 /**
   @brief         Initialization function for the 8192 pt Q15 real FFT.
