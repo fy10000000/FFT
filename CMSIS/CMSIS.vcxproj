@@ -1,0 +1,440 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup Label="ProjectConfigurations">
+    <ProjectConfiguration Include="Debug|Win32">
+      <Configuration>Debug</Configuration>
+      <Platform>Win32</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="Release|Win32">
+      <Configuration>Release</Configuration>
+      <Platform>Win32</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="Debug|x64">
+      <Configuration>Debug</Configuration>
+      <Platform>x64</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="Release|x64">
+      <Configuration>Release</Configuration>
+      <Platform>x64</Platform>
+    </ProjectConfiguration>
+  </ItemGroup>
+  <PropertyGroup Label="Globals">
+    <VCProjectVersion>17.0</VCProjectVersion>
+    <Keyword>Win32Proj</Keyword>
+    <ProjectGuid>{25253c35-a0a5-44ad-9f6b-2dc53d442772}</ProjectGuid>
+    <RootNamespace>CMSIS</RootNamespace>
+    <WindowsTargetPlatformVersion>10.0</WindowsTargetPlatformVersion>
+  </PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'" Label="Configuration">
+    <ConfigurationType>Application</ConfigurationType>
+    <UseDebugLibraries>true</UseDebugLibraries>
+    <PlatformToolset>v143</PlatformToolset>
+    <CharacterSet>Unicode</CharacterSet>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'" Label="Configuration">
+    <ConfigurationType>Application</ConfigurationType>
+    <UseDebugLibraries>false</UseDebugLibraries>
+    <PlatformToolset>v143</PlatformToolset>
+    <WholeProgramOptimization>true</WholeProgramOptimization>
+    <CharacterSet>Unicode</CharacterSet>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'" Label="Configuration">
+    <ConfigurationType>Application</ConfigurationType>
+    <UseDebugLibraries>true</UseDebugLibraries>
+    <PlatformToolset>v143</PlatformToolset>
+    <CharacterSet>Unicode</CharacterSet>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'" Label="Configuration">
+    <ConfigurationType>Application</ConfigurationType>
+    <UseDebugLibraries>false</UseDebugLibraries>
+    <PlatformToolset>v143</PlatformToolset>
+    <WholeProgramOptimization>true</WholeProgramOptimization>
+    <CharacterSet>Unicode</CharacterSet>
+  </PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.props" />
+  <ImportGroup Label="ExtensionSettings">
+  </ImportGroup>
+  <ImportGroup Label="Shared">
+  </ImportGroup>
+  <ImportGroup Label="PropertySheets" Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
+    <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
+  </ImportGroup>
+  <ImportGroup Label="PropertySheets" Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
+    <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
+  </ImportGroup>
+  <ImportGroup Label="PropertySheets" Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
+    <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
+  </ImportGroup>
+  <ImportGroup Label="PropertySheets" Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
+    <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
+  </ImportGroup>
+  <PropertyGroup Label="UserMacros" />
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
+    <ClCompile>
+      <WarningLevel>Level3</WarningLevel>
+      <SDLCheck>true</SDLCheck>
+      <PreprocessorDefinitions>WIN32;_DEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <ConformanceMode>true</ConformanceMode>
+    </ClCompile>
+    <Link>
+      <SubSystem>Console</SubSystem>
+      <GenerateDebugInformation>true</GenerateDebugInformation>
+    </Link>
+  </ItemDefinitionGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
+    <ClCompile>
+      <WarningLevel>Level3</WarningLevel>
+      <FunctionLevelLinking>true</FunctionLevelLinking>
+      <IntrinsicFunctions>true</IntrinsicFunctions>
+      <SDLCheck>true</SDLCheck>
+      <PreprocessorDefinitions>WIN32;NDEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <ConformanceMode>true</ConformanceMode>
+    </ClCompile>
+    <Link>
+      <SubSystem>Console</SubSystem>
+      <EnableCOMDATFolding>true</EnableCOMDATFolding>
+      <OptimizeReferences>true</OptimizeReferences>
+      <GenerateDebugInformation>true</GenerateDebugInformation>
+    </Link>
+  </ItemDefinitionGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
+    <ClCompile>
+      <WarningLevel>Level3</WarningLevel>
+      <SDLCheck>true</SDLCheck>
+      <PreprocessorDefinitions>_DEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <ConformanceMode>true</ConformanceMode>
+      <AdditionalIncludeDirectories>C:\work\CMSIS-DSP\CMSIS-DSP-main-mod\Include;C:\work\CMSIS-DSP\CMSIS-DSP-main-mod\Include\dsp;</AdditionalIncludeDirectories>
+    </ClCompile>
+    <Link>
+      <SubSystem>Console</SubSystem>
+      <GenerateDebugInformation>true</GenerateDebugInformation>
+      <SpecifySectionAttributes>
+      </SpecifySectionAttributes>
+      <ForceFileOutput>MultiplyDefinedSymbolOnly</ForceFileOutput>
+    </Link>
+  </ItemDefinitionGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
+    <ClCompile>
+      <WarningLevel>Level3</WarningLevel>
+      <FunctionLevelLinking>true</FunctionLevelLinking>
+      <IntrinsicFunctions>true</IntrinsicFunctions>
+      <SDLCheck>true</SDLCheck>
+      <PreprocessorDefinitions>NDEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <ConformanceMode>true</ConformanceMode>
+    </ClCompile>
+    <Link>
+      <SubSystem>Console</SubSystem>
+      <EnableCOMDATFolding>true</EnableCOMDATFolding>
+      <OptimizeReferences>true</OptimizeReferences>
+      <GenerateDebugInformation>true</GenerateDebugInformation>
+    </Link>
+  </ItemDefinitionGroup>
+  <ItemGroup>
+    <ClCompile Include="..\Source\BasicMathFunctions\arm_abs_f16.c" />
+    <ClCompile Include="..\Source\BasicMathFunctions\arm_abs_f32.c" />
+    <ClCompile Include="..\Source\BasicMathFunctions\arm_abs_f64.c" />
+    <ClCompile Include="..\Source\BasicMathFunctions\arm_abs_q15.c" />
+    <ClCompile Include="..\Source\BasicMathFunctions\arm_abs_q31.c" />
+    <ClCompile Include="..\Source\BasicMathFunctions\arm_abs_q7.c" />
+    <ClCompile Include="..\Source\BasicMathFunctions\arm_add_f16.c" />
+    <ClCompile Include="..\Source\BasicMathFunctions\arm_add_f32.c" />
+    <ClCompile Include="..\Source\BasicMathFunctions\arm_add_f64.c" />
+    <ClCompile Include="..\Source\BasicMathFunctions\arm_add_q15.c" />
+    <ClCompile Include="..\Source\BasicMathFunctions\arm_add_q31.c" />
+    <ClCompile Include="..\Source\BasicMathFunctions\arm_add_q7.c" />
+    <ClCompile Include="..\Source\BasicMathFunctions\arm_and_u16.c" />
+    <ClCompile Include="..\Source\BasicMathFunctions\arm_and_u32.c" />
+    <ClCompile Include="..\Source\BasicMathFunctions\arm_and_u8.c" />
+    <ClCompile Include="..\Source\BasicMathFunctions\arm_clip_f16.c" />
+    <ClCompile Include="..\Source\BasicMathFunctions\arm_clip_f32.c" />
+    <ClCompile Include="..\Source\BasicMathFunctions\arm_clip_q15.c" />
+    <ClCompile Include="..\Source\BasicMathFunctions\arm_clip_q31.c" />
+    <ClCompile Include="..\Source\BasicMathFunctions\arm_clip_q7.c" />
+    <ClCompile Include="..\Source\BasicMathFunctions\arm_dot_prod_f16.c" />
+    <ClCompile Include="..\Source\BasicMathFunctions\arm_dot_prod_f32.c" />
+    <ClCompile Include="..\Source\BasicMathFunctions\arm_dot_prod_f64.c" />
+    <ClCompile Include="..\Source\BasicMathFunctions\arm_dot_prod_q15.c" />
+    <ClCompile Include="..\Source\BasicMathFunctions\arm_dot_prod_q31.c" />
+    <ClCompile Include="..\Source\BasicMathFunctions\arm_dot_prod_q7.c" />
+    <ClCompile Include="..\Source\BasicMathFunctions\arm_mult_f16.c" />
+    <ClCompile Include="..\Source\BasicMathFunctions\arm_mult_f32.c" />
+    <ClCompile Include="..\Source\BasicMathFunctions\arm_mult_f64.c" />
+    <ClCompile Include="..\Source\BasicMathFunctions\arm_mult_q15.c" />
+    <ClCompile Include="..\Source\BasicMathFunctions\arm_mult_q31.c" />
+    <ClCompile Include="..\Source\BasicMathFunctions\arm_mult_q7.c" />
+    <ClCompile Include="..\Source\BasicMathFunctions\arm_negate_f16.c" />
+    <ClCompile Include="..\Source\BasicMathFunctions\arm_negate_f32.c" />
+    <ClCompile Include="..\Source\BasicMathFunctions\arm_negate_f64.c" />
+    <ClCompile Include="..\Source\BasicMathFunctions\arm_negate_q15.c" />
+    <ClCompile Include="..\Source\BasicMathFunctions\arm_negate_q31.c" />
+    <ClCompile Include="..\Source\BasicMathFunctions\arm_negate_q7.c" />
+    <ClCompile Include="..\Source\BasicMathFunctions\arm_not_u16.c" />
+    <ClCompile Include="..\Source\BasicMathFunctions\arm_not_u32.c" />
+    <ClCompile Include="..\Source\BasicMathFunctions\arm_not_u8.c" />
+    <ClCompile Include="..\Source\BasicMathFunctions\arm_offset_f16.c" />
+    <ClCompile Include="..\Source\BasicMathFunctions\arm_offset_f32.c" />
+    <ClCompile Include="..\Source\BasicMathFunctions\arm_offset_f64.c" />
+    <ClCompile Include="..\Source\BasicMathFunctions\arm_offset_q15.c" />
+    <ClCompile Include="..\Source\BasicMathFunctions\arm_offset_q31.c" />
+    <ClCompile Include="..\Source\BasicMathFunctions\arm_offset_q7.c" />
+    <ClCompile Include="..\Source\BasicMathFunctions\arm_or_u16.c" />
+    <ClCompile Include="..\Source\BasicMathFunctions\arm_or_u32.c" />
+    <ClCompile Include="..\Source\BasicMathFunctions\arm_or_u8.c" />
+    <ClCompile Include="..\Source\BasicMathFunctions\arm_scale_f16.c" />
+    <ClCompile Include="..\Source\BasicMathFunctions\arm_scale_f32.c" />
+    <ClCompile Include="..\Source\BasicMathFunctions\arm_scale_f64.c" />
+    <ClCompile Include="..\Source\BasicMathFunctions\arm_scale_q15.c" />
+    <ClCompile Include="..\Source\BasicMathFunctions\arm_scale_q31.c" />
+    <ClCompile Include="..\Source\BasicMathFunctions\arm_scale_q7.c" />
+    <ClCompile Include="..\Source\BasicMathFunctions\arm_shift_q15.c" />
+    <ClCompile Include="..\Source\BasicMathFunctions\arm_shift_q31.c" />
+    <ClCompile Include="..\Source\BasicMathFunctions\arm_shift_q7.c" />
+    <ClCompile Include="..\Source\BasicMathFunctions\arm_sub_f16.c" />
+    <ClCompile Include="..\Source\BasicMathFunctions\arm_sub_f32.c" />
+    <ClCompile Include="..\Source\BasicMathFunctions\arm_sub_f64.c" />
+    <ClCompile Include="..\Source\BasicMathFunctions\arm_sub_q15.c" />
+    <ClCompile Include="..\Source\BasicMathFunctions\arm_sub_q31.c" />
+    <ClCompile Include="..\Source\BasicMathFunctions\arm_sub_q7.c" />
+    <ClCompile Include="..\Source\BasicMathFunctions\arm_xor_u16.c" />
+    <ClCompile Include="..\Source\BasicMathFunctions\arm_xor_u32.c" />
+    <ClCompile Include="..\Source\BasicMathFunctions\arm_xor_u8.c" />
+    <ClCompile Include="..\Source\BasicMathFunctions\BasicMathFunctions.c" />
+    <ClCompile Include="..\Source\BasicMathFunctions\BasicMathFunctionsF16.c" />
+    <ClCompile Include="..\Source\CommonTables\arm_common_tables.c" />
+    <ClCompile Include="..\Source\CommonTables\arm_common_tables_f16.c" />
+    <ClCompile Include="..\Source\CommonTables\arm_const_structs.c" />
+    <ClCompile Include="..\Source\CommonTables\arm_const_structs_f16.c" />
+    <ClCompile Include="..\Source\CommonTables\arm_mve_tables.c" />
+    <ClCompile Include="..\Source\CommonTables\arm_mve_tables_f16.c" />
+    <ClCompile Include="..\Source\CommonTables\arm_neon_tables.c" />
+    <ClCompile Include="..\Source\CommonTables\arm_neon_tables_f16.c" />
+    <ClCompile Include="..\Source\CommonTables\CommonTables.c" />
+    <ClCompile Include="..\Source\CommonTables\CommonTablesF16.c" />
+    <ClCompile Include="..\Source\ComplexMathFunctions\arm_cmplx_mag_f32.c" />
+    <ClCompile Include="..\Source\ComplexMathFunctions\arm_cmplx_mag_q15.c" />
+    <ClCompile Include="..\Source\ComplexMathFunctions\arm_cmplx_mag_q31.c" />
+    <ClCompile Include="..\Source\ControllerFunctions\arm_pid_init_f32.c" />
+    <ClCompile Include="..\Source\ControllerFunctions\arm_pid_init_q15.c" />
+    <ClCompile Include="..\Source\ControllerFunctions\arm_pid_init_q31.c" />
+    <ClCompile Include="..\Source\ControllerFunctions\arm_pid_reset_f32.c" />
+    <ClCompile Include="..\Source\ControllerFunctions\arm_pid_reset_q15.c" />
+    <ClCompile Include="..\Source\ControllerFunctions\arm_pid_reset_q31.c" />
+    <ClCompile Include="..\Source\ControllerFunctions\arm_sin_cos_f32.c" />
+    <ClCompile Include="..\Source\ControllerFunctions\arm_sin_cos_q31.c" />
+    <ClCompile Include="..\Source\ControllerFunctions\ControllerFunctions.c" />
+    <ClCompile Include="..\Source\FastMathFunctions\arm_atan2_f16.c" />
+    <ClCompile Include="..\Source\FastMathFunctions\arm_atan2_f32.c" />
+    <ClCompile Include="..\Source\FastMathFunctions\arm_atan2_q15.c" />
+    <ClCompile Include="..\Source\FastMathFunctions\arm_atan2_q31.c" />
+    <ClCompile Include="..\Source\FastMathFunctions\arm_cos_f32.c" />
+    <ClCompile Include="..\Source\FastMathFunctions\arm_cos_q15.c" />
+    <ClCompile Include="..\Source\FastMathFunctions\arm_cos_q31.c" />
+    <ClCompile Include="..\Source\FastMathFunctions\arm_divide_q15.c" />
+    <ClCompile Include="..\Source\FastMathFunctions\arm_divide_q31.c" />
+    <ClCompile Include="..\Source\FastMathFunctions\arm_sin_f32.c" />
+    <ClCompile Include="..\Source\FastMathFunctions\arm_sin_q15.c" />
+    <ClCompile Include="..\Source\FastMathFunctions\arm_sin_q31.c" />
+    <ClCompile Include="..\Source\FastMathFunctions\arm_sqrt_q15.c" />
+    <ClCompile Include="..\Source\FastMathFunctions\arm_sqrt_q31.c" />
+    <ClCompile Include="..\Source\FastMathFunctions\arm_vexp_f16.c" />
+    <ClCompile Include="..\Source\FastMathFunctions\arm_vexp_f32.c" />
+    <ClCompile Include="..\Source\FastMathFunctions\arm_vexp_f64.c" />
+    <ClCompile Include="..\Source\FastMathFunctions\arm_vinverse_f16.c" />
+    <ClCompile Include="..\Source\FastMathFunctions\arm_vlog_f16.c" />
+    <ClCompile Include="..\Source\FastMathFunctions\arm_vlog_f32.c" />
+    <ClCompile Include="..\Source\FastMathFunctions\arm_vlog_f64.c" />
+    <ClCompile Include="..\Source\FastMathFunctions\arm_vlog_q15.c" />
+    <ClCompile Include="..\Source\FastMathFunctions\arm_vlog_q31.c" />
+    <ClCompile Include="..\Source\FastMathFunctions\FastMathFunctions.c" />
+    <ClCompile Include="..\Source\FastMathFunctions\FastMathFunctionsF16.c" />
+    <ClCompile Include="..\Source\MatrixFunctions\arm_householder_f16.c" />
+    <ClCompile Include="..\Source\MatrixFunctions\arm_householder_f32.c" />
+    <ClCompile Include="..\Source\MatrixFunctions\arm_householder_f64.c" />
+    <ClCompile Include="..\Source\MatrixFunctions\arm_mat_add_f16.c" />
+    <ClCompile Include="..\Source\MatrixFunctions\arm_mat_add_f32.c" />
+    <ClCompile Include="..\Source\MatrixFunctions\arm_mat_add_q15.c" />
+    <ClCompile Include="..\Source\MatrixFunctions\arm_mat_add_q31.c" />
+    <ClCompile Include="..\Source\MatrixFunctions\arm_mat_cholesky_f16.c" />
+    <ClCompile Include="..\Source\MatrixFunctions\arm_mat_cholesky_f32.c" />
+    <ClCompile Include="..\Source\MatrixFunctions\arm_mat_cholesky_f64.c" />
+    <ClCompile Include="..\Source\MatrixFunctions\arm_mat_cmplx_mult_f16.c" />
+    <ClCompile Include="..\Source\MatrixFunctions\arm_mat_cmplx_mult_f32.c" />
+    <ClCompile Include="..\Source\MatrixFunctions\arm_mat_cmplx_mult_q15.c" />
+    <ClCompile Include="..\Source\MatrixFunctions\arm_mat_cmplx_mult_q31.c" />
+    <ClCompile Include="..\Source\MatrixFunctions\arm_mat_cmplx_trans_f16.c" />
+    <ClCompile Include="..\Source\MatrixFunctions\arm_mat_cmplx_trans_f32.c" />
+    <ClCompile Include="..\Source\MatrixFunctions\arm_mat_cmplx_trans_q15.c" />
+    <ClCompile Include="..\Source\MatrixFunctions\arm_mat_cmplx_trans_q31.c" />
+    <ClCompile Include="..\Source\MatrixFunctions\arm_mat_init_f16.c" />
+    <ClCompile Include="..\Source\MatrixFunctions\arm_mat_init_f32.c" />
+    <ClCompile Include="..\Source\MatrixFunctions\arm_mat_init_f64.c" />
+    <ClCompile Include="..\Source\MatrixFunctions\arm_mat_init_q15.c" />
+    <ClCompile Include="..\Source\MatrixFunctions\arm_mat_init_q31.c" />
+    <ClCompile Include="..\Source\MatrixFunctions\arm_mat_init_q7.c" />
+    <ClCompile Include="..\Source\MatrixFunctions\arm_mat_inverse_f16.c" />
+    <ClCompile Include="..\Source\MatrixFunctions\arm_mat_inverse_f32.c" />
+    <ClCompile Include="..\Source\MatrixFunctions\arm_mat_inverse_f64.c" />
+    <ClCompile Include="..\Source\MatrixFunctions\arm_mat_ldlt_f32.c" />
+    <ClCompile Include="..\Source\MatrixFunctions\arm_mat_ldlt_f64.c" />
+    <ClCompile Include="..\Source\MatrixFunctions\arm_mat_mult_f16.c" />
+    <ClCompile Include="..\Source\MatrixFunctions\arm_mat_mult_f32.c" />
+    <ClCompile Include="..\Source\MatrixFunctions\arm_mat_mult_f64.c" />
+    <ClCompile Include="..\Source\MatrixFunctions\arm_mat_mult_fast_q15.c" />
+    <ClCompile Include="..\Source\MatrixFunctions\arm_mat_mult_fast_q31.c" />
+    <ClCompile Include="..\Source\MatrixFunctions\arm_mat_mult_opt_q31.c" />
+    <ClCompile Include="..\Source\MatrixFunctions\arm_mat_mult_q15.c" />
+    <ClCompile Include="..\Source\MatrixFunctions\arm_mat_mult_q31.c" />
+    <ClCompile Include="..\Source\MatrixFunctions\arm_mat_mult_q7.c" />
+    <ClCompile Include="..\Source\MatrixFunctions\arm_mat_qr_f16.c" />
+    <ClCompile Include="..\Source\MatrixFunctions\arm_mat_qr_f32.c" />
+    <ClCompile Include="..\Source\MatrixFunctions\arm_mat_qr_f64.c" />
+    <ClCompile Include="..\Source\MatrixFunctions\arm_mat_scale_f16.c" />
+    <ClCompile Include="..\Source\MatrixFunctions\arm_mat_scale_f32.c" />
+    <ClCompile Include="..\Source\MatrixFunctions\arm_mat_scale_q15.c" />
+    <ClCompile Include="..\Source\MatrixFunctions\arm_mat_scale_q31.c" />
+    <ClCompile Include="..\Source\MatrixFunctions\arm_mat_solve_lower_triangular_f16.c" />
+    <ClCompile Include="..\Source\MatrixFunctions\arm_mat_solve_lower_triangular_f32.c" />
+    <ClCompile Include="..\Source\MatrixFunctions\arm_mat_solve_lower_triangular_f64.c" />
+    <ClCompile Include="..\Source\MatrixFunctions\arm_mat_solve_upper_triangular_f16.c" />
+    <ClCompile Include="..\Source\MatrixFunctions\arm_mat_solve_upper_triangular_f32.c" />
+    <ClCompile Include="..\Source\MatrixFunctions\arm_mat_solve_upper_triangular_f64.c" />
+    <ClCompile Include="..\Source\MatrixFunctions\arm_mat_sub_f16.c" />
+    <ClCompile Include="..\Source\MatrixFunctions\arm_mat_sub_f32.c" />
+    <ClCompile Include="..\Source\MatrixFunctions\arm_mat_sub_f64.c" />
+    <ClCompile Include="..\Source\MatrixFunctions\arm_mat_sub_q15.c" />
+    <ClCompile Include="..\Source\MatrixFunctions\arm_mat_sub_q31.c" />
+    <ClCompile Include="..\Source\MatrixFunctions\arm_mat_trans_f16.c" />
+    <ClCompile Include="..\Source\MatrixFunctions\arm_mat_trans_f32.c" />
+    <ClCompile Include="..\Source\MatrixFunctions\arm_mat_trans_f64.c" />
+    <ClCompile Include="..\Source\MatrixFunctions\arm_mat_trans_q15.c" />
+    <ClCompile Include="..\Source\MatrixFunctions\arm_mat_trans_q31.c" />
+    <ClCompile Include="..\Source\MatrixFunctions\arm_mat_trans_q7.c" />
+    <ClCompile Include="..\Source\MatrixFunctions\arm_mat_vec_mult_f16.c" />
+    <ClCompile Include="..\Source\MatrixFunctions\arm_mat_vec_mult_f32.c" />
+    <ClCompile Include="..\Source\MatrixFunctions\arm_mat_vec_mult_q15.c" />
+    <ClCompile Include="..\Source\MatrixFunctions\arm_mat_vec_mult_q31.c" />
+    <ClCompile Include="..\Source\MatrixFunctions\arm_mat_vec_mult_q7.c" />
+    <ClCompile Include="..\Source\MatrixFunctions\MatrixFunctions.c" />
+    <ClCompile Include="..\Source\MatrixFunctions\MatrixFunctionsF16.c" />
+    <ClCompile Include="..\Source\StatisticsFunctions\arm_absmax_f32.c" />
+    <ClCompile Include="..\Source\StatisticsFunctions\arm_absmax_q15.c" />
+    <ClCompile Include="..\Source\StatisticsFunctions\arm_absmax_q31.c" />
+    <ClCompile Include="..\Source\TransformFunctions\arm_bitreversal.c" />
+    <ClCompile Include="..\Source\TransformFunctions\arm_bitreversal2.c" />
+    <ClCompile Include="..\Source\TransformFunctions\arm_bitreversal_f16.c" />
+    <ClCompile Include="..\Source\TransformFunctions\arm_cfft_f16.c" />
+    <ClCompile Include="..\Source\TransformFunctions\arm_cfft_f32.c" />
+    <ClCompile Include="..\Source\TransformFunctions\arm_cfft_f64.c" />
+    <ClCompile Include="..\Source\TransformFunctions\arm_cfft_init_f16.c" />
+    <ClCompile Include="..\Source\TransformFunctions\arm_cfft_init_f32.c" />
+    <ClCompile Include="..\Source\TransformFunctions\arm_cfft_init_f64.c" />
+    <ClCompile Include="..\Source\TransformFunctions\arm_cfft_init_q15.c" />
+    <ClCompile Include="..\Source\TransformFunctions\arm_cfft_init_q31.c" />
+    <ClCompile Include="..\Source\TransformFunctions\arm_cfft_q15.c" />
+    <ClCompile Include="..\Source\TransformFunctions\arm_cfft_q31.c" />
+    <ClCompile Include="..\Source\TransformFunctions\arm_cfft_radix2_f16.c" />
+    <ClCompile Include="..\Source\TransformFunctions\arm_cfft_radix2_f32.c" />
+    <ClCompile Include="..\Source\TransformFunctions\arm_cfft_radix2_init_f16.c" />
+    <ClCompile Include="..\Source\TransformFunctions\arm_cfft_radix2_init_f32.c" />
+    <ClCompile Include="..\Source\TransformFunctions\arm_cfft_radix2_init_q15.c" />
+    <ClCompile Include="..\Source\TransformFunctions\arm_cfft_radix2_init_q31.c" />
+    <ClCompile Include="..\Source\TransformFunctions\arm_cfft_radix2_q15.c" />
+    <ClCompile Include="..\Source\TransformFunctions\arm_cfft_radix2_q31.c" />
+    <ClCompile Include="..\Source\TransformFunctions\arm_cfft_radix4_f16.c" />
+    <ClCompile Include="..\Source\TransformFunctions\arm_cfft_radix4_f32.c" />
+    <ClCompile Include="..\Source\TransformFunctions\arm_cfft_radix4_init_f16.c" />
+    <ClCompile Include="..\Source\TransformFunctions\arm_cfft_radix4_init_f32.c" />
+    <ClCompile Include="..\Source\TransformFunctions\arm_cfft_radix4_init_q15.c" />
+    <ClCompile Include="..\Source\TransformFunctions\arm_cfft_radix4_init_q31.c" />
+    <ClCompile Include="..\Source\TransformFunctions\arm_cfft_radix4_q15.c" />
+    <ClCompile Include="..\Source\TransformFunctions\arm_cfft_radix4_q31.c" />
+    <ClCompile Include="..\Source\TransformFunctions\arm_cfft_radix8_f16.c" />
+    <ClCompile Include="..\Source\TransformFunctions\arm_cfft_radix8_f32.c" />
+    <ClCompile Include="..\Source\TransformFunctions\arm_mfcc_f16.c" />
+    <ClCompile Include="..\Source\TransformFunctions\arm_mfcc_f32.c" />
+    <ClCompile Include="..\Source\TransformFunctions\arm_mfcc_init_f16.c" />
+    <ClCompile Include="..\Source\TransformFunctions\arm_mfcc_init_f32.c" />
+    <ClCompile Include="..\Source\TransformFunctions\arm_mfcc_init_q15.c" />
+    <ClCompile Include="..\Source\TransformFunctions\arm_mfcc_init_q31.c" />
+    <ClCompile Include="..\Source\TransformFunctions\arm_mfcc_q15.c" />
+    <ClCompile Include="..\Source\TransformFunctions\arm_mfcc_q31.c" />
+    <ClCompile Include="..\Source\TransformFunctions\arm_rfft_fast_f16.c" />
+    <ClCompile Include="..\Source\TransformFunctions\arm_rfft_fast_f32.c" />
+    <ClCompile Include="..\Source\TransformFunctions\arm_rfft_fast_f64.c" />
+    <ClCompile Include="..\Source\TransformFunctions\arm_rfft_fast_init_f16.c" />
+    <ClCompile Include="..\Source\TransformFunctions\arm_rfft_fast_init_f32.c" />
+    <ClCompile Include="..\Source\TransformFunctions\arm_rfft_fast_init_f64.c" />
+    <ClCompile Include="..\Source\TransformFunctions\arm_rfft_init_q15.c" />
+    <ClCompile Include="..\Source\TransformFunctions\arm_rfft_init_q31.c" />
+    <ClCompile Include="..\Source\TransformFunctions\arm_rfft_q15.c" />
+    <ClCompile Include="..\Source\TransformFunctions\arm_rfft_q31.c" />
+    <ClCompile Include="..\Source\TransformFunctions\arm_transform_buffer_sizes.c" />
+    <ClCompile Include="..\Source\TransformFunctions\TransformFunctions.c" />
+    <ClCompile Include="..\Source\TransformFunctions\TransformFunctionsF16.c" />
+    <ClCompile Include="CMSIS.cpp" />
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="..\Include\arm_common_tables.h" />
+    <ClInclude Include="..\Include\arm_common_tables_f16.h" />
+    <ClInclude Include="..\Include\arm_const_structs.h" />
+    <ClInclude Include="..\Include\arm_const_structs_f16.h" />
+    <ClInclude Include="..\Include\arm_helium_utils.h" />
+    <ClInclude Include="..\Include\arm_math.h" />
+    <ClInclude Include="..\Include\arm_math_f16.h" />
+    <ClInclude Include="..\Include\arm_math_memory.h" />
+    <ClInclude Include="..\Include\arm_math_types.h" />
+    <ClInclude Include="..\Include\arm_math_types_f16.h" />
+    <ClInclude Include="..\Include\arm_mve_tables.h" />
+    <ClInclude Include="..\Include\arm_mve_tables_f16.h" />
+    <ClInclude Include="..\Include\arm_neon_tables.h" />
+    <ClInclude Include="..\Include\arm_neon_tables_f16.h" />
+    <ClInclude Include="..\Include\arm_vec_math.h" />
+    <ClInclude Include="..\Include\arm_vec_math_f16.h" />
+    <ClInclude Include="..\Include\dsp\basic_math_functions.h" />
+    <ClInclude Include="..\Include\dsp\basic_math_functions_f16.h" />
+    <ClInclude Include="..\Include\dsp\bayes_functions.h" />
+    <ClInclude Include="..\Include\dsp\bayes_functions_f16.h" />
+    <ClInclude Include="..\Include\dsp\complex_math_functions.h" />
+    <ClInclude Include="..\Include\dsp\complex_math_functions_f16.h" />
+    <ClInclude Include="..\Include\dsp\controller_functions.h" />
+    <ClInclude Include="..\Include\dsp\controller_functions_f16.h" />
+    <ClInclude Include="..\Include\dsp\debug.h" />
+    <ClInclude Include="..\Include\dsp\distance_functions.h" />
+    <ClInclude Include="..\Include\dsp\distance_functions_f16.h" />
+    <ClInclude Include="..\Include\dsp\fast_math_functions.h" />
+    <ClInclude Include="..\Include\dsp\fast_math_functions_f16.h" />
+    <ClInclude Include="..\Include\dsp\filtering_functions.h" />
+    <ClInclude Include="..\Include\dsp\filtering_functions_f16.h" />
+    <ClInclude Include="..\Include\dsp\interpolation_functions.h" />
+    <ClInclude Include="..\Include\dsp\interpolation_functions_f16.h" />
+    <ClInclude Include="..\Include\dsp\matrix_functions.h" />
+    <ClInclude Include="..\Include\dsp\matrix_functions_f16.h" />
+    <ClInclude Include="..\Include\dsp\matrix_utils.h" />
+    <ClInclude Include="..\Include\dsp\none.h" />
+    <ClInclude Include="..\Include\dsp\quaternion_math_functions.h" />
+    <ClInclude Include="..\Include\dsp\statistics_functions.h" />
+    <ClInclude Include="..\Include\dsp\statistics_functions_f16.h" />
+    <ClInclude Include="..\Include\dsp\support_functions.h" />
+    <ClInclude Include="..\Include\dsp\support_functions_f16.h" />
+    <ClInclude Include="..\Include\dsp\svm_defines.h" />
+    <ClInclude Include="..\Include\dsp\svm_functions.h" />
+    <ClInclude Include="..\Include\dsp\svm_functions_f16.h" />
+    <ClInclude Include="..\Include\dsp\transform_functions.h" />
+    <ClInclude Include="..\Include\dsp\transform_functions_f16.h" />
+    <ClInclude Include="..\Include\dsp\utils.h" />
+    <ClInclude Include="..\Include\dsp\window_functions.h" />
+    <ClInclude Include="..\PrivateInclude\arm_neon_private.h" />
+    <ClInclude Include="..\PrivateInclude\arm_sorting.h" />
+    <ClInclude Include="..\PrivateInclude\arm_vec_fft.h" />
+    <ClInclude Include="..\PrivateInclude\arm_vec_filtering.h" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="..\Source\BasicMathFunctions\Config.cmake" />
+    <None Include="..\Source\FastMathFunctions\Config.cmake" />
+    <None Include="..\Source\TransformFunctions\Config.cmake" />
+  </ItemGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
+  <ImportGroup Label="ExtensionTargets">
+  </ImportGroup>
+</Project>

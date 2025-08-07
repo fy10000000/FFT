@@ -1,0 +1,725 @@
+{
+  "Version": 1,
+  "WorkspaceRootPath": "C:\\work\\CMSIS-DSP\\CMSIS-DSP-main-mod\\CMSIS\\",
+  "Documents": [
+    {
+      "AbsoluteMoniker": "D:0:0:{25253C35-A0A5-44AD-9F6B-2DC53D442772}|CMSIS.vcxproj|C:\\work\\CMSIS-DSP\\CMSIS-DSP-main-mod\\CMSIS\\CMSIS.cpp||{D0E1A5C6-B359-4E41-9B60-3365922C2A22}",
+      "RelativeMoniker": "D:0:0:{25253C35-A0A5-44AD-9F6B-2DC53D442772}|CMSIS.vcxproj|solutionrelative:CMSIS.cpp||{D0E1A5C6-B359-4E41-9B60-3365922C2A22}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{25253C35-A0A5-44AD-9F6B-2DC53D442772}|CMSIS.vcxproj|C:\\work\\CMSIS-DSP\\CMSIS-DSP-main-mod\\Source\\TransformFunctions\\arm_cfft_radix4_init_q15.c||{D0E1A5C6-B359-4E41-9B60-3365922C2A22}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{25253C35-A0A5-44AD-9F6B-2DC53D442772}|CMSIS.vcxproj|C:\\work\\CMSIS-DSP\\CMSIS-DSP-main-mod\\Source\\CommonTables\\arm_common_tables.c||{D0E1A5C6-B359-4E41-9B60-3365922C2A22}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{25253C35-A0A5-44AD-9F6B-2DC53D442772}|CMSIS.vcxproj|C:\\work\\CMSIS-DSP\\CMSIS-DSP-main-mod\\Include\\arm_common_tables.h||{D0E1A5C6-B359-4E41-9B60-3365922C2A22}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{25253C35-A0A5-44AD-9F6B-2DC53D442772}|CMSIS.vcxproj|C:\\work\\CMSIS-DSP\\CMSIS-DSP-main-mod\\Source\\CommonTables\\arm_const_structs.c||{D0E1A5C6-B359-4E41-9B60-3365922C2A22}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{25253C35-A0A5-44AD-9F6B-2DC53D442772}|CMSIS.vcxproj|C:\\work\\CMSIS-DSP\\CMSIS-DSP-main-mod\\Source\\TransformFunctions\\arm_cfft_radix2_init_q31.c||{D0E1A5C6-B359-4E41-9B60-3365922C2A22}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{25253C35-A0A5-44AD-9F6B-2DC53D442772}|CMSIS.vcxproj|C:\\work\\CMSIS-DSP\\CMSIS-DSP-main-mod\\Source\\TransformFunctions\\arm_cfft_radix2_init_q15.c||{D0E1A5C6-B359-4E41-9B60-3365922C2A22}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{25253C35-A0A5-44AD-9F6B-2DC53D442772}|CMSIS.vcxproj|C:\\work\\CMSIS-DSP\\CMSIS-DSP-main-mod\\Source\\TransformFunctions\\arm_rfft_init_q31.c||{D0E1A5C6-B359-4E41-9B60-3365922C2A22}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{25253C35-A0A5-44AD-9F6B-2DC53D442772}|CMSIS.vcxproj|C:\\work\\CMSIS-DSP\\CMSIS-DSP-main-mod\\Source\\TransformFunctions\\arm_cfft_radix2_init_f32.c||{D0E1A5C6-B359-4E41-9B60-3365922C2A22}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{25253C35-A0A5-44AD-9F6B-2DC53D442772}|CMSIS.vcxproj|C:\\work\\CMSIS-DSP\\CMSIS-DSP-main-mod\\Source\\TransformFunctions\\arm_mfcc_init_q31.c||{D0E1A5C6-B359-4E41-9B60-3365922C2A22}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{25253C35-A0A5-44AD-9F6B-2DC53D442772}|CMSIS.vcxproj|C:\\work\\CMSIS-DSP\\CMSIS-DSP-main-mod\\Include\\dsp\\transform_functions.h||{D0E1A5C6-B359-4E41-9B60-3365922C2A22}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{25253C35-A0A5-44AD-9F6B-2DC53D442772}|CMSIS.vcxproj|C:\\work\\CMSIS-DSP\\CMSIS-DSP-main-mod\\Source\\TransformFunctions\\TransformFunctions.c||{D0E1A5C6-B359-4E41-9B60-3365922C2A22}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{25253C35-A0A5-44AD-9F6B-2DC53D442772}|CMSIS.vcxproj|C:\\work\\CMSIS-DSP\\CMSIS-DSP-main-mod\\Source\\TransformFunctions\\arm_rfft_init_q15.c||{D0E1A5C6-B359-4E41-9B60-3365922C2A22}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{25253C35-A0A5-44AD-9F6B-2DC53D442772}|CMSIS.vcxproj|C:\\work\\CMSIS-DSP\\CMSIS-DSP-main-mod\\Source\\TransformFunctions\\arm_mfcc_init_q15.c||{D0E1A5C6-B359-4E41-9B60-3365922C2A22}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{25253C35-A0A5-44AD-9F6B-2DC53D442772}|CMSIS.vcxproj|C:\\work\\CMSIS-DSP\\CMSIS-DSP-main-mod\\Source\\TransformFunctions\\arm_bitreversal.c||{D0E1A5C6-B359-4E41-9B60-3365922C2A22}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{25253C35-A0A5-44AD-9F6B-2DC53D442772}|CMSIS.vcxproj|C:\\work\\CMSIS-DSP\\CMSIS-DSP-main-mod\\Source\\TransformFunctions\\arm_cfft_radix2_f32.c||{D0E1A5C6-B359-4E41-9B60-3365922C2A22}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{25253C35-A0A5-44AD-9F6B-2DC53D442772}|CMSIS.vcxproj|C:\\work\\CMSIS-DSP\\CMSIS-DSP-main-mod\\Include\\arm_const_structs.h||{D0E1A5C6-B359-4E41-9B60-3365922C2A22}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{25253C35-A0A5-44AD-9F6B-2DC53D442772}|CMSIS.vcxproj|C:\\work\\CMSIS-DSP\\CMSIS-DSP-main-mod\\Source\\TransformFunctions\\arm_cfft_q15.c||{D0E1A5C6-B359-4E41-9B60-3365922C2A22}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{25253C35-A0A5-44AD-9F6B-2DC53D442772}|CMSIS.vcxproj|C:\\work\\CMSIS-DSP\\CMSIS-DSP-main-mod\\Source\\TransformFunctions\\arm_cfft_radix2_q31.c||{D0E1A5C6-B359-4E41-9B60-3365922C2A22}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{25253C35-A0A5-44AD-9F6B-2DC53D442772}|CMSIS.vcxproj|C:\\work\\CMSIS-DSP\\CMSIS-DSP-main-mod\\Source\\TransformFunctions\\arm_rfft_fast_init_f64.c||{D0E1A5C6-B359-4E41-9B60-3365922C2A22}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{25253C35-A0A5-44AD-9F6B-2DC53D442772}|CMSIS.vcxproj|C:\\work\\CMSIS-DSP\\CMSIS-DSP-main-mod\\Source\\TransformFunctions\\arm_cfft_radix4_init_q31.c||{D0E1A5C6-B359-4E41-9B60-3365922C2A22}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{25253C35-A0A5-44AD-9F6B-2DC53D442772}|CMSIS.vcxproj|C:\\work\\CMSIS-DSP\\CMSIS-DSP-main-mod\\Source\\TransformFunctions\\arm_cfft_radix4_init_f32.c||{D0E1A5C6-B359-4E41-9B60-3365922C2A22}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{25253C35-A0A5-44AD-9F6B-2DC53D442772}|CMSIS.vcxproj|C:\\work\\CMSIS-DSP\\CMSIS-DSP-main-mod\\Source\\TransformFunctions\\arm_cfft_radix4_f16.c||{D0E1A5C6-B359-4E41-9B60-3365922C2A22}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{25253C35-A0A5-44AD-9F6B-2DC53D442772}|CMSIS.vcxproj|C:\\work\\CMSIS-DSP\\CMSIS-DSP-main-mod\\Source\\TransformFunctions\\arm_cfft_radix4_f32.c||{D0E1A5C6-B359-4E41-9B60-3365922C2A22}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{25253C35-A0A5-44AD-9F6B-2DC53D442772}|CMSIS.vcxproj|C:\\work\\CMSIS-DSP\\CMSIS-DSP-main-mod\\Source\\TransformFunctions\\arm_cfft_f16.c||{D0E1A5C6-B359-4E41-9B60-3365922C2A22}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{25253C35-A0A5-44AD-9F6B-2DC53D442772}|CMSIS.vcxproj|C:\\work\\CMSIS-DSP\\CMSIS-DSP-main-mod\\Source\\TransformFunctions\\arm_rfft_q15.c||{D0E1A5C6-B359-4E41-9B60-3365922C2A22}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{A2FE74E1-B743-11D0-AE1A-00A0C90FFFC3}|\u003CMiscFiles\u003E|C:\\Program Files\\Microsoft Visual Studio\\2022\\Community\\VC\\Tools\\MSVC\\14.43.34808\\crt\\src\\vcruntime\\gs_report.c||{D0E1A5C6-B359-4E41-9B60-3365922C2A22}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{25253C35-A0A5-44AD-9F6B-2DC53D442772}|CMSIS.vcxproj|C:\\work\\CMSIS-DSP\\CMSIS-DSP-main-mod\\Source\\TransformFunctions\\arm_cfft_f32.c||{D0E1A5C6-B359-4E41-9B60-3365922C2A22}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{25253C35-A0A5-44AD-9F6B-2DC53D442772}|CMSIS.vcxproj|C:\\work\\CMSIS-DSP\\CMSIS-DSP-main-mod\\Source\\FastMathFunctions\\arm_divide_q31.c||{D0E1A5C6-B359-4E41-9B60-3365922C2A22}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{25253C35-A0A5-44AD-9F6B-2DC53D442772}|CMSIS.vcxproj|C:\\work\\CMSIS-DSP\\CMSIS-DSP-main-mod\\Source\\TransformFunctions\\arm_mfcc_q31.c||{D0E1A5C6-B359-4E41-9B60-3365922C2A22}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{25253C35-A0A5-44AD-9F6B-2DC53D442772}|CMSIS.vcxproj|C:\\work\\CMSIS-DSP\\CMSIS-DSP-main-mod\\PrivateInclude\\arm_neon_private.h||{D0E1A5C6-B359-4E41-9B60-3365922C2A22}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{25253C35-A0A5-44AD-9F6B-2DC53D442772}|CMSIS.vcxproj|C:\\work\\CMSIS-DSP\\CMSIS-DSP-main-mod\\Source\\BasicMathFunctions\\arm_abs_f64.c||{D0E1A5C6-B359-4E41-9B60-3365922C2A22}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{25253C35-A0A5-44AD-9F6B-2DC53D442772}|CMSIS.vcxproj|C:\\work\\CMSIS-DSP\\CMSIS-DSP-main-mod\\Include\\dsp\\basic_math_functions.h||{D0E1A5C6-B359-4E41-9B60-3365922C2A22}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{25253C35-A0A5-44AD-9F6B-2DC53D442772}|CMSIS.vcxproj|C:\\work\\CMSIS-DSP\\CMSIS-DSP-main-mod\\Include\\dsp\\fast_math_functions.h||{D0E1A5C6-B359-4E41-9B60-3365922C2A22}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{25253C35-A0A5-44AD-9F6B-2DC53D442772}|CMSIS.vcxproj|C:\\work\\CMSIS-DSP\\CMSIS-DSP-main-mod\\Source\\BasicMathFunctions\\arm_abs_f32.c||{D0E1A5C6-B359-4E41-9B60-3365922C2A22}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{25253C35-A0A5-44AD-9F6B-2DC53D442772}|CMSIS.vcxproj|C:\\work\\CMSIS-DSP\\CMSIS-DSP-main-mod\\Source\\ControllerFunctions\\arm_sin_cos_f32.c||{D0E1A5C6-B359-4E41-9B60-3365922C2A22}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{25253C35-A0A5-44AD-9F6B-2DC53D442772}|CMSIS.vcxproj|C:\\work\\CMSIS-DSP\\CMSIS-DSP-main-mod\\Source\\TransformFunctions\\arm_mfcc_q15.c||{D0E1A5C6-B359-4E41-9B60-3365922C2A22}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{A2FE74E1-B743-11D0-AE1A-00A0C90FFFC3}|\u003CMiscFiles\u003E|C:\\work\\CMSIS-DSP\\CMSIS-DSP-main\\Source\\TransformFunctions\\arm_rfft_fast_init_f32.c||{D0E1A5C6-B359-4E41-9B60-3365922C2A22}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{A2FE74E1-B743-11D0-AE1A-00A0C90FFFC3}|\u003CMiscFiles\u003E|C:\\work\\CMSIS-DSP\\CMSIS-DSP-main\\Source\\TransformFunctions\\arm_cfft_init_f32.c||{D0E1A5C6-B359-4E41-9B60-3365922C2A22}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{A2FE74E1-B743-11D0-AE1A-00A0C90FFFC3}|\u003CMiscFiles\u003E|C:\\work\\CMSIS-DSP\\CMSIS-DSP-main\\Source\\TransformFunctions\\arm_cfft_radix4_f32.c||{D0E1A5C6-B359-4E41-9B60-3365922C2A22}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{A2FE74E1-B743-11D0-AE1A-00A0C90FFFC3}|\u003CMiscFiles\u003E|C:\\work\\CMSIS-DSP\\CMSIS-DSP-main\\Source\\TransformFunctions\\arm_bitreversal.c||{D0E1A5C6-B359-4E41-9B60-3365922C2A22}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{A2FE74E1-B743-11D0-AE1A-00A0C90FFFC3}|\u003CMiscFiles\u003E|C:\\work\\CMSIS-DSP\\CMSIS-DSP-main\\Source\\TransformFunctions\\arm_cfft_f16.c||{D0E1A5C6-B359-4E41-9B60-3365922C2A22}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{A2FE74E1-B743-11D0-AE1A-00A0C90FFFC3}|\u003CMiscFiles\u003E|C:\\work\\CMSIS-DSP\\CMSIS-DSP-main\\Source\\TransformFunctions\\arm_cfft_q15.c||{D0E1A5C6-B359-4E41-9B60-3365922C2A22}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{A2FE74E1-B743-11D0-AE1A-00A0C90FFFC3}|\u003CMiscFiles\u003E|C:\\work\\CMSIS-DSP\\CMSIS-DSP-main\\Include\\dsp\\transform_functions.h||{D0E1A5C6-B359-4E41-9B60-3365922C2A22}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{A2FE74E1-B743-11D0-AE1A-00A0C90FFFC3}|\u003CMiscFiles\u003E|C:\\work\\CMSIS-DSP\\CMSIS-DSP-main\\Include\\arm_common_tables.h||{D0E1A5C6-B359-4E41-9B60-3365922C2A22}"
+    }
+  ],
+  "DocumentGroupContainers": [
+    {
+      "Orientation": 0,
+      "VerticalTabListWidth": 256,
+      "DocumentGroups": [
+        {
+          "DockedWidth": 200,
+          "SelectedChildIndex": 1,
+          "Children": [
+            {
+              "$type": "Document",
+              "DocumentIndex": 2,
+              "Title": "arm_common_tables.c",
+              "DocumentMoniker": "C:\\work\\CMSIS-DSP\\CMSIS-DSP-main-mod\\Source\\CommonTables\\arm_common_tables.c",
+              "RelativeDocumentMoniker": "..\\Source\\CommonTables\\arm_common_tables.c",
+              "ToolTip": "C:\\work\\CMSIS-DSP\\CMSIS-DSP-main-mod\\Source\\CommonTables\\arm_common_tables.c",
+              "RelativeToolTip": "..\\Source\\CommonTables\\arm_common_tables.c",
+              "ViewState": "AgIAAKkAAAAAAAAAAAAWwLMAAAAPAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000423|",
+              "WhenOpened": "2025-07-29T19:41:57.21Z",
+              "EditorCaption": ""
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 0,
+              "Title": "CMSIS.cpp",
+              "DocumentMoniker": "C:\\work\\CMSIS-DSP\\CMSIS-DSP-main-mod\\CMSIS\\CMSIS.cpp",
+              "RelativeDocumentMoniker": "CMSIS.cpp",
+              "ToolTip": "C:\\work\\CMSIS-DSP\\CMSIS-DSP-main-mod\\CMSIS\\CMSIS.cpp",
+              "RelativeToolTip": "CMSIS.cpp",
+              "ViewState": "AgIAADYAAAAAAAAAAAAAAHEAAAAaAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000677|",
+              "WhenOpened": "2025-06-23T19:21:08.131Z",
+              "EditorCaption": ""
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 6,
+              "Title": "arm_cfft_radix2_init_q15.c",
+              "DocumentMoniker": "C:\\work\\CMSIS-DSP\\CMSIS-DSP-main-mod\\Source\\TransformFunctions\\arm_cfft_radix2_init_q15.c",
+              "RelativeDocumentMoniker": "..\\Source\\TransformFunctions\\arm_cfft_radix2_init_q15.c",
+              "ToolTip": "C:\\work\\CMSIS-DSP\\CMSIS-DSP-main-mod\\Source\\TransformFunctions\\arm_cfft_radix2_init_q15.c",
+              "RelativeToolTip": "..\\Source\\TransformFunctions\\arm_cfft_radix2_init_q15.c",
+              "ViewState": "AgIAAEcAAAAAAAAAAADwv1AAAAA0AAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000423|",
+              "WhenOpened": "2025-07-28T19:43:44.705Z",
+              "EditorCaption": ""
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 7,
+              "Title": "arm_rfft_init_q31.c",
+              "DocumentMoniker": "C:\\work\\CMSIS-DSP\\CMSIS-DSP-main-mod\\Source\\TransformFunctions\\arm_rfft_init_q31.c",
+              "RelativeDocumentMoniker": "..\\Source\\TransformFunctions\\arm_rfft_init_q31.c",
+              "ToolTip": "C:\\work\\CMSIS-DSP\\CMSIS-DSP-main-mod\\Source\\TransformFunctions\\arm_rfft_init_q31.c",
+              "RelativeToolTip": "..\\Source\\TransformFunctions\\arm_rfft_init_q31.c",
+              "ViewState": "AgIAAMoBAAAAAAAAAADwv9MBAABwAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000423|",
+              "WhenOpened": "2025-07-28T16:25:59.454Z",
+              "EditorCaption": ""
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 4,
+              "Title": "arm_const_structs.c",
+              "DocumentMoniker": "C:\\work\\CMSIS-DSP\\CMSIS-DSP-main-mod\\Source\\CommonTables\\arm_const_structs.c",
+              "RelativeDocumentMoniker": "..\\Source\\CommonTables\\arm_const_structs.c",
+              "ToolTip": "C:\\work\\CMSIS-DSP\\CMSIS-DSP-main-mod\\Source\\CommonTables\\arm_const_structs.c",
+              "RelativeToolTip": "..\\Source\\CommonTables\\arm_const_structs.c",
+              "ViewState": "AgIAAHMAAAAAAAAAAAAWwHQAAAAaAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000423|",
+              "WhenOpened": "2025-07-29T17:42:35.91Z",
+              "EditorCaption": ""
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 1,
+              "Title": "arm_cfft_radix4_init_q15.c",
+              "DocumentMoniker": "C:\\work\\CMSIS-DSP\\CMSIS-DSP-main-mod\\Source\\TransformFunctions\\arm_cfft_radix4_init_q15.c",
+              "RelativeDocumentMoniker": "..\\Source\\TransformFunctions\\arm_cfft_radix4_init_q15.c",
+              "ToolTip": "C:\\work\\CMSIS-DSP\\CMSIS-DSP-main-mod\\Source\\TransformFunctions\\arm_cfft_radix4_init_q15.c",
+              "RelativeToolTip": "..\\Source\\TransformFunctions\\arm_cfft_radix4_init_q15.c",
+              "ViewState": "AgIAAEkAAAAAAAAAAAAswEEAAAA1AAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000423|",
+              "WhenOpened": "2025-07-28T19:46:16.589Z",
+              "EditorCaption": ""
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 3,
+              "Title": "arm_common_tables.h",
+              "DocumentMoniker": "C:\\work\\CMSIS-DSP\\CMSIS-DSP-main-mod\\Include\\arm_common_tables.h",
+              "RelativeDocumentMoniker": "..\\Include\\arm_common_tables.h",
+              "ToolTip": "C:\\work\\CMSIS-DSP\\CMSIS-DSP-main-mod\\Include\\arm_common_tables.h",
+              "RelativeToolTip": "..\\Include\\arm_common_tables.h",
+              "ViewState": "AgIAAB4AAAAAAAAAAAAWwCgAAAAYAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000680|",
+              "WhenOpened": "2025-07-28T19:49:48.577Z",
+              "EditorCaption": ""
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 8,
+              "Title": "arm_cfft_radix2_init_f32.c",
+              "DocumentMoniker": "C:\\work\\CMSIS-DSP\\CMSIS-DSP-main-mod\\Source\\TransformFunctions\\arm_cfft_radix2_init_f32.c",
+              "RelativeDocumentMoniker": "..\\Source\\TransformFunctions\\arm_cfft_radix2_init_f32.c",
+              "ToolTip": "C:\\work\\CMSIS-DSP\\CMSIS-DSP-main-mod\\Source\\TransformFunctions\\arm_cfft_radix2_init_f32.c",
+              "RelativeToolTip": "..\\Source\\TransformFunctions\\arm_cfft_radix2_init_f32.c",
+              "ViewState": "AgIAAL0AAAAAAAAAAAAjwMgAAAAAAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000423|",
+              "WhenOpened": "2025-08-01T18:00:20.606Z",
+              "EditorCaption": ""
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 5,
+              "Title": "arm_cfft_radix2_init_q31.c",
+              "DocumentMoniker": "C:\\work\\CMSIS-DSP\\CMSIS-DSP-main-mod\\Source\\TransformFunctions\\arm_cfft_radix2_init_q31.c",
+              "RelativeDocumentMoniker": "..\\Source\\TransformFunctions\\arm_cfft_radix2_init_q31.c",
+              "ToolTip": "C:\\work\\CMSIS-DSP\\CMSIS-DSP-main-mod\\Source\\TransformFunctions\\arm_cfft_radix2_init_q31.c",
+              "RelativeToolTip": "..\\Source\\TransformFunctions\\arm_cfft_radix2_init_q31.c",
+              "ViewState": "AgIAAEYAAAAAAAAAAADwv08AAAAzAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000423|",
+              "WhenOpened": "2025-07-30T17:34:55.917Z",
+              "EditorCaption": ""
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 9,
+              "Title": "arm_mfcc_init_q31.c",
+              "DocumentMoniker": "C:\\work\\CMSIS-DSP\\CMSIS-DSP-main-mod\\Source\\TransformFunctions\\arm_mfcc_init_q31.c",
+              "RelativeDocumentMoniker": "..\\Source\\TransformFunctions\\arm_mfcc_init_q31.c",
+              "ToolTip": "C:\\work\\CMSIS-DSP\\CMSIS-DSP-main-mod\\Source\\TransformFunctions\\arm_mfcc_init_q31.c",
+              "RelativeToolTip": "..\\Source\\TransformFunctions\\arm_mfcc_init_q31.c",
+              "ViewState": "AgIAABoAAAAAAAAAAADwvyMAAAAJAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000423|",
+              "WhenOpened": "2025-08-06T23:50:22.05Z",
+              "EditorCaption": ""
+            },
+            {
+              "$type": "Bookmark",
+              "Name": "ST:0:0:{cce594b6-0c39-4442-ba28-10c64ac7e89f}"
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 10,
+              "Title": "transform_functions.h",
+              "DocumentMoniker": "C:\\work\\CMSIS-DSP\\CMSIS-DSP-main-mod\\Include\\dsp\\transform_functions.h",
+              "RelativeDocumentMoniker": "..\\Include\\dsp\\transform_functions.h",
+              "ToolTip": "C:\\work\\CMSIS-DSP\\CMSIS-DSP-main-mod\\Include\\dsp\\transform_functions.h",
+              "RelativeToolTip": "..\\Include\\dsp\\transform_functions.h",
+              "ViewState": "AgIAAOgCAAAAAAAAAADwv/ECAAANAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000680|",
+              "WhenOpened": "2025-08-06T23:48:01.978Z",
+              "EditorCaption": ""
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 11,
+              "Title": "TransformFunctions.c",
+              "DocumentMoniker": "C:\\work\\CMSIS-DSP\\CMSIS-DSP-main-mod\\Source\\TransformFunctions\\TransformFunctions.c",
+              "RelativeDocumentMoniker": "..\\Source\\TransformFunctions\\TransformFunctions.c",
+              "ToolTip": "C:\\work\\CMSIS-DSP\\CMSIS-DSP-main-mod\\Source\\TransformFunctions\\TransformFunctions.c",
+              "RelativeToolTip": "..\\Source\\TransformFunctions\\TransformFunctions.c",
+              "ViewState": "AgIAAEAAAAAAAAAAAADwv0AAAAAKAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000423|",
+              "WhenOpened": "2025-08-06T23:48:57.878Z",
+              "EditorCaption": ""
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 13,
+              "Title": "arm_mfcc_init_q15.c",
+              "DocumentMoniker": "C:\\work\\CMSIS-DSP\\CMSIS-DSP-main-mod\\Source\\TransformFunctions\\arm_mfcc_init_q15.c",
+              "RelativeDocumentMoniker": "..\\Source\\TransformFunctions\\arm_mfcc_init_q15.c",
+              "ToolTip": "C:\\work\\CMSIS-DSP\\CMSIS-DSP-main-mod\\Source\\TransformFunctions\\arm_mfcc_init_q15.c",
+              "RelativeToolTip": "..\\Source\\TransformFunctions\\arm_mfcc_init_q15.c",
+              "ViewState": "AgIAAB0AAAAAAAAAAADwvyMAAAAJAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000423|",
+              "WhenOpened": "2025-08-06T23:48:08.402Z",
+              "EditorCaption": ""
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 12,
+              "Title": "arm_rfft_init_q15.c",
+              "DocumentMoniker": "C:\\work\\CMSIS-DSP\\CMSIS-DSP-main-mod\\Source\\TransformFunctions\\arm_rfft_init_q15.c",
+              "RelativeDocumentMoniker": "..\\Source\\TransformFunctions\\arm_rfft_init_q15.c",
+              "ToolTip": "C:\\work\\CMSIS-DSP\\CMSIS-DSP-main-mod\\Source\\TransformFunctions\\arm_rfft_init_q15.c",
+              "RelativeToolTip": "..\\Source\\TransformFunctions\\arm_rfft_init_q15.c",
+              "ViewState": "AgIAANMBAAAAAAAAAADwv8oBAAAdAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000423|",
+              "WhenOpened": "2025-07-28T16:30:29.787Z",
+              "EditorCaption": ""
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 15,
+              "Title": "arm_cfft_radix2_f32.c",
+              "DocumentMoniker": "C:\\work\\CMSIS-DSP\\CMSIS-DSP-main-mod\\Source\\TransformFunctions\\arm_cfft_radix2_f32.c",
+              "RelativeDocumentMoniker": "..\\Source\\TransformFunctions\\arm_cfft_radix2_f32.c",
+              "ToolTip": "C:\\work\\CMSIS-DSP\\CMSIS-DSP-main-mod\\Source\\TransformFunctions\\arm_cfft_radix2_f32.c",
+              "RelativeToolTip": "..\\Source\\TransformFunctions\\arm_cfft_radix2_f32.c",
+              "ViewState": "AgIAAEYAAAAAAAAAAAApwFQAAAAAAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000423|",
+              "WhenOpened": "2025-07-28T16:09:50.91Z",
+              "EditorCaption": ""
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 14,
+              "Title": "arm_bitreversal.c",
+              "DocumentMoniker": "C:\\work\\CMSIS-DSP\\CMSIS-DSP-main-mod\\Source\\TransformFunctions\\arm_bitreversal.c",
+              "RelativeDocumentMoniker": "..\\Source\\TransformFunctions\\arm_bitreversal.c",
+              "ToolTip": "C:\\work\\CMSIS-DSP\\CMSIS-DSP-main-mod\\Source\\TransformFunctions\\arm_bitreversal.c",
+              "RelativeToolTip": "..\\Source\\TransformFunctions\\arm_bitreversal.c",
+              "ViewState": "AgIAALwAAAAAAAAAAAApwMcAAAAdAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000423|",
+              "WhenOpened": "2025-07-28T16:09:14.79Z",
+              "EditorCaption": ""
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 16,
+              "Title": "arm_const_structs.h",
+              "DocumentMoniker": "C:\\work\\CMSIS-DSP\\CMSIS-DSP-main-mod\\Include\\arm_const_structs.h",
+              "RelativeDocumentMoniker": "..\\Include\\arm_const_structs.h",
+              "ToolTip": "C:\\work\\CMSIS-DSP\\CMSIS-DSP-main-mod\\Include\\arm_const_structs.h",
+              "RelativeToolTip": "..\\Include\\arm_const_structs.h",
+              "ViewState": "AgIAAEcAAAAAAAAAAADgv1EAAAAmAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000680|",
+              "WhenOpened": "2025-07-28T17:07:01.927Z",
+              "EditorCaption": ""
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 17,
+              "Title": "arm_cfft_q15.c",
+              "DocumentMoniker": "C:\\work\\CMSIS-DSP\\CMSIS-DSP-main-mod\\Source\\TransformFunctions\\arm_cfft_q15.c",
+              "RelativeDocumentMoniker": "..\\Source\\TransformFunctions\\arm_cfft_q15.c",
+              "ToolTip": "C:\\work\\CMSIS-DSP\\CMSIS-DSP-main-mod\\Source\\TransformFunctions\\arm_cfft_q15.c",
+              "RelativeToolTip": "..\\Source\\TransformFunctions\\arm_cfft_q15.c",
+              "ViewState": "AgIAAKMCAAAAAAAAAAAiwLACAAAnAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000423|",
+              "WhenOpened": "2025-08-05T20:07:47.683Z",
+              "EditorCaption": ""
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 19,
+              "Title": "arm_rfft_fast_init_f64.c",
+              "DocumentMoniker": "C:\\work\\CMSIS-DSP\\CMSIS-DSP-main-mod\\Source\\TransformFunctions\\arm_rfft_fast_init_f64.c",
+              "RelativeDocumentMoniker": "..\\Source\\TransformFunctions\\arm_rfft_fast_init_f64.c",
+              "ToolTip": "C:\\work\\CMSIS-DSP\\CMSIS-DSP-main-mod\\Source\\TransformFunctions\\arm_rfft_fast_init_f64.c",
+              "RelativeToolTip": "..\\Source\\TransformFunctions\\arm_rfft_fast_init_f64.c",
+              "ViewState": "AgIAAGIAAAAAAAAAAAAQwHEAAAAoAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000423|",
+              "WhenOpened": "2025-07-28T19:50:37.317Z",
+              "EditorCaption": ""
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 18,
+              "Title": "arm_cfft_radix2_q31.c",
+              "DocumentMoniker": "C:\\work\\CMSIS-DSP\\CMSIS-DSP-main-mod\\Source\\TransformFunctions\\arm_cfft_radix2_q31.c",
+              "RelativeDocumentMoniker": "..\\Source\\TransformFunctions\\arm_cfft_radix2_q31.c",
+              "ToolTip": "C:\\work\\CMSIS-DSP\\CMSIS-DSP-main-mod\\Source\\TransformFunctions\\arm_cfft_radix2_q31.c",
+              "RelativeToolTip": "..\\Source\\TransformFunctions\\arm_cfft_radix2_q31.c",
+              "ViewState": "AgIAADsAAAAAAAAAAAAawD0AAAAqAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000423|",
+              "WhenOpened": "2025-08-04T21:15:08.756Z",
+              "EditorCaption": ""
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 20,
+              "Title": "arm_cfft_radix4_init_q31.c",
+              "DocumentMoniker": "C:\\work\\CMSIS-DSP\\CMSIS-DSP-main-mod\\Source\\TransformFunctions\\arm_cfft_radix4_init_q31.c",
+              "RelativeDocumentMoniker": "..\\Source\\TransformFunctions\\arm_cfft_radix4_init_q31.c",
+              "ToolTip": "C:\\work\\CMSIS-DSP\\CMSIS-DSP-main-mod\\Source\\TransformFunctions\\arm_cfft_radix4_init_q31.c",
+              "RelativeToolTip": "..\\Source\\TransformFunctions\\arm_cfft_radix4_init_q31.c",
+              "ViewState": "AgIAADwAAAAAAAAAAAAvwEkAAAAAAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000423|",
+              "WhenOpened": "2025-07-28T19:44:08.943Z",
+              "EditorCaption": ""
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 21,
+              "Title": "arm_cfft_radix4_init_f32.c",
+              "DocumentMoniker": "C:\\work\\CMSIS-DSP\\CMSIS-DSP-main-mod\\Source\\TransformFunctions\\arm_cfft_radix4_init_f32.c",
+              "RelativeDocumentMoniker": "..\\Source\\TransformFunctions\\arm_cfft_radix4_init_f32.c",
+              "ToolTip": "C:\\work\\CMSIS-DSP\\CMSIS-DSP-main-mod\\Source\\TransformFunctions\\arm_cfft_radix4_init_f32.c",
+              "RelativeToolTip": "..\\Source\\TransformFunctions\\arm_cfft_radix4_init_f32.c",
+              "ViewState": "AgIAAF0AAAAAAAAAAAAkwG8AAAAXAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000423|",
+              "WhenOpened": "2025-07-28T19:49:43.437Z",
+              "EditorCaption": ""
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 42,
+              "Title": "arm_cfft_q15.c",
+              "DocumentMoniker": "C:\\work\\CMSIS-DSP\\CMSIS-DSP-main\\Source\\TransformFunctions\\arm_cfft_q15.c",
+              "RelativeDocumentMoniker": "..\\..\\CMSIS-DSP-main\\Source\\TransformFunctions\\arm_cfft_q15.c",
+              "ToolTip": "C:\\work\\CMSIS-DSP\\CMSIS-DSP-main\\Source\\TransformFunctions\\arm_cfft_q15.c",
+              "RelativeToolTip": "..\\..\\CMSIS-DSP-main\\Source\\TransformFunctions\\arm_cfft_q15.c",
+              "ViewState": "AgIAADcCAAAAAAAAAIAwwEYCAAAMAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000423|",
+              "WhenOpened": "2025-06-23T19:23:52.056Z"
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 24,
+              "Title": "arm_cfft_f16.c",
+              "DocumentMoniker": "C:\\work\\CMSIS-DSP\\CMSIS-DSP-main-mod\\Source\\TransformFunctions\\arm_cfft_f16.c",
+              "RelativeDocumentMoniker": "..\\Source\\TransformFunctions\\arm_cfft_f16.c",
+              "ToolTip": "C:\\work\\CMSIS-DSP\\CMSIS-DSP-main-mod\\Source\\TransformFunctions\\arm_cfft_f16.c",
+              "RelativeToolTip": "..\\Source\\TransformFunctions\\arm_cfft_f16.c",
+              "ViewState": "AgIAALsBAAAAAAAAAAAkwLkBAAAcAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000423|",
+              "WhenOpened": "2025-08-04T16:27:19.741Z",
+              "EditorCaption": ""
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 23,
+              "Title": "arm_cfft_radix4_f32.c",
+              "DocumentMoniker": "C:\\work\\CMSIS-DSP\\CMSIS-DSP-main-mod\\Source\\TransformFunctions\\arm_cfft_radix4_f32.c",
+              "RelativeDocumentMoniker": "..\\Source\\TransformFunctions\\arm_cfft_radix4_f32.c",
+              "ToolTip": "C:\\work\\CMSIS-DSP\\CMSIS-DSP-main-mod\\Source\\TransformFunctions\\arm_cfft_radix4_f32.c",
+              "RelativeToolTip": "..\\Source\\TransformFunctions\\arm_cfft_radix4_f32.c",
+              "ViewState": "AgIAANUDAAAAAAAAAAAkwN8DAAAfAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000423|",
+              "WhenOpened": "2025-08-04T16:27:46.402Z",
+              "EditorCaption": ""
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 22,
+              "Title": "arm_cfft_radix4_f16.c",
+              "DocumentMoniker": "C:\\work\\CMSIS-DSP\\CMSIS-DSP-main-mod\\Source\\TransformFunctions\\arm_cfft_radix4_f16.c",
+              "RelativeDocumentMoniker": "..\\Source\\TransformFunctions\\arm_cfft_radix4_f16.c",
+              "ToolTip": "C:\\work\\CMSIS-DSP\\CMSIS-DSP-main-mod\\Source\\TransformFunctions\\arm_cfft_radix4_f16.c",
+              "RelativeToolTip": "..\\Source\\TransformFunctions\\arm_cfft_radix4_f16.c",
+              "ViewState": "AgIAAMcEAAAAAAAAAAAkwNEEAAA2AAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000423|",
+              "WhenOpened": "2025-08-04T16:28:15.031Z",
+              "EditorCaption": ""
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 41,
+              "Title": "arm_cfft_f16.c",
+              "DocumentMoniker": "C:\\work\\CMSIS-DSP\\CMSIS-DSP-main\\Source\\TransformFunctions\\arm_cfft_f16.c",
+              "RelativeDocumentMoniker": "..\\..\\CMSIS-DSP-main\\Source\\TransformFunctions\\arm_cfft_f16.c",
+              "ToolTip": "C:\\work\\CMSIS-DSP\\CMSIS-DSP-main\\Source\\TransformFunctions\\arm_cfft_f16.c",
+              "RelativeToolTip": "..\\..\\CMSIS-DSP-main\\Source\\TransformFunctions\\arm_cfft_f16.c",
+              "ViewState": "AgIAAHwCAAAAAAAAAIAwwIsCAAAMAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000423|",
+              "WhenOpened": "2025-06-23T22:22:25.507Z"
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 40,
+              "Title": "arm_bitreversal.c",
+              "DocumentMoniker": "C:\\work\\CMSIS-DSP\\CMSIS-DSP-main\\Source\\TransformFunctions\\arm_bitreversal.c",
+              "RelativeDocumentMoniker": "..\\..\\CMSIS-DSP-main\\Source\\TransformFunctions\\arm_bitreversal.c",
+              "ToolTip": "C:\\work\\CMSIS-DSP\\CMSIS-DSP-main\\Source\\TransformFunctions\\arm_bitreversal.c",
+              "RelativeToolTip": "..\\..\\CMSIS-DSP-main\\Source\\TransformFunctions\\arm_bitreversal.c",
+              "ViewState": "AgIAAEgAAAAAAAAAAIAwwC0AAAAXAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000423|",
+              "WhenOpened": "2025-06-23T22:27:45.483Z"
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 39,
+              "Title": "arm_cfft_radix4_f32.c",
+              "DocumentMoniker": "C:\\work\\CMSIS-DSP\\CMSIS-DSP-main\\Source\\TransformFunctions\\arm_cfft_radix4_f32.c",
+              "RelativeDocumentMoniker": "..\\..\\CMSIS-DSP-main\\Source\\TransformFunctions\\arm_cfft_radix4_f32.c",
+              "ToolTip": "C:\\work\\CMSIS-DSP\\CMSIS-DSP-main\\Source\\TransformFunctions\\arm_cfft_radix4_f32.c",
+              "RelativeToolTip": "..\\..\\CMSIS-DSP-main\\Source\\TransformFunctions\\arm_cfft_radix4_f32.c",
+              "ViewState": "AgIAACMAAAAAAAAAAIAwwFMAAAAGAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000423|",
+              "WhenOpened": "2025-06-23T22:28:05.262Z"
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 38,
+              "Title": "arm_cfft_init_f32.c",
+              "DocumentMoniker": "C:\\work\\CMSIS-DSP\\CMSIS-DSP-main\\Source\\TransformFunctions\\arm_cfft_init_f32.c",
+              "RelativeDocumentMoniker": "..\\..\\CMSIS-DSP-main\\Source\\TransformFunctions\\arm_cfft_init_f32.c",
+              "ToolTip": "C:\\work\\CMSIS-DSP\\CMSIS-DSP-main\\Source\\TransformFunctions\\arm_cfft_init_f32.c",
+              "RelativeToolTip": "..\\..\\CMSIS-DSP-main\\Source\\TransformFunctions\\arm_cfft_init_f32.c",
+              "ViewState": "AgIAACwBAAAAAAAAAIAwwDsBAAATAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000423|",
+              "WhenOpened": "2025-06-23T22:29:12.317Z"
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 37,
+              "Title": "arm_rfft_fast_init_f32.c",
+              "DocumentMoniker": "C:\\work\\CMSIS-DSP\\CMSIS-DSP-main\\Source\\TransformFunctions\\arm_rfft_fast_init_f32.c",
+              "RelativeDocumentMoniker": "..\\..\\CMSIS-DSP-main\\Source\\TransformFunctions\\arm_rfft_fast_init_f32.c",
+              "ToolTip": "C:\\work\\CMSIS-DSP\\CMSIS-DSP-main\\Source\\TransformFunctions\\arm_rfft_fast_init_f32.c",
+              "RelativeToolTip": "..\\..\\CMSIS-DSP-main\\Source\\TransformFunctions\\arm_rfft_fast_init_f32.c",
+              "ViewState": "AgIAAPYAAAAAAAAAAIAwwAUBAAAJAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000423|",
+              "WhenOpened": "2025-06-23T22:29:17.485Z"
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 26,
+              "Title": "gs_report.c",
+              "DocumentMoniker": "C:\\Program Files\\Microsoft Visual Studio\\2022\\Community\\VC\\Tools\\MSVC\\14.43.34808\\crt\\src\\vcruntime\\gs_report.c",
+              "RelativeDocumentMoniker": "..\\..\\..\\..\\Program Files\\Microsoft Visual Studio\\2022\\Community\\VC\\Tools\\MSVC\\14.43.34808\\crt\\src\\vcruntime\\gs_report.c",
+              "ToolTip": "C:\\Program Files\\Microsoft Visual Studio\\2022\\Community\\VC\\Tools\\MSVC\\14.43.34808\\crt\\src\\vcruntime\\gs_report.c",
+              "RelativeToolTip": "..\\..\\..\\..\\Program Files\\Microsoft Visual Studio\\2022\\Community\\VC\\Tools\\MSVC\\14.43.34808\\crt\\src\\vcruntime\\gs_report.c",
+              "ViewState": "AgIAANEAAAAAAAAAAAAMwNsAAAAAAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000423|",
+              "WhenOpened": "2025-07-31T15:33:01.958Z"
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 43,
+              "Title": "transform_functions.h",
+              "DocumentMoniker": "C:\\work\\CMSIS-DSP\\CMSIS-DSP-main\\Include\\dsp\\transform_functions.h",
+              "RelativeDocumentMoniker": "..\\..\\CMSIS-DSP-main\\Include\\dsp\\transform_functions.h",
+              "ToolTip": "C:\\work\\CMSIS-DSP\\CMSIS-DSP-main\\Include\\dsp\\transform_functions.h",
+              "RelativeToolTip": "..\\..\\CMSIS-DSP-main\\Include\\dsp\\transform_functions.h",
+              "ViewState": "AgIAAAwBAAAAAAAAAAAcwBkBAAAQAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000680|",
+              "WhenOpened": "2025-06-23T22:29:06.564Z"
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 44,
+              "Title": "arm_common_tables.h",
+              "DocumentMoniker": "C:\\work\\CMSIS-DSP\\CMSIS-DSP-main\\Include\\arm_common_tables.h",
+              "RelativeDocumentMoniker": "..\\..\\CMSIS-DSP-main\\Include\\arm_common_tables.h",
+              "ToolTip": "C:\\work\\CMSIS-DSP\\CMSIS-DSP-main\\Include\\arm_common_tables.h",
+              "RelativeToolTip": "..\\..\\CMSIS-DSP-main\\Include\\arm_common_tables.h",
+              "ViewState": "AgIAAEUAAAAAAAAAAAAAAFMAAAALAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000680|",
+              "WhenOpened": "2025-07-29T17:44:02.509Z"
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 25,
+              "Title": "arm_rfft_q15.c",
+              "DocumentMoniker": "C:\\work\\CMSIS-DSP\\CMSIS-DSP-main-mod\\Source\\TransformFunctions\\arm_rfft_q15.c",
+              "RelativeDocumentMoniker": "..\\Source\\TransformFunctions\\arm_rfft_q15.c",
+              "ToolTip": "C:\\work\\CMSIS-DSP\\CMSIS-DSP-main-mod\\Source\\TransformFunctions\\arm_rfft_q15.c",
+              "RelativeToolTip": "..\\Source\\TransformFunctions\\arm_rfft_q15.c",
+              "ViewState": "AgIAABEAAAAAAAAAAAAvwCAAAAAbAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000423|",
+              "WhenOpened": "2025-08-01T18:54:33.693Z"
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 27,
+              "Title": "arm_cfft_f32.c",
+              "DocumentMoniker": "C:\\work\\CMSIS-DSP\\CMSIS-DSP-main-mod\\Source\\TransformFunctions\\arm_cfft_f32.c",
+              "RelativeDocumentMoniker": "..\\Source\\TransformFunctions\\arm_cfft_f32.c",
+              "ToolTip": "C:\\work\\CMSIS-DSP\\CMSIS-DSP-main-mod\\Source\\TransformFunctions\\arm_cfft_f32.c",
+              "RelativeToolTip": "..\\Source\\TransformFunctions\\arm_cfft_f32.c",
+              "ViewState": "AgIAADADAAAAAAAAAAASwDcDAAAAAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000423|",
+              "WhenOpened": "2025-07-28T19:35:05.005Z"
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 28,
+              "Title": "arm_divide_q31.c",
+              "DocumentMoniker": "C:\\work\\CMSIS-DSP\\CMSIS-DSP-main-mod\\Source\\FastMathFunctions\\arm_divide_q31.c",
+              "RelativeDocumentMoniker": "..\\Source\\FastMathFunctions\\arm_divide_q31.c",
+              "ToolTip": "C:\\work\\CMSIS-DSP\\CMSIS-DSP-main-mod\\Source\\FastMathFunctions\\arm_divide_q31.c",
+              "RelativeToolTip": "..\\Source\\FastMathFunctions\\arm_divide_q31.c",
+              "ViewState": "AgIAAEsAAAAAAAAAAAAawFUAAAAnAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000423|",
+              "WhenOpened": "2025-07-29T20:33:20.764Z"
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 29,
+              "Title": "arm_mfcc_q31.c",
+              "DocumentMoniker": "C:\\work\\CMSIS-DSP\\CMSIS-DSP-main-mod\\Source\\TransformFunctions\\arm_mfcc_q31.c",
+              "RelativeDocumentMoniker": "..\\Source\\TransformFunctions\\arm_mfcc_q31.c",
+              "ToolTip": "C:\\work\\CMSIS-DSP\\CMSIS-DSP-main-mod\\Source\\TransformFunctions\\arm_mfcc_q31.c",
+              "RelativeToolTip": "..\\Source\\TransformFunctions\\arm_mfcc_q31.c",
+              "ViewState": "AgIAALMAAAAAAAAAAAAYwL8AAAAXAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000423|",
+              "WhenOpened": "2025-07-28T16:07:50.33Z"
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 30,
+              "Title": "arm_neon_private.h",
+              "DocumentMoniker": "C:\\work\\CMSIS-DSP\\CMSIS-DSP-main-mod\\PrivateInclude\\arm_neon_private.h",
+              "RelativeDocumentMoniker": "..\\PrivateInclude\\arm_neon_private.h",
+              "ToolTip": "C:\\work\\CMSIS-DSP\\CMSIS-DSP-main-mod\\PrivateInclude\\arm_neon_private.h",
+              "RelativeToolTip": "..\\PrivateInclude\\arm_neon_private.h",
+              "ViewState": "AgIAABgAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000680|",
+              "WhenOpened": "2025-07-28T23:07:08.124Z"
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 31,
+              "Title": "arm_abs_f64.c",
+              "DocumentMoniker": "C:\\work\\CMSIS-DSP\\CMSIS-DSP-main-mod\\Source\\BasicMathFunctions\\arm_abs_f64.c",
+              "RelativeDocumentMoniker": "..\\Source\\BasicMathFunctions\\arm_abs_f64.c",
+              "ToolTip": "C:\\work\\CMSIS-DSP\\CMSIS-DSP-main-mod\\Source\\BasicMathFunctions\\arm_abs_f64.c",
+              "RelativeToolTip": "..\\Source\\BasicMathFunctions\\arm_abs_f64.c",
+              "ViewState": "AgIAACQAAAAAAAAAAAAAACcAAAAAAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000423|",
+              "WhenOpened": "2025-07-28T22:14:22.065Z"
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 33,
+              "Title": "fast_math_functions.h",
+              "DocumentMoniker": "C:\\work\\CMSIS-DSP\\CMSIS-DSP-main-mod\\Include\\dsp\\fast_math_functions.h",
+              "RelativeDocumentMoniker": "..\\Include\\dsp\\fast_math_functions.h",
+              "ToolTip": "C:\\work\\CMSIS-DSP\\CMSIS-DSP-main-mod\\Include\\dsp\\fast_math_functions.h",
+              "RelativeToolTip": "..\\Include\\dsp\\fast_math_functions.h",
+              "ViewState": "AgIAAGYBAAAAAAAAAAAtwHIBAAANAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000680|",
+              "WhenOpened": "2025-07-28T20:49:51.371Z"
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 34,
+              "Title": "arm_abs_f32.c",
+              "DocumentMoniker": "C:\\work\\CMSIS-DSP\\CMSIS-DSP-main-mod\\Source\\BasicMathFunctions\\arm_abs_f32.c",
+              "RelativeDocumentMoniker": "..\\Source\\BasicMathFunctions\\arm_abs_f32.c",
+              "ToolTip": "C:\\work\\CMSIS-DSP\\CMSIS-DSP-main-mod\\Source\\BasicMathFunctions\\arm_abs_f32.c",
+              "RelativeToolTip": "..\\Source\\BasicMathFunctions\\arm_abs_f32.c",
+              "ViewState": "AgIAAGAAAAAAAAAAAAAtwHMAAAABAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000423|",
+              "WhenOpened": "2025-07-28T21:37:45.284Z"
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 35,
+              "Title": "arm_sin_cos_f32.c",
+              "DocumentMoniker": "C:\\work\\CMSIS-DSP\\CMSIS-DSP-main-mod\\Source\\ControllerFunctions\\arm_sin_cos_f32.c",
+              "RelativeDocumentMoniker": "..\\Source\\ControllerFunctions\\arm_sin_cos_f32.c",
+              "ToolTip": "C:\\work\\CMSIS-DSP\\CMSIS-DSP-main-mod\\Source\\ControllerFunctions\\arm_sin_cos_f32.c",
+              "RelativeToolTip": "..\\Source\\ControllerFunctions\\arm_sin_cos_f32.c",
+              "ViewState": "AgIAAD4AAAAAAAAAAAAYwEoAAAAUAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000423|",
+              "WhenOpened": "2025-07-28T20:59:23.201Z"
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 32,
+              "Title": "basic_math_functions.h",
+              "DocumentMoniker": "C:\\work\\CMSIS-DSP\\CMSIS-DSP-main-mod\\Include\\dsp\\basic_math_functions.h",
+              "RelativeDocumentMoniker": "..\\Include\\dsp\\basic_math_functions.h",
+              "ToolTip": "C:\\work\\CMSIS-DSP\\CMSIS-DSP-main-mod\\Include\\dsp\\basic_math_functions.h",
+              "RelativeToolTip": "..\\Include\\dsp\\basic_math_functions.h",
+              "ViewState": "AgIAAHUBAAAAAAAAAAAtwIUBAAAFAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000680|",
+              "WhenOpened": "2025-07-28T19:01:26.087Z"
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 36,
+              "Title": "arm_mfcc_q15.c",
+              "DocumentMoniker": "C:\\work\\CMSIS-DSP\\CMSIS-DSP-main-mod\\Source\\TransformFunctions\\arm_mfcc_q15.c",
+              "RelativeDocumentMoniker": "..\\Source\\TransformFunctions\\arm_mfcc_q15.c",
+              "ToolTip": "C:\\work\\CMSIS-DSP\\CMSIS-DSP-main-mod\\Source\\TransformFunctions\\arm_mfcc_q15.c",
+              "RelativeToolTip": "..\\Source\\TransformFunctions\\arm_mfcc_q15.c",
+              "ViewState": "AgIAAHgAAAAAAAAAAAAYwIQAAAAUAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000423|",
+              "WhenOpened": "2025-07-28T19:00:34.215Z"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
