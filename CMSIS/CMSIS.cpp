@@ -109,10 +109,9 @@ int main(int argc,char* argv[])
 {
   float T = 1.0 / 500.0; // Period for the test sine wave (1/500 seconds = 2ms period)
   const int multK = 16; // multiple of 1K size can be used for 1,2,4,8,or 16 (has not been tested for less than 1K)
-  float F1 = 0.0; // Frequency of the first sine wave
-  float F2 = 200.0; // Frequency of the second sine wave
-  float F3 = 0.0; // Frequency of the third sine wave
-
+  float F1 = 50.0; // Frequency of the first sine wave
+  float F2 = 80.0; // Frequency of the second sine wave
+  
 // File lengths are too long to do float and radix4 and radix2 serially: use compile flags
 //#define DO_FLOAT
 #define DO_Q15_RADIX2
@@ -177,7 +176,7 @@ int main(int argc,char* argv[])
   std::cout << "************ FFT q15_t Radix2 ************************ \n";
   for (int i = 0; i < 1024 * multK; i++) {
     double x = i * T;
-    src_q15[i*2] = (q15_t)(f2q15(0.5*sin(F1 * 2.0 * PI * x) + 0.5*sin(F2 * 2.0 * PI * x) + 0.5 * sin(F3 * 2.0 * PI * x)));
+    src_q15[i*2] = (q15_t)(f2q15(0.5*sin(F1 * 2.0 * PI * x) + 0.5*sin(F2 * 2.0 * PI * x)));
     src_q15[i*2+1] = 0; // set the imaginary part to 0
   }
  
