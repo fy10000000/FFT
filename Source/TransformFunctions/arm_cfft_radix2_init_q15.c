@@ -88,7 +88,7 @@ ARM_DSP_ATTRIBUTE arm_status arm_cfft_radix2_init_q15(
   switch (S->fftLen)
   {
   case 16384U:
-    /*  Initializations of structure parameters for 8192 point FFT */
+    /*  Initializations of structure parameters for 16384 point FFT */
     /*  Initialise the twiddle coef modifier value */
     S->twidCoefModifier = 1U;
     /*  Initialise the bit reversal table modifier */
