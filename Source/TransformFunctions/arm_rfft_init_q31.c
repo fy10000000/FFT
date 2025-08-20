@@ -147,7 +147,7 @@ ARM_DSP_ATTRIBUTE arm_status arm_rfft_init_##LEN##_q31( arm_rfft_instance_q31 * 
    @par
                     This function also initializes Twiddle factor table.
   */
-RFFTINIT_Q31(163884, 8192, 1) //fixme
+RFFTINIT_Q31(16384, 8192, 1) //fixme
 
 /**
   @brief         Initialization function for the 8192 pt Q31 real FFT.
@@ -463,9 +463,9 @@ ARM_DSP_ATTRIBUTE arm_status arm_rfft_init_q31(
     /*  Initialization of coef modifier depending on the FFT length */
     switch (fftLenReal)
     {
-    //case 16384U:
-    //    status = arm_rfft_init_16384_q31( S,ifftFlagR,bitReverseFlag );
-    //    break; // fixme fix compilation of RFFTINIT_Q31 before uncommenting cf arm_rfft_init_##LEN##_q31 macro
+    case 16384U:
+        status = arm_rfft_init_16384_q31( S,ifftFlagR,bitReverseFlag );
+        break; // fixme fix compilation of RFFTINIT_Q31 before uncommenting cf arm_rfft_init_##LEN##_q31 macro
     case 8192U:
         status = arm_rfft_init_8192_q31( S,ifftFlagR,bitReverseFlag );
         break;

@@ -38,7 +38,7 @@ extern "C"
 #endif
 
   /* Double Precision Float CFFT twiddles */
-  extern const uint16_t armBitRevTable[1024 * 4]; // was 1024
+  extern const uint16_t armBitRevTable[1024 * 4]; // was 1024 make * 4
 
     extern const uint64_t twiddleCoefF64_16[32];
 

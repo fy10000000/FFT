@@ -29,17 +29,16 @@
 #include "dsp/transform_functions.h"
 #include "arm_common_tables.h"
 
-
 /**
   @addtogroup ComplexFFTDeprecated
   @{
  */
 
 /**
-  @brief                        Initialization function for the Q15 CFFT/CIFFT.
-  @deprecated                   Do not use this function. It has been superseded by \ref arm_cfft_q15 and will be removed
-  @param[in,out] S              points to an instance of the Q15 CFFT/CIFFT structure.
-  @param[in]     fftLen         length of the FFT.
+  @brief         Initialization function for the Q15 CFFT/CIFFT.
+  @deprecated    Do not use this function. It has been superseded by \ref arm_cfft_q15 and will be removed in the future.
+  @param[in,out] S              points to an instance of the Q15 CFFT/CIFFT structure
+  @param[in]     fftLen         length of the FFT
   @param[in]     ifftFlag       flag that selects transform direction
                    - value = 0: forward transform
                    - value = 1: inverse transform
@@ -52,7 +51,7 @@
 
   @par           Details
                    The parameter <code>ifftFlag</code> controls whether a forward or inverse transform is computed.
-                   Set(=1) ifftFlag for calculation of CIFFT otherwise  CFFT is calculated
+                   Set(=1) ifftFlag for calculation of CIFFT otherwise CFFT is calculated
   @par
                    The parameter <code>bitReverseFlag</code> controls whether output is in normal order or bit reversed order.
                    Set(=1) bitReverseFlag for output to be in normal order otherwise output is in bit reversed order.
@@ -89,7 +88,6 @@ ARM_DSP_ATTRIBUTE arm_status arm_cfft_radix2_init_q15(
   {
   case 16384U:
     /*  Initializations of structure parameters for 16384 point FFT */
-    /*  Initialise the twiddle coef modifier value */
     S->twidCoefModifier = 1U;
     /*  Initialise the bit reversal table modifier */
     S->bitRevFactor = 1U;
@@ -99,7 +97,6 @@ ARM_DSP_ATTRIBUTE arm_status arm_cfft_radix2_init_q15(
 
   case 8192U:
     /*  Initializations of structure parameters for 8192 point FFT */
-    /*  Initialise the twiddle coef modifier value */
     S->twidCoefModifier = 2U;
     /*  Initialise the bit reversal table modifier */
     S->bitRevFactor = 2U;
@@ -107,8 +104,6 @@ ARM_DSP_ATTRIBUTE arm_status arm_cfft_radix2_init_q15(
     S->pBitRevTable = (uint16_t*) &armBitRevTable[1];
     break;
   case 4096U:
-    /*  Initializations of structure parameters for 4096 point FFT */
-
     /*  Initialise the twiddle coef modifier value */
     S->twidCoefModifier = 4U;
     /*  Initialise the bit reversal table modifier */
@@ -119,14 +114,12 @@ ARM_DSP_ATTRIBUTE arm_status arm_cfft_radix2_init_q15(
     break;
 
   case 2048U:
-    /*  Initializations of structure parameters for 2048 point FFT */
-
     /*  Initialise the twiddle coef modifier value */
-    S->twidCoefModifier = 4U;
+    S->twidCoefModifier = 8U;
     /*  Initialise the bit reversal table modifier */
-    S->bitRevFactor = 4U;
+    S->bitRevFactor = 8U;
     /*  Initialise the bit reversal table pointer */
-    S->pBitRevTable = (uint16_t *) & armBitRevTable[3];
+    S->pBitRevTable = (uint16_t *) & armBitRevTable[7];
 
     break;
 

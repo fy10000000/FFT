@@ -26,26 +26,28 @@ int32_t f2q31(float value) {
   if (value > 0.999969) value = 0.999969; // Slightly less than 1.0
   if (value < -1.0) value = -1.0;
 
-  // Convert to Q15 format
-  return (int32_t)round(value * 65536.0f);
+  // Convert to Q31 format
+  return (int32_t)round(value * 2147483648.0f);
 }
 
-int32_t to_fixed(float f, int e) {
-  int a = f * pow(2.0, e);
-  int b = (int)round(a);
+int to_fixed(float f, int e) {
+  float tmp = pow(2.0f, e);
+  int64_t b = (int64_t)llround(f * tmp);
+  //int a = (int) (f * tmp);
+  //int b = (int)round(aa);
 
-  if (b > 0 && b > 32767) {
-    return 32767;
+  if (b > 0 && b > 2147483647) { // 2147483647 32767
+    return 2147483647;
   }
-  if (b < 0 && b <= -32768) {
-    return -32768;
+  if (b < 0 && b <= -2147483648) { // -32768 
+    return -2147483648;
   }
   if (b < 0) {
     // next lines turn b into it's 2's complement.
     b = abs(b);
     b = ~b;
   }
-  return b;
+  return (int) b;
 }
 
 /**
@@ -75,6 +77,12 @@ void armBitRevTableCalculator(void) {
   }
 }
 
+double magnitude(int64_t real, int64_t imag) {
+  double real_d = (double)real;
+  double imag_d = (double)imag;
+  return sqrt(real_d * real_d + imag_d * imag_d);
+}
+
 /**
  * @brief Function to generate the arm Twiddle Coefficient Table
  * The main case is 16384 with dyad = 15 for q15_t (or 31 for q31_t)
@@ -85,18 +93,16 @@ void armBitRevTableCalculator(void) {
  */
 void twiddleCoefCalculator() {
   int fft_len = 16384;// 4096;// 8192;
-  int dyad = 15; // 15 for q15_t, 31 for q31_t (nothing to do with fft_len)
-  float factor = pow(2, dyad);
-
+  int dyad = 31; // 15 for q15_t, 31 for q31_t (nothing to do with fft_len)
+  
   // the coeffs (not twiddle factors)
-#define q15_t int16_t
-// consider using version without '\n' in printf for one line array (more readable than 16k line)
+  //#define q31_t int64_t
+  // consider using version without '\n' in printf for one line array (more readable than 16k line)
   for (int i = 0; i < (3 * fft_len / 4); i++) {
     float twiddleCoefq15Even = cos(i * 2 * PI / (float)fft_len);
     float twiddleCoefq15Odd = sin(i * 2 * PI / (float)fft_len);
     //printf("(q15_t) %#04hx, (q15_t) %#04hx,", (q15_t)to_fixed(twiddleCoefq15Even, dyad), (q15_t)to_fixed(twiddleCoefq15Odd, dyad));
-    printf("(q15_t) %#04hx, (q15_t) %#04hx, \n",
-      (q15_t)to_fixed(twiddleCoefq15Even, dyad), (q15_t)to_fixed(twiddleCoefq15Odd, dyad));
+    printf("(q31_t) %d, (q31_t) %d, \n", (int)to_fixed(twiddleCoefq15Even, dyad), (int) to_fixed(twiddleCoefq15Odd, dyad));
   }
 }
 
@@ -114,9 +120,9 @@ int main(int argc,char* argv[])
   
 // File lengths are too long to do float and radix4 and radix2 serially: use compile flags
 //#define DO_FLOAT
-#define DO_Q15_RADIX2
+//#define DO_Q15_RADIX2
 //#define DO_Q15_RADIX4
-//#define DO_Q31_RADIX2 need to fix compilation issues first!!!
+#define DO_Q31_RADIX2 
 
   if (0) {
     // set to 1 above if need to recalculate some of the twiddleCoefs
@@ -201,7 +207,7 @@ int main(int argc,char* argv[])
   arm_cfft_radix2_init_q31(&s_q31, 1024 * multK, 0, 1); // Initialize the CFFT instance for 8-point FFT
   arm_cfft_radix2_q31(&s_q31, src_q31);
   for (int i = 0; i < 1024 * multK / 2; i++) {
-    std::cout << "rad2_q31[" << i << "] , " << (double(i)/double(T* multK*1024)) << " , " << sqrt(src_q31[2 * i] * src_q31[2 * i] + src_q31[2 * i + 1] * src_q31[2 * i + 1]) << "\n";
+    std::cout << "rad2_q31[" << i << "] , " << (double(i) / double(T * multK * 1024)) << " , " << magnitude(src_q31[2 * i], src_q31[2 * i + 1]) << "\n";
   }
 #endif //DO_Q31_RADIX2
   return 0;
