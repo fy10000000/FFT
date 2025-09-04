@@ -741,6 +741,9 @@
     <ClCompile Include="..\Source\StatisticsFunctions\arm_absmax_q31.c">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="..\Source\TransformFunctions\gnss_codes.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="..\Include\arm_common_tables.h">
@@ -900,6 +903,9 @@
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="..\PrivateInclude\arm_vec_filtering.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="..\Include\gnss_codes.h">
       <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>

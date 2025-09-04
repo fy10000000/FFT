@@ -11,27 +11,181 @@
 
 #include <iostream>
 #include "transform_functions.h"
+#include "gnss_codes.h"
 
-int16_t f2q15(float value) {
-  // Clamp the value to the Q15 range [-1.0, 1.0)
-  if (value > 0.999969) value = 0.999969; // Slightly less than 1.0
-  if (value < -1.0) value = -1.0;
 
-  // Convert to Q15 format
-  return (int16_t)round(value * 32768.0f);
+#define Q31_MIN   ((int32_t)0x80000000)  // -2147483648
+#define Q31_MAX   ((int32_t)0x7FFFFFFF)  //  2147483647
+#define Q15_MIN   (-32768)
+#define Q15_MAX   ( 32767)
+
+static inline int16_t q15_mul(int16_t a, int16_t b) {
+  // Promote to 32-bit for the product
+  int32_t prod = (int32_t)a * (int32_t)b; // range: [0x4000_0000, 0x4000_0000]
+  // Round to nearest: add 0.5 ulp before shifting.
+  // For signed values, use "round away from zero" approach:
+  // add 0x4000 for positive, subtract 0x4000 for negative.
+  int32_t rounded = prod >= 0 ? (prod + (1 << 14)) : (prod - (1 << 14));
+  int32_t q15 = rounded >> 15;
+  // Saturate to Q15 range
+  if (q15 > Q15_MAX) { 
+    return Q15_MAX; 
+  }
+  if (q15 < Q15_MIN) {
+    return Q15_MIN;
+  }
+  return (int16_t)q15;
 }
 
-int32_t f2q31(float value) {
-  // Clamp the value to the Q15 range [-1.0, 1.0)
-  if (value > 0.999969) value = 0.999969; // Slightly less than 1.0
-  if (value < -1.0) value = -1.0;
+static inline int16_t q15_add(int16_t a, int16_t b) {
+  int32_t sum = (int32_t)a + (int32_t)b;
+  if (sum > Q15_MAX) return Q15_MAX;
+  if (sum < Q15_MIN) return Q15_MIN;
+  return (int16_t)sum;
+}
 
-  // Convert to Q31 format
-  return (int32_t)round(value * 2147483648.0f);
+static inline int16_t q15_sub(int16_t a, int16_t b) {
+  int32_t diff = (int32_t)a - (int32_t)b;
+  if (diff > Q15_MAX) return Q15_MAX;
+  if (diff < Q15_MIN) return Q15_MIN;
+  return (int16_t)diff;
+}
+
+static inline int32_t q31_add(int32_t a, int32_t b) {
+  int64_t sum = (int64_t)a + (int64_t)b;
+  if (sum > Q31_MAX) {
+    return Q31_MAX;
+  }
+  if (sum < Q31_MIN) {
+    return Q31_MIN;
+  }
+  return (int32_t)sum;
+}
+
+static inline int32_t q31_sub(int32_t a, int32_t b) {
+  int64_t diff = (int64_t)a - (int64_t)b;
+  if (diff > Q31_MAX) {
+    return Q31_MAX;
+  }
+  if (diff < Q31_MIN) {
+    return Q31_MIN;
+  }
+  return (int32_t)diff;
+}
+
+static inline int32_t q31_mul(int32_t a, int32_t b) {
+  // 64-bit product in Q62
+  int64_t prod = (int64_t)a * (int64_t)b;
+  // Round to nearest, symmetric: add/subtract 0.5 LSB before shifting.
+  // 0.5 LSB at Q31 corresponds to 1<<30 in Q62 domain.
+  int64_t rounded = prod >= 0 ? (prod + (int64_t)1 << 30) : (prod - ((int64_t)1 << 30));
+  // Shift back to Q31
+  int64_t q31 = rounded >> 31;
+  // Saturate
+  if (q31 > Q31_MAX) { 
+    return Q31_MAX; 
+  }
+  if (q31 < Q31_MIN) { 
+    return Q31_MIN; 
+  }
+  return (int32_t)q31;
+}
+
+static inline float q31tof(int32_t x) { return (float)x / 2147483648.0f; } // 2^31
+static inline int32_t f2q31(float x) {
+  if (x >= 0.9999999995343387f) {
+    return Q31_MAX; // (Q31_MAX / 2^31)
+  }
+  if (x <= -1.0f) {
+    return Q31_MIN;
+  }
+  double v = (double)x * 2147483648.0; // 2^31
+  if (v > Q31_MAX) {
+    v = Q31_MAX;
+  }
+  if (v < (double)Q31_MIN) {
+    v = (double)Q31_MIN;
+  }
+  return (int32_t)v;
+}
+
+
+static uint16_t U2(uint8_t* p)
+{
+  uint16_t value = 0;
+  for (int i = 0; i < 2; i++) {
+    value = (value << 8) | (p[1 - i]);
+  }
+  return value;
+}
+
+static uint32_t U3(uint8_t* p)
+{
+  uint32_t value = 0;
+  for (int i = 0; i < 3; i++) {
+    value = (value << 8) | (p[2 - i]);
+  }
+  return value;
+}
+
+static uint32_t U4(uint8_t* p)
+{
+  uint32_t value = 0;
+  for (int i = 0; i < 4; i++) {
+    value = (value << 8) | (p[3 - i]);
+  }
+  return value;
+}
+
+double compute_gps_time(int year, int month, int day, int hour, int minute, int second)
+{
+  struct tm refTime, epochTime;
+  time_t refTimeRaw, epochTimeRaw;
+  double diff;
+
+  refTime.tm_year = year - 1900;
+  refTime.tm_mon = month - 1;
+  refTime.tm_mday = day;
+  refTime.tm_hour = hour;
+  refTime.tm_min = minute;
+  refTime.tm_sec = second;
+  refTime.tm_isdst = 0;
+  refTimeRaw = mktime(&refTime);
+
+  epochTime.tm_year = 80;//start of GPS time Jan 6 1980
+  epochTime.tm_mon = 1 - 1;
+  epochTime.tm_mday = 6;
+  epochTime.tm_hour = 0;
+  epochTime.tm_min = 0;
+  epochTime.tm_sec = 0;
+  epochTime.tm_isdst = 0;
+  epochTimeRaw = mktime(&epochTime);
+
+  diff = difftime(refTimeRaw, epochTimeRaw);
+
+  return diff;
+}
+
+static float q15tof(int16_t x) { return (float)x / 32768.0f; }
+static int16_t f2q15(float x) {
+  if (x >= 0.9999695f) {
+    return Q15_MAX; // ~ (32767/32768)
+  }
+  if (x <= -1.0f) {
+    return Q15_MIN;
+  }
+  int32_t v = (int32_t)(x * 32768.0f);
+  if (v > Q15_MAX) {
+    v = Q15_MAX;
+  }
+  if (v < Q15_MIN) {
+    v = Q15_MIN;
+  }
+  return (int16_t)v;
 }
 
 int to_fixed(float f, int e) {
-  float tmp = pow(2.0f, e);
+  float tmp = (float) pow(2.0f, e);
   int64_t b = (int64_t)llround(f * tmp);
   //int a = (int) (f * tmp);
   //int b = (int)round(aa);
@@ -106,23 +260,241 @@ void twiddleCoefCalculator() {
   }
 }
 
+float signalf(float x, float F1, float F2, float F3, float F4) {
+  float ans = 0.5 * sin(F1 * 2.0 * PI * x) + 0.5 * sin(F2 * 2.0 * PI * x) + 0.5 * sin(F3 * 2.0 * PI * x) + 0.5 * sin(F4 * 2.0 * PI * x);
+  return ans;
+}
 
+void DecodeOrsIQCplx(uint8_t* data, uint32_t byteLength, c32 iqs[])
+{
+  /// A 2-bit look up table for decoding
+  static int16_t TwoBitTable[4] = { 1,-1,3,-3 };
+
+  for (uint32_t i = 0; i < byteLength; i++) {
+    uint8_t byte = data[i];
+
+    uint8_t bits = (byte) & 0x03;
+    iqs[2 * i].r = (float)TwoBitTable[bits];
+
+    bits = (byte >> 2) & 0x03;
+    iqs[2 * i].i = (float)TwoBitTable[bits];
+
+    bits = (byte >> 4) & 0x03;
+    iqs[2 * i + 1].r = (float)TwoBitTable[bits];
+
+    bits = (byte >> 6) & 0x03;
+    iqs[2 * i + 1].i = (float)TwoBitTable[bits];
+  }
+}
+
+
+void read_ors(char* input) {
+  FILE* fp_msb = NULL;
+  fopen_s(&fp_msb, input, "rb");
+  if (fp_msb == NULL) {
+    fprintf(stderr, "Failed to open msb file %s\n", input);
+    return;
+  }
+  fseek(fp_msb, 0L, SEEK_END);
+  size_t bytes_to_read = ftell(fp_msb);
+  rewind(fp_msb);
+
+  uint8_t* buffer = (uint8_t*)malloc(bytes_to_read);
+  size_t bytesRead;
+  bytesRead = fread(buffer, 1, bytes_to_read, fp_msb);
+  if (bytesRead != bytes_to_read) {
+    // Process the read data
+    printf("Error parsiing data\n");
+    for (size_t i = 0; i < 50; i++) {
+      printf("%02X ", buffer[i]);
+    }
+    printf("\n");
+  }
+  fclose(fp_msb);
+
+  // 2 for res 1
+  uint16_t hdrlen = U2(&buffer[2]); // 2 for header length
+  // 6 for res2
+  uint16_t yr = U2(&buffer[10]) + 1900; // 12
+  uint16_t mon = buffer[12] + 1; // 13
+  uint16_t day = buffer[13]; // 14
+  double tods = U4(&buffer[14]) / 1000.0; // 18
+  int hr = (int)floor(tods / 3600.0);
+  int min = (int)floor((tods / 3600.0 - floor(tods / 3600.0)) * 60);
+  int sec = (int)floor((tods / 60.0 - floor(tods / 60.0)) * 60);
+  // map back to GPS time
+  double dtime = compute_gps_time(yr, mon, day, hr, min, sec);
+  int msec = (int)round((sec - floor(sec)) * 1000);
+  uint32_t nanos = U3(&buffer[18]); // 21
+  printf("%4d-%02d-%02d-%02d-%02d-%02d msec=%d nanos=%d \n", yr, mon, day, hr, min, sec, msec, nanos);
+
+  uint16_t size = ((uint16_t)bytes_to_read) - hdrlen;
+
+  printf("size (total bytes - hdrs) %d \n", size);
+  
+
+#define SIZE 1024*4 *4
+  c32* iandq = (c32*)malloc(SIZE * sizeof(c32));
+  c32* repli = (c32*)malloc(SIZE * sizeof(c32));
+  if (iandq == NULL || repli == NULL) {
+    fprintf(stderr, "Memory allocation failed for q32 array.\n");
+    free(iandq);
+    free(repli);
+    return;
+  }
+
+  DecodeOrsIQCplx(&buffer[hdrlen], SIZE/2, iandq);
+  free(buffer);
+
+  //float actual[SIZE * 2] = { 0 };
+  //float replica[SIZE * 2] = { 0 };
+  //float prod[SIZE * 2] = { 0 };
+
+  float* actual = (float*)malloc(SIZE * 2 * sizeof(float));
+  float* replica = (float*)malloc(SIZE * 2 * sizeof(float));
+  float* prod = (float*)malloc(SIZE * 2 * sizeof(float));
+  if (actual == NULL || replica == NULL || prod == NULL) {
+    fprintf(stderr, "Memory allocation failed for 'actual'.\n");
+    return; // Exit or handle the error appropriately
+  }
+  memset(actual, 0, sizeof(float) * SIZE * 2);
+  memset(replica, 0, sizeof(float) * SIZE * 2);
+  memset(prod, 0, sizeof(float) * SIZE * 2);
+
+  
+  int prn = 6;// 26;// 9;// 29;// 11;// 6;// 7;// 31;// 3;// 26;// 4;// 9;// 7;// 11;// 6;// 31;// 9;// 3;// 26;// 4;// 10;// 23;// 13;// 27;// 18;// 15;// 10;//15
+  double doppler = -1231.94;// -1279.33;// 2651.04;// -82.61;// 646.60;// -1487.68;// 3213.83;// -3087.45;// -3052.57;// -1279.33;// 272.41;// 2651.04;// 3341.25;// 1312.40;// -903.17;// -2885.45;// 2967.03;// -2603.85;// -565.13;// 770.87;// 2023;// -530.0;// -3314.0;// 154.0;// -2034.0;// -2490;// 2030; // -2490
+  //int code[SIZE] = { 0 };
+  //getCode(SIZE/4, 4, prn, code);
+  //mix_prn(code,-doppler,0, repli, SIZE);
+  
+  synth_e1b_prn(prn, -doppler, 0, 0, 4.092e6f, 1.023e6f, SIZE, repli);
+  //synth_gps_prn(prn, -doppler, SIZE, repli);
+
+  if (1) {
+    arm_cfft_radix2_instance_f32 as;
+    arm_cfft_radix2_instance_f32 rs;
+
+    for (int i = 0; i < SIZE; i++) {
+      actual[2 * i]      = iandq[i].r * 0.25;
+      actual[2 * i + 1]  = iandq[i].i * 0.25;
+      replica[2 * i]     = repli[i].r * 0.25;
+      replica[2 * i + 1] = repli[i].i * 0.25;
+    }
+    if (iandq != NULL) { free(iandq); }
+    if (repli != NULL) { free(repli); }
+    
+    // do the float thing
+    arm_cfft_radix2_init_f32(&as, SIZE, 0, 1); // Initialize the CFFT instance for 8-point FFT
+    arm_cfft_radix2_f32(&as, actual);
+
+    arm_cfft_radix2_init_f32(&rs, SIZE, 0, 1); // Initialize the CFFT instance for 8-point FFT
+    arm_cfft_radix2_f32(&rs, replica);
+
+    
+    // conjugate the replica
+    for (int i = 0; i < SIZE; i++) {
+      float Ar = actual[i * 2],  Ai = actual[i * 2 + 1];
+      float Rr = replica[i * 2], Ri = replica[i * 2 + 1];
+      // A * conj(R)
+      prod[i * 2]     = Ar * Rr + Ai * Ri;     // (Ar + jAi) * (Rr - jRi)
+      prod[i * 2 + 1] = Ai * Rr - Ar * Ri;     // 
+    }
+
+    arm_cfft_radix2_instance_f32 conv;
+    arm_cfft_radix2_init_f32(&conv, SIZE, 1, 1); // inverse FFT
+    arm_cfft_radix2_f32(&conv, prod);
+    float max = 0;
+    int pos = 0;
+    FILE* fp_out = NULL;
+    errno_t er = fopen_s(&fp_out,"C:/Python/out.csv", "w");
+    if (er != 0 || fp_out == NULL) {
+      fprintf(stderr, "Failed to open output file\n");
+      return;
+    }
+    for (int i = 0; i < SIZE; i++) {
+      float mag = sqrt(prod[2 * i] * prod[2 * i] + prod[2 * i + 1] * prod[2 * i + 1]);
+      fprintf(fp_out, "%d, %f \n", i, mag);
+      if (mag > max) {
+        max = mag;
+        pos = i;
+      }
+    }
+    fclose(fp_out);
+    
+    printf("max = %f pos=%d\n", max, pos);
+  }
+
+  if (0) { // q15 or 31
+
+    arm_cfft_radix4_instance_q31 aq;
+    arm_cfft_radix4_instance_q31 rq;
+    q31_t  actual[SIZE * 2] = { 0 };
+    q31_t replica[SIZE * 2] = { 0 };
+    for (int i = 0; i < SIZE; i++) {
+      actual[2 * i]      = f2q31(iandq[i].r * 0.15);
+      actual[2 * i + 1]  = f2q31(iandq[i].i * 0.15);
+      replica[2 * i]     = f2q31(repli[i].r * 0.15);
+      replica[2 * i + 1] = f2q31(repli[i].i * 0.15);
+    }
+    if (iandq != NULL) { free(iandq); }
+    if (repli != NULL) { free(repli); }
+
+    arm_cfft_radix4_init_q31(&aq, SIZE, 0, 1); // Initialize the CFFT instance for 8-point FFT
+    arm_cfft_radix4_q31(&aq, actual);
+
+    arm_cfft_radix4_init_q31(&rq, SIZE, 0, 1); // Initialize the CFFT instance for 8-point FFT
+    arm_cfft_radix4_q31(&rq, replica);
+  
+    q31_t prod[SIZE * 2] = { 0 };
+    // Mult Actual with conjugate of Replica
+    for (int i = 0; i < SIZE; i++) {
+      float Ar = actual[i * 2], Ai = actual[i * 2 + 1];
+      float Rr = replica[i * 2], Ri = replica[i * 2 + 1];
+      // A * conj(R)
+      prod[i * 2] = q31_add(q31_mul(Ar,Rr) , q31_mul(Ai,Ri));     // (Ar + jAi) * (Rr - jRi)
+      prod[i * 2 + 1] = q31_sub(q31_mul(Ai,Rr), q31_mul(Ar,Ri));     // 
+    }
+
+    arm_cfft_radix4_instance_q31 conv;
+    arm_cfft_radix4_init_q31(&conv, SIZE, 1, 1); // inverse FFT
+    arm_cfft_radix4_q31(&conv, prod);
+    float max = 0;
+    int pos = 0;
+    for (int i = 0; i < SIZE; i++) {
+      float mag = sqrt( (float)prod[2 * i] * (float)prod[2 * i] + (float)prod[2 * i + 1] * (float)prod[2 * i + 1]);
+      printf("%d, %f \n", i, mag);
+      if (mag > max) {
+        max = mag;
+        pos = i;
+      }
+    }
+    printf("max = %f pos=%d\n", max, pos);
+  }
+  
+  free(actual); free(replica); free(prod);
+  //////////////////////////////////////////////////////
+  
+}
 
 /**
  * Main for testing and developing under Visual Studio 2022
  */
 int main(int argc,char* argv[])
 {
-  float T = 1.0 / 500.0; // Period for the test sine wave (1/500 seconds = 2ms period)
+  float T = (float) (1.0 / 500.0); // Period for the test sine wave (1/500 seconds = 2ms period)
   const int multK = 16; // multiple of 1K size can be used for 1,2,4,8,or 16 (has not been tested for less than 1K)
-  float F1 = 50.0; // Frequency of the first sine wave
-  float F2 = 80.0; // Frequency of the second sine wave
+  float F1 = 50.0f; // Frequency of the first sine wave
+  float F2 = 0;// 80.0f; // Frequency of the second sine wave
+  float F3 = 0;// 155.0f; // Frequency of the third sine wave (not used in this example, but can be added for more complexity)
+  float F4 = 230.0f; // Frequency of the third sine wave (not used in this example, but can be added for more complexity)
   
 // File lengths are too long to do float and radix4 and radix2 serially: use compile flags
 //#define DO_FLOAT
-//#define DO_Q15_RADIX2
+#define DO_Q15_RADIX2
 //#define DO_Q15_RADIX4
-#define DO_Q31_RADIX2 
+//#define DO_Q31_RADIX2 
+//#define DO_Q31_RADIX4 
 
   if (0) {
     // set to 1 above if need to recalculate some of the twiddleCoefs
@@ -135,6 +507,15 @@ int main(int argc,char* argv[])
     // set to 1 above if need to recalculate some of the armBitRevTables
     // e.g. armBitRevTable[1024 * 4] in arm_common_tables.c which is on one big line!
     armBitRevTableCalculator();
+    return 0;
+  }
+
+  if (1) {
+    read_ors((char*)"C:/work/Baseband/TestData/100ms/bw25/G_2025_09_03_23_04_45.ors");
+    //read_ors((char*)"C:/work/Baseband/TestData/100ms/bw25/G_2025_09_03_23_22_41.ors");
+    //read_ors((char*)"C:/work/Baseband/TestData/100ms/bw25/G_2025_09_03_23_04_45.ors");
+    //read_ors((char*)"C:/work/Baseband/TestData/G_2025_06_05_22_11_26.ors");
+    return 0;
   }
 
 #ifdef DO_FLOAT
@@ -143,7 +524,7 @@ int main(int argc,char* argv[])
   memset(test, 0, sizeof(test));
   for (int i = 0; i < 1024 * multK; i++) {
     double x = i * T;
-    test[i*2] = 2000 * sin(F1 * 2.0 * PI * x) + 2000 * sin(F2 * 2.0 * PI * x);
+    test[i*2] = 0.5 * signalf(x,F1,F2,F3,F4);
     test[i * 2 + 1] = 0; // set the imaginary part to 0
   }
   
@@ -167,7 +548,7 @@ int main(int argc,char* argv[])
   std::cout << "************ FFT q15_t Radix4 ************************ \n";
   for (int i = 0; i < 1024 * multK; i++) {
     double x = i * T;
-    src_q15[i * 2] = (q15_t)(f2q15 (0.5 * sin(F1 * 2.0 * PI * x) + 0.5 * sin(F2 * 2.0 * PI * x)));
+    src_q15[i * 2] = (q15_t)(f2q15(signalf(x, F1, F2, F3, F4)));
     src_q15[i * 2 + 1] = 0; // set the imaginary part to 0
   }
   arm_cfft_radix4_init_q15(&s_q15_radix4, 1024 * multK, 0, 1); // Initialize the CFFT instance for 8-point FFT
@@ -182,7 +563,7 @@ int main(int argc,char* argv[])
   std::cout << "************ FFT q15_t Radix2 ************************ \n";
   for (int i = 0; i < 1024 * multK; i++) {
     double x = i * T;
-    src_q15[i*2] = (q15_t)(f2q15(0.5*sin(F1 * 2.0 * PI * x) + 0.5*sin(F2 * 2.0 * PI * x)));
+    src_q15[i*2] = (q15_t)f2q15(signalf(x, F1, F2, F3, F4));
     src_q15[i*2+1] = 0; // set the imaginary part to 0
   }
  
@@ -194,14 +575,19 @@ int main(int argc,char* argv[])
   }
 #endif // DO_Q15_RADIX2
 
+#if defined(DO_Q31_RADIX2) || defined(DO_Q31_RADIX4)
+  q31_t src_q31[1024 * 2 * multK];
+  memset(src_q31, 0, sizeof(src_q31));
+#endif
+
 #ifdef DO_Q31_RADIX2
   // now try the Q31 version warning does not compile right
   arm_cfft_radix2_instance_q31 s_q31;
-  q31_t src_q31[1024 * 2 * multK];
+
   std::cout << "************ FFT q31_t ************************ \n";
   for (int i = 0; i < 1024 * multK; i++) {
     double x = i * T;
-    src_q31[i*2] = (q31_t)f2q31(0.5 * sin(F1 * 2.0 * PI * x) + 0.5 * sin(F2 * 2.0 * PI * x));
+    src_q31[i*2] = (q31_t)f2q31(signalf(x, F1, F2, F3, F4));
     src_q31[i * 2 + 1] = 0;
   }
   arm_cfft_radix2_init_q31(&s_q31, 1024 * multK, 0, 1); // Initialize the CFFT instance for 8-point FFT
@@ -210,6 +596,24 @@ int main(int argc,char* argv[])
     std::cout << "rad2_q31[" << i << "] , " << (double(i) / double(T * multK * 1024)) << " , " << magnitude(src_q31[2 * i], src_q31[2 * i + 1]) << "\n";
   }
 #endif //DO_Q31_RADIX2
+
+#ifdef DO_Q31_RADIX4
+  // now try the Q31 version warning does not compile right
+  arm_cfft_radix4_instance_q31 s_q31_r4;
+ 
+  std::cout << "************ FFT q31_t rad4 ************************ \n";
+  for (int i = 0; i < 1024 * multK; i++) {
+    double x = i * T;
+    src_q31[i * 2] = (q31_t)f2q31(signalf(x, F1, F2, F3, F4));
+    src_q31[i * 2 + 1] = 0;
+  }
+  arm_cfft_radix4_init_q31(&s_q31_r4, 1024 * multK, 0, 1); // Initialize the CFFT instance for 8-point FFT
+  arm_cfft_radix4_q31(&s_q31_r4, src_q31);
+  for (int i = 0; i < 1024 * multK / 2; i++) {
+    std::cout << "rad4_q31[" << i << "] , " << (double(i) / double(T * multK * 1024)) << " , " << magnitude(src_q31[2 * i], src_q31[2 * i + 1]) << "\n";
+  }
+#endif //DO_Q31_RADIX2
+
   return 0;
 }
 
