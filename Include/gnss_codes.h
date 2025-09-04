@@ -35,10 +35,6 @@ extern "C" {
 void synth_e1b_prn(
   int prn, // one based indexing
   float doppler,
-  float phi_rad,
-  float code_phase,
-  float fs_hz, // typically 4.092e6f
-  float code_rate_cps, // typically 1.023e6f
   size_t N,
   c32* out
 );

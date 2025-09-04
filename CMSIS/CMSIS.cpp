@@ -332,7 +332,7 @@ void read_ors(char* input) {
 
   printf("size (total bytes - hdrs) %d \n", size);
   
-  //// Dial in the prn and doppler here
+  //// Dial in the prn and doppler here ////////////////
 #define SIZE 1024*4 *4  // 16K for Galileo and 4K for GPS
   int proc_gps = 0; // 1 for GPS, 0 for Galileo
   int prn = 36;// 9;// 23;// 9;// 6;// 26;// 9;// 29;// 11;// 6;// 7;// 31;// 3;// 26;// 4;// 9;// 7;// 11;// 6;// 31;// 9;// 3;// 26;// 4;// 10;// 23;// 13;// 27;// 18;// 15;// 10;//15
@@ -367,7 +367,7 @@ void read_ors(char* input) {
     synth_gps_prn(prn, -doppler, SIZE, repli);
   }
   else { // Galileo
-    synth_e1b_prn(prn, -doppler, 0, 0, 4.092e6f, 1.023e6f, SIZE, repli);
+    synth_e1b_prn(prn, -doppler, SIZE, repli);
   }
 
   if (1) {

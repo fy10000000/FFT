@@ -182,13 +182,13 @@ void sincosf_fast(float phia, float* sine, float* cosine) {
 extern void synth_e1b_prn(
   int prn, // one based indexing
   float doppler, 
-  float phi_rad, 
-  float code_phase,
-  float fs_hz, // typically 4.092e6f
-  float code_rate_cps, // typically 1.023e6f
   size_t N,
   c32* out
 ) {
+  float phi_rad = 0.0;
+  float code_phase = 0.0;
+  const float fs_hz = 4.092e6f;
+  const float code_rate_cps = 1.023e6f;
   int ret = load_e1b_primary_codes((char*)"C:/work/Baseband/HEX_E1B.txt", E1B_Code);
   if (ret < 0) { printf("Error loading Galileo codes; check path in synth_e1b_prn()\n"); return; }
   const int L = 4092;
