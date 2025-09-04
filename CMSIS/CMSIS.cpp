@@ -332,8 +332,14 @@ void read_ors(char* input) {
 
   printf("size (total bytes - hdrs) %d \n", size);
   
+  //// Dial in the prn and doppler here
+#define SIZE 1024*4 *4  // 16K for Galileo and 4K for GPS
+  int proc_gps = 0; // 1 for GPS, 0 for Galileo
+  int prn = 36;// 9;// 23;// 9;// 6;// 26;// 9;// 29;// 11;// 6;// 7;// 31;// 3;// 26;// 4;// 9;// 7;// 11;// 6;// 31;// 9;// 3;// 26;// 4;// 10;// 23;// 13;// 27;// 18;// 15;// 10;//15
+  double doppler = -2730.37;// -100.53;// -854.19;// -1927.59;// -100.53;// -1231.94;// -1279.33;// 2651.04;// -82.61;// 646.60;// -1487.68;// 3213.83;// -3087.45;// -3052.57;// -1279.33;// 272.41;// 2651.04;// 3341.25;// 1312.40;// -903.17;// -2885.45;// 2967.03;// -2603.85;// -565.13;// 770.87;// 2023;// -530.0;// -3314.0;// 154.0;// -2034.0;// -2490;// 2030; // -2490
+  
+  /////////////////////////////////////////////////////
 
-#define SIZE 1024*4 *4
   c32* iandq = (c32*)malloc(SIZE * sizeof(c32));
   c32* repli = (c32*)malloc(SIZE * sizeof(c32));
   if (iandq == NULL || repli == NULL) {
@@ -346,10 +352,6 @@ void read_ors(char* input) {
   DecodeOrsIQCplx(&buffer[hdrlen], SIZE/2, iandq);
   free(buffer);
 
-  //float actual[SIZE * 2] = { 0 };
-  //float replica[SIZE * 2] = { 0 };
-  //float prod[SIZE * 2] = { 0 };
-
   float* actual = (float*)malloc(SIZE * 2 * sizeof(float));
   float* replica = (float*)malloc(SIZE * 2 * sizeof(float));
   float* prod = (float*)malloc(SIZE * 2 * sizeof(float));
@@ -361,15 +363,12 @@ void read_ors(char* input) {
   memset(replica, 0, sizeof(float) * SIZE * 2);
   memset(prod, 0, sizeof(float) * SIZE * 2);
 
-  
-  int prn = 6;// 26;// 9;// 29;// 11;// 6;// 7;// 31;// 3;// 26;// 4;// 9;// 7;// 11;// 6;// 31;// 9;// 3;// 26;// 4;// 10;// 23;// 13;// 27;// 18;// 15;// 10;//15
-  double doppler = -1231.94;// -1279.33;// 2651.04;// -82.61;// 646.60;// -1487.68;// 3213.83;// -3087.45;// -3052.57;// -1279.33;// 272.41;// 2651.04;// 3341.25;// 1312.40;// -903.17;// -2885.45;// 2967.03;// -2603.85;// -565.13;// 770.87;// 2023;// -530.0;// -3314.0;// 154.0;// -2034.0;// -2490;// 2030; // -2490
-  //int code[SIZE] = { 0 };
-  //getCode(SIZE/4, 4, prn, code);
-  //mix_prn(code,-doppler,0, repli, SIZE);
-  
-  synth_e1b_prn(prn, -doppler, 0, 0, 4.092e6f, 1.023e6f, SIZE, repli);
-  //synth_gps_prn(prn, -doppler, SIZE, repli);
+  if (proc_gps) {
+    synth_gps_prn(prn, -doppler, SIZE, repli);
+  }
+  else { // Galileo
+    synth_e1b_prn(prn, -doppler, 0, 0, 4.092e6f, 1.023e6f, SIZE, repli);
+  }
 
   if (1) {
     arm_cfft_radix2_instance_f32 as;
@@ -407,7 +406,7 @@ void read_ors(char* input) {
     float max = 0;
     int pos = 0;
     FILE* fp_out = NULL;
-    errno_t er = fopen_s(&fp_out,"C:/Python/out.csv", "w");
+    errno_t er = fopen_s(&fp_out,"C:/Python/out1.csv", "w");
     if (er != 0 || fp_out == NULL) {
       fprintf(stderr, "Failed to open output file\n");
       return;
