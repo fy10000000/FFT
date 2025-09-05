@@ -39,15 +39,23 @@ static inline int16_t q15_mul(int16_t a, int16_t b) {
 
 static inline int16_t q15_add(int16_t a, int16_t b) {
   int32_t sum = (int32_t)a + (int32_t)b;
-  if (sum > Q15_MAX) return Q15_MAX;
-  if (sum < Q15_MIN) return Q15_MIN;
+  if (sum > Q15_MAX) {
+    return Q15_MAX;
+  }
+  if (sum < Q15_MIN) {
+    return Q15_MIN;
+  }
   return (int16_t)sum;
 }
 
 static inline int16_t q15_sub(int16_t a, int16_t b) {
   int32_t diff = (int32_t)a - (int32_t)b;
-  if (diff > Q15_MAX) return Q15_MAX;
-  if (diff < Q15_MIN) return Q15_MIN;
+  if (diff > Q15_MAX) {
+    return Q15_MAX;
+  }
+  if (diff < Q15_MIN) {
+    return Q15_MIN;
+  }
   return (int16_t)diff;
 }
 
@@ -333,17 +341,17 @@ void read_ors(char* input) {
   printf("size (total bytes - hdrs) %d \n", size);
 
   FILE* fp_out = NULL; //output file
-  errno_t er = fopen_s(&fp_out, "C:/Python/out1.csv", "w");
+  errno_t er = fopen_s(&fp_out, "C:/Python/out2.csv", "w");
   if (er != 0 || fp_out == NULL) {
     fprintf(stderr, "Failed to open output file\n");
     return;
   }
   
   //// Dial in the prn and doppler here ////////////////
-#define SIZE 1024*4  // 16K for Galileo and 4K for GPS
-  int proc_gps = 4; // 1 for GPS, 0 for Galileo
-  int prn = 36;// 24;// 34;// 4;// 15;// 36;// 9;// 23;// 9;// 6;// 26;// 9;// 29;// 11;// 6;// 7;// 31;// 3;// 26;// 4;// 9;// 7;// 11;// 6;// 31;// 9;// 3;// 26;// 4;// 10;// 23;// 13;// 27;// 18;// 15;// 10;//15
-  double doppler = 804.48;// -2730.37;// 3553.67;// -1013.74;// -2011.07;// 1557.36;// -2730.37;// -100.53;// -854.19;// -1927.59;// -100.53;// -1231.94;// -1279.33;// 2651.04;// -82.61;// 646.60;// -1487.68;// 3213.83;// -3087.45;// -3052.57;// -1279.33;// 272.41;// 2651.04;// 3341.25;// 1312.40;// -903.17;// -2885.45;// 2967.03;// -2603.85;// -565.13;// 770.87;// 2023;// -530.0;// -3314.0;// 154.0;// -2034.0;// -2490;// 2030; // -2490
+#define SIZE 1024*4 *4 // 16K for Galileo and 4K for GPS
+  int proc_gps = 0; // 1 for GPS, 0 for Galileo
+  int prn = 5;// 15;// 24;// 4;// 23;// 5;// 31;// 6;// 9;// 34;// 36;// 24;// 34;// 4;// 15;// 36;// 9;// 23;// 9;// 6;// 26;// 9;// 29;// 11;// 6;// 7;// 31;// 3;// 26;// 4;// 9;// 7;// 11;// 6;// 31;// 9;// 3;// 26;// 4;// 10;// 23;// 13;// 27;// 18;// 15;// 10;//15
+  double doppler = 2277.32;// 1557.36;// 3553.67;// -2011.07;// -854.19;// 2277.32;// 1927.59;// -1231.94;// -100.53;// -1013.74;// -2730.37;// 3553.67;// -1013.74;// -2011.07;// 1557.36;// -2730.37;// -100.53;// -854.19;// -1927.59;// -100.53;// -1231.94;// -1279.33;// 2651.04;// -82.61;// 646.60;// -1487.68;// 3213.83;// -3087.45;// -3052.57;// -1279.33;// 272.41;// 2651.04;// 3341.25;// 1312.40;// -903.17;// -2885.45;// 2967.03;// -2603.85;// -565.13;// 770.87;// 2023;// -530.0;// -3314.0;// 154.0;// -2034.0;// -2490;// 2030; // -2490
   
   /////////////////////////////////////////////////////
 
@@ -376,7 +384,7 @@ void read_ors(char* input) {
     synth_e1b_prn(prn, -doppler, SIZE, repli);
   }
 
-  if (0) {
+  if (1) {
     arm_cfft_radix2_instance_f32 as;
     arm_cfft_radix2_instance_f32 rs;
 
@@ -420,61 +428,16 @@ void read_ors(char* input) {
     printf("max_float = %f pos=%d\n", max, pos);
   }
 
-  if (1) { // q15 
-
-    arm_cfft_radix4_instance_q15 aq;
-    arm_cfft_radix4_instance_q15 rq;
-    q15_t  actual[SIZE * 2] = { 0 };
-    q15_t replica[SIZE * 2] = { 0 };
-    for (int i = 0; i < SIZE; i++) {
-      actual[2 * i]      = f2q15(iandq[i].r * 0.15);
-      actual[2 * i + 1]  = f2q15(iandq[i].i * 0.15);
-      replica[2 * i]     = f2q15(repli[i].r * 0.15);
-      replica[2 * i + 1] = f2q15(repli[i].i * 0.15);
-    }
-    if (iandq != NULL) { free(iandq); }
-    if (repli != NULL) { free(repli); }
-
-    arm_cfft_radix4_init_q15(&aq, SIZE, 0, 1); // Initialize the CFFT instance for 8-point FFT
-    arm_cfft_radix4_q15(&aq, actual);
-
-    arm_cfft_radix4_init_q15(&rq, SIZE, 0, 1); // Initialize the CFFT instance for 8-point FFT
-    arm_cfft_radix4_q15(&rq, replica);
-  
-    q15_t prod[SIZE * 2] = { 0 };
-    // Mult Actual with conjugate of Replica
-    for (int i = 0; i < SIZE; i++) {
-      float Ar = actual[i * 2], Ai = actual[i * 2 + 1];
-      float Rr = replica[i * 2], Ri = replica[i * 2 + 1];
-      // A * conj(R)
-      prod[i * 2] = q15_add(q15_mul(Ar,Rr) , q15_mul(Ai,Ri));     // (Ar + jAi) * (Rr - jRi)
-      prod[i * 2 + 1] = q15_sub(q15_mul(Ai,Rr), q15_mul(Ar,Ri));     // 
-    }
-
-    arm_cfft_radix4_instance_q15 conv;
-    arm_cfft_radix4_init_q15(&conv, SIZE, 1, 1); // inverse FFT
-    arm_cfft_radix4_q15(&conv, prod);
-    float max = 0;
-    int pos = 0;
-    for (int i = 0; i < SIZE; i++) {
-      float mag = sqrt( (float)prod[2 * i] * (float)prod[2 * i] + (float)prod[2 * i + 1] * (float)prod[2 * i + 1]);
-      fprintf(fp_out,"%d, %f \n", i, mag);
-      if (mag > max) { max = mag; pos = i;}
-    }
-    printf("max_q15 = %f pos=%d\n", max, pos);
-  }
-
   if (0) { // q31 
-
     arm_cfft_radix4_instance_q31 aq;
     arm_cfft_radix4_instance_q31 rq;
     q31_t  actual[SIZE * 2] = { 0 };
     q31_t replica[SIZE * 2] = { 0 };
     for (int i = 0; i < SIZE; i++) {
-      actual[2 * i] = f2q31(iandq[i].r * 0.15);
-      actual[2 * i + 1] = f2q31(iandq[i].i * 0.15);
-      replica[2 * i] = f2q31(repli[i].r * 0.15);
-      replica[2 * i + 1] = f2q31(repli[i].i * 0.15);
+      actual[2 * i]      = f2q31(iandq[i].r * 0.00001);
+      actual[2 * i + 1]  = f2q31(iandq[i].i * 0.00001);
+      replica[2 * i]     = f2q31(repli[i].r * 0.00001);
+      replica[2 * i + 1] = f2q31(repli[i].i * 0.00001);
     }
     if (iandq != NULL) { free(iandq); }
     if (repli != NULL) { free(repli); }
@@ -502,10 +465,55 @@ void read_ors(char* input) {
     int pos = 0;
     for (int i = 0; i < SIZE; i++) {
       float mag = sqrt((float)prod[2 * i] * (float)prod[2 * i] + (float)prod[2 * i + 1] * (float)prod[2 * i + 1]);
+      if (i <= 4 || i >= SIZE - 4) { mag = 0; }
       fprintf(fp_out, "%d, %f \n", i, mag);
       if (mag > max) { max = mag; pos = i; }
     }
     printf("max_q31 = %f pos=%d\n", max, pos);
+  }
+
+  if (0) { // q15 
+
+    arm_cfft_radix4_instance_q15 aq;
+    arm_cfft_radix4_instance_q15 rq;
+    q15_t  actual[SIZE * 2] = { 0 };
+    q15_t replica[SIZE * 2] = { 0 };
+    for (int i = 0; i < SIZE; i++) {
+      actual[2 * i] = f2q15(iandq[i].r * 0.2);
+      actual[2 * i + 1] = f2q15(iandq[i].i * 0.2);
+      replica[2 * i] = f2q15(repli[i].r * 0.2);
+      replica[2 * i + 1] = f2q15(repli[i].i * 0.2);
+    }
+    if (iandq != NULL) { free(iandq); }
+    if (repli != NULL) { free(repli); }
+
+    arm_cfft_radix4_init_q15(&aq, SIZE, 0, 1); // Initialize the CFFT instance for 8-point FFT
+    arm_cfft_radix4_q15(&aq, actual);
+
+    arm_cfft_radix4_init_q15(&rq, SIZE, 0, 1); // Initialize the CFFT instance for 8-point FFT
+    arm_cfft_radix4_q15(&rq, replica);
+
+    q15_t prod[SIZE * 2] = { 0 };
+    // Mult Actual with conjugate of Replica
+    for (int i = 0; i < SIZE; i++) {
+      float Ar = actual[i * 2], Ai = actual[i * 2 + 1];
+      float Rr = replica[i * 2], Ri = replica[i * 2 + 1];
+      // A * conj(R)
+      prod[i * 2] = q15_add(q15_mul(Ar, Rr), q15_mul(Ai, Ri));     // (Ar + jAi) * (Rr - jRi)
+      prod[i * 2 + 1] = q15_sub(q15_mul(Ai, Rr), q15_mul(Ar, Ri));     // 
+    }
+
+    arm_cfft_radix4_instance_q15 conv;
+    arm_cfft_radix4_init_q15(&conv, SIZE, 1, 1); // inverse FFT
+    arm_cfft_radix4_q15(&conv, prod);
+    float max = 0;
+    int pos = 0;
+    for (int i = 0; i < SIZE; i++) {
+      float mag = sqrt((float)prod[2 * i] * (float)prod[2 * i] + (float)prod[2 * i + 1] * (float)prod[2 * i + 1]);
+      fprintf(fp_out, "%d, %f \n", i, mag);
+      if (mag > max) { max = mag; pos = i; }
+    }
+    printf("max_q15 = %f pos=%d\n", max, pos);
   }
 
   fclose(fp_out);
