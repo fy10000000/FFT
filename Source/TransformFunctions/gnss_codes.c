@@ -228,7 +228,7 @@ extern void synth_e1b_prn(
 
 ////////////////////////////////////////////////////////////////
 
-void getCode(int num, int samplesPerChip, const int prn, int* out)
+extern void getCode(int num, int samplesPerChip, const int prn, int* out)
 {
   //Feedback taps as defined in GPS spec
   int g1tap[] = { 2,9 };

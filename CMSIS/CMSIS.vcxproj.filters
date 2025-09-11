@@ -744,6 +744,9 @@
     <ClCompile Include="..\Source\TransformFunctions\gnss_codes.c">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="..\Source\TransformFunctions\quasi_pilot_tests.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="..\Include\arm_common_tables.h">

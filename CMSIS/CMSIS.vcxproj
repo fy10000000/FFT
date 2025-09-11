@@ -371,6 +371,7 @@
     <ClCompile Include="..\Source\TransformFunctions\arm_rfft_q31.c" />
     <ClCompile Include="..\Source\TransformFunctions\arm_transform_buffer_sizes.c" />
     <ClCompile Include="..\Source\TransformFunctions\gnss_codes.c" />
+    <ClCompile Include="..\Source\TransformFunctions\quasi_pilot_tests.c" />
     <ClCompile Include="..\Source\TransformFunctions\TransformFunctions.c" />
     <ClCompile Include="..\Source\TransformFunctions\TransformFunctionsF16.c" />
     <ClCompile Include="CMSIS.cpp" />
