@@ -105,7 +105,7 @@ extern void mix_two_prns_oversampled_per_prn(const int32_t* prn_a,
   const int32_t* prn_b,
   double doppler_a_hz, double doppler_b_hz,
   double phase_a_deg, double phase_b_deg,
-  c32* out_iandq, int size, float samp_rate, float sigma)
+  c32* out_iandq, int size, float samp_rate, float sigma, int sign)
 {
   // PRN A phasor increment and initial phase
   const double dth_a = 2.0 *M_PI * (double)doppler_a_hz / (double)samp_rate;
@@ -128,8 +128,8 @@ extern void mix_two_prns_oversampled_per_prn(const int32_t* prn_a,
     // s[n] = a*e^{j theta_a[n]} + b*e^{j theta_b[n]}
     double ia = a * pca, qa = a * psa;
     double ib = b * pcb, qb = b * psb;
-    out_iandq[samp].r = (float)quantize_pm13(ia + ib  + noise(sigma));
-    out_iandq[samp].i = (float)quantize_pm13(qa + qb  + noise(sigma));
+    out_iandq[samp].r = (float)quantize_pm13(ia + ib  + noise(sigma)) * sign;
+    out_iandq[samp].i = (float)quantize_pm13(qa + qb  + noise(sigma)) * sign;
 
     // advance both phasors
     double npca = pca * ca_inc - psa * sa_inc;

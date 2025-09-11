@@ -530,8 +530,9 @@ void test_quasi_pilot() {
     fprintf(stderr, "Memory allocation failed for 100 ms I&Q array.\n");
     return;
   }
+  int window = 10; // 5 ms either side
   int nci = 100;
-  int c_phase = 999;
+  int c_phase = 777; // which chip to set the code phase to
   int prn1 = 4, prn2 = 8;
   float dop1 = 2000, dop2 = -3000;
   int prn_c1[1023 * 2], prn_c2[1023 * 2];
@@ -541,10 +542,14 @@ void test_quasi_pilot() {
   make_replica(prn_c1, replica, dop1, 1023*2, 1.023e6 * 2);
   // now advance code-phase
   rotate_fwd(prn_c1, 1023 * 2, c_phase); // code phase 1/4 way
-  
+  int sign = 1;
   for (int i = 0; i < nci; i++) {
+    //printf("%d sign %d \n", i+1,sign);
+    //sign *= ((i +1) % 10) == 0 ? -1 : 1; // change sign every 20 ms
+    if (i >= 55) { sign = -1; }
+    // offset doppler by 250 Hz and add a residual doppler ramp of 0.1 Hz per ms
     mix_two_prns_oversampled_per_prn(prn_c1, prn_c2,dop1 + 250.0 + i * 0.1 ,dop2 - i * 0.1,0,0,
-      &out[1023 * 2 * i],1023*2, 1.023e6 * 2 , 4.01);
+      &out[1023 * 2 * i],1023*2, 1.023e6 * 2 , 4.01, sign);
   }
   // use FFTs 
   float fft_replica[1024 * 2 * 2] = { 0 };
@@ -558,52 +563,50 @@ void test_quasi_pilot() {
   }
   arm_cfft_radix2_f32(&s, fft_replica);
   
-  float fft_prod[1024 * 2 * 2] = { 0 };
   float fft_data[1024 * 2 * 2] = { 0 };
-  arm_cfft_radix2_init_f32(&s, 1024 * 2, 0, 1);
-  // use linearity to sum the ncis coherently
-  for (int loop = 0; loop < nci; loop++) {
-    // xfer to float array
-    fft_data[1024 * 2 - 1] = fft_data[1024 * 2 - 2] = 0;
-    for (int j = 0; j < 1023 * 2; j++) {
-      fft_data[j * 2 + 0] += out[(1023 * 2 * loop) + j].r * 0.25;
-      fft_data[j * 2 + 1] += out[(1023 * 2 * loop) + j].i * 0.25;
+  for (int center = window/2; center <= nci - window/2; center++) {
+    // use linearity to sum the ncis coherently in moving window
+    memset(fft_data, 0, sizeof(fft_data));
+    for (int windex = center - window /2; windex < center + window/5; windex++) {
+      for (int j = 0; j < 1023 * 2; j++) { // xfer to float array
+        fft_data[j * 2 + 0] += out[(1023 * 2 * windex) + j].r * 0.25;
+        fft_data[j * 2 + 1] += out[(1023 * 2 * windex) + j].i * 0.25;
+      }
+    } // for coherent integrations
+    // need a better normalization strategy if using fixed point to avoid overflow
+    for (int j = 0; j < 1023 * 2 * 2; j++) { fft_data[j] /= (float)window; }
+    arm_cfft_radix2_init_f32(&s, 1024 * 2, 0, 1);
+    arm_cfft_radix2_f32(&s, fft_data);
+    // pt-wise multiply with conj of replica
+    float fft_prod[1024 * 2 * 2] = { 0 };
+    for (int k = 0; k < 1024 * 2; k++) {
+      float Ar = fft_data[k * 2 + 0], Ai = fft_data[k * 2 + 1];
+      float Rr = fft_replica[k * 2 + 0], Ri = fft_replica[k * 2 + 1]; // conj
+      // A * conj(R) and add this product coherently
+      fft_prod[k * 2 + 0] += (Ar * Rr + Ai * Ri);     // (Ar + jAi) * (Rr - jRi)
+      fft_prod[k * 2 + 1] += (Ai * Rr - Ar * Ri);     // 
     }
-  } // for coherent integrations
-  for (int j = 0; j < 1023 * 2 * 2; j++) {
-    fft_data[j] /= (float)nci;
-  }
-  arm_cfft_radix2_f32(&s, fft_data);
-  // multiply with conj of replica
-    
-  for (int k = 0; k < 1024 * 2; k++) {
-    float Ar =    fft_data[k * 2 + 0], Ai =    fft_data[k * 2 + 1];
-    float Rr = fft_replica[k * 2 + 0], Ri = fft_replica[k * 2 + 1]; // conj
-    // A * conj(R) and add this product coherently
-    fft_prod[k * 2 + 0] += (Ar * Rr + Ai * Ri);     // (Ar + jAi) * (Rr - jRi)
-    fft_prod[k * 2 + 1] += (Ai * Rr - Ar * Ri);     // 
-  }
-  
-  // inverse FFT
-  arm_cfft_radix2_init_f32(&s, 1024 * 2, 1, 1);
-  arm_cfft_radix2_f32(&s, fft_prod);
-  float max = 0;
-  int pos = 0;
 
-  FILE* fp_out = NULL; //output file
-  errno_t er = fopen_s(&fp_out, "C:/Python/out2.csv", "w");
-  if (er != 0 || fp_out == NULL) {
-    fprintf(stderr, "Failed to open output file\n");
-    return;
+    // inverse FFT
+    arm_cfft_radix2_init_f32(&s, 1024 * 2, 1, 1);
+    arm_cfft_radix2_f32(&s, fft_prod);
+
+    //FILE* fp_out = NULL; //output file
+    //errno_t er = fopen_s(&fp_out, "C:/Python/out2.csv", "w");
+    //if (er != 0 || fp_out == NULL) {
+    //  fprintf(stderr, "Failed to open output file\n");
+    //  return;
+    //}
+
+    float max = 0; int pos = 0;
+    for (int m = 0; m < 1024 * 2; m++) {
+      float mag = sqrt(fft_prod[m * 2] * fft_prod[m * 2] + fft_prod[m * 2 + 1] * fft_prod[m * 2 + 1]);
+      //fprintf(fp_out, "%d, %f \n", m, mag);
+      if (mag > max) { max = mag; pos = m; }
+    }
+    printf("center=%d max=%f pos=%d\n", center, max, pos);
   }
-  for (int m = 0; m < 1024 * 2; m++) {
-    float mag = sqrt(fft_prod[m * 2] * fft_prod[m * 2] + fft_prod[m * 2 + 1] * fft_prod[m * 2 + 1]);
-    fprintf(fp_out, "%d, %f \n", m, mag);
-    if (m < 2 || (m > 2044)) { continue; }
-    if (mag > max) { max = mag; pos = m; }
-  }
-  printf("max_float quasi pilot segment max = %f pos=%d\n", max, pos);
-  fclose(fp_out);
+  //fclose(fp_out);
   free(out);
 }
 

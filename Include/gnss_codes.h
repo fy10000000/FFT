@@ -48,7 +48,7 @@ void synth_gps_prn(int prn, float doppler, size_t size, c32* replica);
 void mix_two_prns_oversampled_per_prn(const int32_t* prn_a, const int32_t* prn_b,
   double doppler_a_hz, double doppler_b_hz,
   double phase_a_deg, double phase_b_deg,
-  c32* out_iandq, int size, float samp_rate, float sigma);
+  c32* out_iandq, int size, float samp_rate, float sigma, int sign);
 
 void make_replica(const int32_t* prn_a, c32* out_iandq, float doppler, int size, float samp_freq);
 void rotate_fwd(int array[], int size, int offset);
