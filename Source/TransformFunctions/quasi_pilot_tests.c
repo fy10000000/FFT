@@ -128,8 +128,8 @@ extern void mix_two_prns_oversampled_per_prn(const int32_t* prn_a,
     // s[n] = a*e^{j theta_a[n]} + b*e^{j theta_b[n]}
     double ia = a * pca, qa = a * psa;
     double ib = b * pcb, qb = b * psb;
-    out_iandq[samp].r = (float)quantize_pm13(ia + ib + noise(sigma)); 
-    out_iandq[samp].i = (float)quantize_pm13(qa + qb + noise(sigma)); 
+    out_iandq[samp].r = (float)quantize_pm13(ia + ib  + noise(sigma));
+    out_iandq[samp].i = (float)quantize_pm13(qa + qb  + noise(sigma));
 
     // advance both phasors
     double npca = pca * ca_inc - psa * sa_inc;
