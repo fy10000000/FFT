@@ -563,8 +563,9 @@ void read_ors(char* input) {
 }
 
 void test_quasi_pilot() {
+  srand((unsigned int)time(NULL)); // randomise seed
   // Test the quasi pilot generation
-  int len = 1023 * 2 * 100; // 2 samples per chip and 100 ms
+  int len = 1023 * 2 * 240; // 2 samples per chip and 100 ms
   int min_idx = 0;
   int loc_cnt = 0;
   float min_val = 1e5;
@@ -573,10 +574,10 @@ void test_quasi_pilot() {
     fprintf(stderr, "Memory allocation failed for 100 ms I&Q array.\n");
     return;
   }
-  int locations[50] = {21,40,60,81};// { 11, 21, 31, 41, 50, 61, 71, 81, 91, -1 };// index into locations of bit transitions
-  int window = 16; // 5 ms either side
-  int nci = 100;
-  int c_phase = 777; // which chip to set the code phase to
+  int locations[50] = { -1 };// { 19, 39, 60, 79, 99, 119, 140, 159, 180 };// { -1 };// { 19, 39, 59, 79, 99, 119, 139, 159, 179 };// index into locations of bit transitions
+  int window = 6; // 5 ms either side
+  int nci = 240;
+  int c_phase = 888; // which chip to set the code phase to
   int prn1 = 4, prn2 = 8;
   float dop1 = 2000, dop2 = -3000;
   int prn_c1[1023 * 2], prn_c2[1023 * 2];
@@ -590,17 +591,15 @@ void test_quasi_pilot() {
   int sign2 = 1;
   stat_s stat;
   stat_init(&stat);
-  stat_s stat2;
-  stat_init(&stat2);
   for (int i = 0; i < nci; i++) {
     
-    sign *= ((i +1) % 20) == 0 ? -1 : 1; // change sign every 20 ms
-    for (int j = 0; j < 10; j++) {
+    sign *= ((i +1) % 10) == 0 ? -1 : 1; // change sign every 20 ms
+    for (int j = 0; j < 50; j++) {
       if (locations[j] == i) { sign2 *= -1; break; } // change sign at the bit transitions
     }
     // offset doppler by 250 Hz and add a residual doppler ramp of 0.1 Hz per ms
     mix_two_prns_oversampled_per_prn(prn_c1, prn_c2,dop1 + 250.0 + i * 0.1 ,dop2 - i * 0.1,0,0,
-      &out[1023 * 2 * i],1023*2, 1.023e6 * 2 , 4.01, sign * sign2);
+      &out[1023 * 2 * i],1023*2, 1.023e6 * 2 , 2.26, sign * sign2); // was 2.26 for -118 dBm
     printf("%d sign %d \n", i + 1, sign * sign2);
   }
   // use FFTs 
@@ -649,18 +648,15 @@ void test_quasi_pilot() {
       //fprintf(fp_out, "%d, %f \n", m, mag);
       if (mag > max) { max = mag; pos = m; }
     }
-    //stat_add(&stat, pos);
-    stat_add(&stat2, max);
-    //float var = stat_var(&stat);
-    //float mean = stat_mean(&stat);
-    //float var2 = stat_var(&stat2);
-    float mean2 = stat_mean(&stat2);
+    stat_add(&stat, max);
+  
+    float mean2 = stat_mean(&stat);
     if (max < min_val && max < mean2 - 0.5 && max < 20) {
       min_val = max;
       min_idx = center;
     }
     if ((center == min_idx + 1) && (max > min_val) ) {
-      locations[loc_cnt++] = min_idx - 1;
+      locations[loc_cnt++] = min_idx; // empirically the wider the window the earlier the bit transition appears
       min_val = 1e5;
       min_idx = 0;
     }
@@ -670,7 +666,7 @@ void test_quasi_pilot() {
   for (int i = 0; i < loc_cnt; i++) {
     printf("Bit transition at %d ms \n", locations[i]);
   }
-
+  printf("Random number: %d\n", rand());
   free(out);
 }
 
