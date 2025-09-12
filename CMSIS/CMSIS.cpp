@@ -19,6 +19,47 @@
 #define Q15_MIN   (-32768)
 #define Q15_MAX   ( 32767)
 
+typedef struct {
+  float  num;
+  float  data[20];
+  int    idx;
+  int    window;
+} stat_s;
+
+void stat_init(stat_s* s) {
+  s->num = 0.0f;
+  s->idx = 0;
+  s->window = 3;
+  memset(s->data, 0, sizeof(s->data));
+} 
+
+void stat_add(stat_s* s, float x) {
+  if (s->num < s->window) {
+    s->num++;
+  }
+  s->data[s->idx] = x;
+  s->idx++;
+  s->idx %= s->window;
+}
+
+float stat_var(stat_s* s) {
+  if (s->num < 3) { return 0.0f; }
+  float sum = 0.0f, sum_sq = 0.0f;
+  for (int i = 0; i < s->num; i++) {
+    sum += s->data[i];
+    sum_sq += s->data[i] * s->data[i];
+  }
+  return ((sum_sq - sum * sum / s->num) / (s->num - 1));
+}
+
+float stat_mean(stat_s* s) {
+  float sum = 0.0f;
+  for (int i = 0; i < s->num; i++) {
+    sum += s->data[i];
+  }
+  return  sum / s->num;
+}
+
 static inline int16_t q15_mul(int16_t a, int16_t b) {
   // Promote to 32-bit for the product
   int32_t prod = (int32_t)a * (int32_t)b; // range: [0x4000_0000, 0x4000_0000]
@@ -524,13 +565,16 @@ void read_ors(char* input) {
 void test_quasi_pilot() {
   // Test the quasi pilot generation
   int len = 1023 * 2 * 100; // 2 samples per chip and 100 ms
-  
+  int min_idx = 0;
+  int loc_cnt = 0;
+  float min_val = 1e5;
   c32* out = (c32*)malloc(len * sizeof(c32));
   if (out == NULL) {
     fprintf(stderr, "Memory allocation failed for 100 ms I&Q array.\n");
     return;
   }
-  int window = 10; // 5 ms either side
+  int locations[50] = {21,40,60,81};// { 11, 21, 31, 41, 50, 61, 71, 81, 91, -1 };// index into locations of bit transitions
+  int window = 16; // 5 ms either side
   int nci = 100;
   int c_phase = 777; // which chip to set the code phase to
   int prn1 = 4, prn2 = 8;
@@ -543,13 +587,21 @@ void test_quasi_pilot() {
   // now advance code-phase
   rotate_fwd(prn_c1, 1023 * 2, c_phase); // code phase 1/4 way
   int sign = 1;
+  int sign2 = 1;
+  stat_s stat;
+  stat_init(&stat);
+  stat_s stat2;
+  stat_init(&stat2);
   for (int i = 0; i < nci; i++) {
-    //printf("%d sign %d \n", i+1,sign);
-    //sign *= ((i +1) % 10) == 0 ? -1 : 1; // change sign every 20 ms
-    if (i >= 55) { sign = -1; }
+    
+    sign *= ((i +1) % 20) == 0 ? -1 : 1; // change sign every 20 ms
+    for (int j = 0; j < 10; j++) {
+      if (locations[j] == i) { sign2 *= -1; break; } // change sign at the bit transitions
+    }
     // offset doppler by 250 Hz and add a residual doppler ramp of 0.1 Hz per ms
     mix_two_prns_oversampled_per_prn(prn_c1, prn_c2,dop1 + 250.0 + i * 0.1 ,dop2 - i * 0.1,0,0,
-      &out[1023 * 2 * i],1023*2, 1.023e6 * 2 , 4.01, sign);
+      &out[1023 * 2 * i],1023*2, 1.023e6 * 2 , 4.01, sign * sign2);
+    printf("%d sign %d \n", i + 1, sign * sign2);
   }
   // use FFTs 
   float fft_replica[1024 * 2 * 2] = { 0 };
@@ -591,22 +643,34 @@ void test_quasi_pilot() {
     arm_cfft_radix2_init_f32(&s, 1024 * 2, 1, 1);
     arm_cfft_radix2_f32(&s, fft_prod);
 
-    //FILE* fp_out = NULL; //output file
-    //errno_t er = fopen_s(&fp_out, "C:/Python/out2.csv", "w");
-    //if (er != 0 || fp_out == NULL) {
-    //  fprintf(stderr, "Failed to open output file\n");
-    //  return;
-    //}
-
     float max = 0; int pos = 0;
     for (int m = 0; m < 1024 * 2; m++) {
       float mag = sqrt(fft_prod[m * 2] * fft_prod[m * 2] + fft_prod[m * 2 + 1] * fft_prod[m * 2 + 1]);
       //fprintf(fp_out, "%d, %f \n", m, mag);
       if (mag > max) { max = mag; pos = m; }
     }
-    printf("center=%d max=%f pos=%d\n", center, max, pos);
+    //stat_add(&stat, pos);
+    stat_add(&stat2, max);
+    //float var = stat_var(&stat);
+    //float mean = stat_mean(&stat);
+    //float var2 = stat_var(&stat2);
+    float mean2 = stat_mean(&stat2);
+    if (max < min_val && max < mean2 - 0.5 && max < 20) {
+      min_val = max;
+      min_idx = center;
+    }
+    if ((center == min_idx + 1) && (max > min_val) ) {
+      locations[loc_cnt++] = min_idx - 1;
+      min_val = 1e5;
+      min_idx = 0;
+    }
+    printf("center=%d max=%f pos=%d mean=%f\n", center, max, pos, mean2);
+  } // for center
+
+  for (int i = 0; i < loc_cnt; i++) {
+    printf("Bit transition at %d ms \n", locations[i]);
   }
-  //fclose(fp_out);
+
   free(out);
 }
 
