@@ -565,7 +565,7 @@ void read_ors(char* input) {
 void test_quasi_pilot() {
   srand((unsigned int)time(NULL)); // randomise seed
   // Test the quasi pilot generation
-  int len = 1023 * 2 * 240; // 2 samples per chip and 100 ms
+  int len = 1023 * 2 * 200; // 2 samples per chip and 100 ms
   int min_idx = 0;
   int loc_cnt = 0;
   float min_val = 1e5;
@@ -574,31 +574,30 @@ void test_quasi_pilot() {
     fprintf(stderr, "Memory allocation failed for 100 ms I&Q array.\n");
     return;
   }
-  int locations[50] = { -1 };// { 19, 39, 60, 79, 99, 119, 140, 159, 180 };// { -1 };// { 19, 39, 59, 79, 99, 119, 139, 159, 179 };// index into locations of bit transitions
-  int window = 6; // 5 ms either side
-  int nci = 240;
+  int locations[50] = {-1};// { 10, 20, 30, 40, 50, 60, 70, 80, 90, 100, 110, 120, 130, 140, 150, 160, 170, 180, 190, 200 };// { 19, 39, 60, 79, 99, 119, 140, 159, 180 };// { -1 };// { 19, 39, 59, 79, 99, 119, 139, 159, 179 };// index into locations of bit transitions
+  int window = 6; // 3 ms either side
+  int nci = 200;
   int c_phase = 888; // which chip to set the code phase to
   int prn1 = 4, prn2 = 8;
-  float dop1 = 2000, dop2 = -3000;
+  float dop1 = 2000, dop2 = -3000, dop_error = 250; // full 250 Hz error in wipeoff
   int prn_c1[1023 * 2], prn_c2[1023 * 2];
-  c32 replica[1023 * 2] = { 0 };
+  c32 replica[1023 * 2] = { 0 }; // fixed replica used for FFT
   getCode(1023, 2, prn1, prn_c1);
   getCode(1023, 2, prn2, prn_c2);
   make_replica(prn_c1, replica, dop1, 1023*2, 1.023e6 * 2);
   // now advance code-phase
   rotate_fwd(prn_c1, 1023 * 2, c_phase); // code phase 1/4 way
-  int sign = 1;
-  int sign2 = 1;
+  int sign = 1;  // sign applied as part of simulation
+  int sign2 = 1; // sign applied a posteriori after finding BTT
   stat_s stat;
-  stat_init(&stat);
+  stat_init(&stat); // moving average of peak values window size = 3
   for (int i = 0; i < nci; i++) {
-    
-    sign *= ((i +1) % 10) == 0 ? -1 : 1; // change sign every 20 ms
+    sign *= ((i +1) % 20) == 0 ? -1 : 1; // change sign every 20 ms
     for (int j = 0; j < 50; j++) {
       if (locations[j] == i) { sign2 *= -1; break; } // change sign at the bit transitions
     }
     // offset doppler by 250 Hz and add a residual doppler ramp of 0.1 Hz per ms
-    mix_two_prns_oversampled_per_prn(prn_c1, prn_c2,dop1 + 250.0 + i * 0.1 ,dop2 - i * 0.1,0,0,
+    mix_two_prns_oversampled_per_prn(prn_c1, prn_c2,dop1 + dop_error + i * 0.6 ,dop2 - i * 0.6,0,0,
       &out[1023 * 2 * i],1023*2, 1.023e6 * 2 , 2.26, sign * sign2); // was 2.26 for -118 dBm
     printf("%d sign %d \n", i + 1, sign * sign2);
   }
