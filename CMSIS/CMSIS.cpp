@@ -592,13 +592,13 @@ void test_quasi_pilot() {
   stat_s stat;
   stat_init(&stat); // moving average of peak values window size = 3
   for (int i = 0; i < nci; i++) {
-    sign *= ((i +1) % 20) == 0 ? -1 : 1; // change sign every 20 ms
+    sign *= ((i +1) % 10) == 0 ? -1 : 1; // change sign every 20 ms
     for (int j = 0; j < 50; j++) {
       if (locations[j] == i) { sign2 *= -1; break; } // change sign at the bit transitions
     }
     // offset doppler by 250 Hz and add a residual doppler ramp of 0.1 Hz per ms
     mix_two_prns_oversampled_per_prn(prn_c1, prn_c2,dop1 + dop_error + i * 0.6 ,dop2 - i * 0.6,0,0,
-      &out[1023 * 2 * i],1023*2, 1.023e6 * 2 , 2.26, sign * sign2); // was 2.26 for -118 dBm
+      &out[1023 * 2 * i],1023*2, 1.023e6 * 2 , 3.3, sign * sign2); // was 2.31 for -128.5 dBm 3.1 for -131.5
     printf("%d sign %d \n", i + 1, sign * sign2);
   }
   // use FFTs 
