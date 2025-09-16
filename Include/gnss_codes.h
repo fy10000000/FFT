@@ -43,6 +43,8 @@ void synth_e1b_prn(
   c32* out
 );
 
+void getGalCode(int prn, int* out, int size);
+
 void synth_gps_prn(int prn, float doppler, size_t size, c32* replica);
 
 void mix_two_prns_oversampled_per_prn(const int32_t* prn_a, const int32_t* prn_b,

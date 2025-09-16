@@ -165,6 +165,12 @@ void sincosf_fast(float phia, float* sine, float* cosine) {
   *cosine = cos(phia);
 }
 
+extern void getGalCode(int prn, int* out, int size) {
+  for (int i = 0; i < size; i++) {
+    out[i] = E1B_Code[prn][i];
+  }
+}
+
 // -------------------------------
 // Signal synthesis for two PRNs (PRN2 and PRN4) into one complex baseband stream.
 // Inputs:
