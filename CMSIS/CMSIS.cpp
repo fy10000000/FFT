@@ -1,4 +1,4 @@
-/** 
+﻿/** 
  * CMSIS.cpp : This file contains the 'main' function for testing modifications made
  * to CMSIS to handle up to 16K FFT size for the CFFT functions.
  * 
@@ -18,6 +18,9 @@
 #define Q31_MAX   ((int32_t)0x7FFFFFFF)  //  2147483647
 #define Q15_MIN   (-32768)
 #define Q15_MAX   ( 32767)
+#define R2D (180.0f / 3.14159265358979f)
+#define D2R (3.14159265358979f / 180.0f)
+#define FS (4.092e6f) // sample rate
 
 typedef struct {
   float  num;
@@ -285,6 +288,81 @@ double magnitude(int64_t real, int64_t imag) {
   double imag_d = (double)imag;
   return sqrt(real_d * real_d + imag_d * imag_d);
 }
+
+double recover_prn_phase_deg_with_doppler(const c32* iandq,
+  int SIZE,
+  const int prn_a[], // tested with 1024*4
+  int  code_offset,
+  double doppler_a_hz,
+  double sampe_rate_hz,
+  int* best_offset_out,
+  float* doppler_out,
+  float* pwr)
+{
+  double best_pow = -1.0, best_re = 0.0, best_im = 0.0, best_doppler = 0.0;
+  int best_off = 0;
+
+  float code_search_span = 0; //chip span was 2
+  float code_low = code_offset - code_search_span;
+  float code_high = code_offset + code_search_span;
+  uint8_t wrap = 0;
+  if (code_low < 0) { code_low += SIZE; wrap = 1; }
+  if (code_high > SIZE) { code_high -= SIZE;  wrap = 1; }
+
+  float f_search_step_hz = 1.0; // Hz
+  float f_search_span_hz = 0; // Hz span was 2
+  for (float f = -f_search_span_hz; f <= +f_search_span_hz + 1e-3f; f += f_search_step_hz) {
+    // Frequency wipe for PRN A: multiply by e^{-j 2π f_a n / fs}
+    double dtheta = 2.0 * PI * (doppler_a_hz + f) / (double)sampe_rate_hz;
+
+    const float c_inc = (float)cos(dtheta);
+    const float s_inc = (float)sin(dtheta);
+
+    float pc = 1.0f, ps = 0.0f;  // start at zero phase; PRN A's initial phase stays in residual
+    static float iw[1023 * 4], qw[1023 * 4]; // put replica with Doppler; code will be handled in next loop
+    for (int n = 0; n < SIZE; ++n) {
+      float I = iandq[n].r, Q = iandq[n].i;
+      // (I + jQ) * e^{-jθ} = (I*pc + Q*ps) + j(-I*ps + Q*pc)
+      iw[n] = +I * pc + Q * ps;
+      qw[n] = -I * ps + Q * pc;
+      // rotate by dtheta
+      float npc = pc * c_inc - ps * s_inc;
+      float nps = pc * s_inc + ps * c_inc;
+      // cache for next round
+      pc = npc;
+      ps = nps;
+    }
+
+    // 1/4-chip code-phase search across one code period
+    for (int off = 0; off < SIZE; ++off) {
+      if (wrap == 0 && (off < code_low || off > code_high)) { continue; } // handle wrap around of code search limits
+      if (wrap == 1 && (off > code_high && off < code_low)) { continue; }
+      double re = 0.0, im = 0.0;
+      for (int n = 0; n < SIZE; ++n) {
+        int idx = n - off;
+        if (idx < 0) { idx += SIZE; } // handle code rollovers
+        re += iw[n] * prn_a[idx];
+        im += qw[n] * prn_a[idx];
+      }
+      double p = sqrt(re * re + im * im);
+      if (p > best_pow) {
+        best_pow = p;
+        best_doppler = (double)f;
+        best_re = re;
+        best_im = im;
+        best_off = off;
+      }
+      
+    } // for off 
+  } // end for f_search_span_hz
+  *doppler_out = best_doppler;
+  *best_offset_out = best_off;
+  *pwr = best_pow;
+  //printf(" best %.3f sec %.3f %d %d %d \n", best_pow, second_best_pow, best_off, second_off, (int)fabs(best_off - second_off));
+  double phase_deg = atan2(best_im, best_re) * R2D;
+  return phase_deg;
+}
+
 
 /**
  * @brief Function to generate the arm Twiddle Coefficient Table
@@ -565,7 +643,9 @@ void read_ors(char* input) {
 void test_quasi_pilot() {
   srand((unsigned int)time(NULL)); // randomise seed
   // Test the quasi pilot generation
-  int len = 1023 * 2 * 200; // 2 samples per chip and 100 ms
+  #define SPC 4 // samples per chip
+ 
+  int len = 1023 * SPC * 200; // 2 samples per chip and 100 ms
   int min_idx = 0;
   int loc_cnt = 0;
   float min_val = 1e5;
@@ -574,62 +654,80 @@ void test_quasi_pilot() {
     fprintf(stderr, "Memory allocation failed for 100 ms I&Q array.\n");
     return;
   }
-  int locations[50] = {-1};// { 10, 20, 30, 40, 50, 60, 70, 80, 90, 100, 110, 120, 130, 140, 150, 160, 170, 180, 190, 200 };// { 19, 39, 60, 79, 99, 119, 140, 159, 180 };// { -1 };// { 19, 39, 59, 79, 99, 119, 139, 159, 179 };// index into locations of bit transitions
-  int window = 6; // 3 ms either side
+  int locations[50] = {-1}; //{ 10, 20, 30, 40, 50, 60, 70, 80, 90, 100, 110, 120, 130, 140, 150, 160, 170, 180, 190, 200 };// { 19, 39, 60, 79, 99, 119, 140, 159, 180 };// { -1 };// { 19, 39, 59, 79, 99, 119, 139, 159, 179 };// index into locations of bit transitions
+  int window = 41; // 3 ms either side
   int nci = 200;
-  int c_phase = 888; // which chip to set the code phase to
+  int c_phase = 444; // which chip to set the code phase to
   int prn1 = 4, prn2 = 8;
-  float dop1 = 2000, dop2 = -3000, dop_error = 250; // full 250 Hz error in wipeoff
-  int prn_c1[1023 * 2], prn_c2[1023 * 2];
-  c32 replica[1023 * 2] = { 0 }; // fixed replica used for FFT
-  getCode(1023, 2, prn1, prn_c1);
-  getCode(1023, 2, prn2, prn_c2);
-  make_replica(prn_c1, replica, dop1, 1023*2, 1.023e6 * 2);
+  float dop1 = 2000, dop2 = -3000;
+  float dop_error = 10; // full 250 Hz error in wipeoff
+  float sigma = 0;// 3.4; // noise level
+  int prn_c1[1023 * SPC], prn_c2[1023 * SPC];
+  c32 replica[1023 * SPC] = { 0 }; // fixed replica used for FFT
+  getCode(1023, SPC, prn1, prn_c1);
+  getCode(1023, SPC, prn2, prn_c2);
+  make_replica(prn_c1, replica, dop1, 1023*2, 1.023e6 * SPC);
   // now advance code-phase
-  rotate_fwd(prn_c1, 1023 * 2, c_phase); // code phase 1/4 way
+  rotate_fwd(prn_c1, 1023 * SPC, c_phase); // code phase 1/4 way
   int sign = 1;  // sign applied as part of simulation
   int sign2 = 1; // sign applied a posteriori after finding BTT
   stat_s stat;
   stat_init(&stat); // moving average of peak values window size = 3
   for (int i = 0; i < nci; i++) {
-    sign *= ((i +1) % 10) == 0 ? -1 : 1; // change sign every 20 ms
+    sign *= ((i +1) % 1000) == 0 ? -1 : 1; // change sign every 20 ms
     for (int j = 0; j < 50; j++) {
       if (locations[j] == i) { sign2 *= -1; break; } // change sign at the bit transitions
     }
     // offset doppler by 250 Hz and add a residual doppler ramp of 0.1 Hz per ms
-    mix_two_prns_oversampled_per_prn(prn_c1, prn_c2,dop1 + dop_error + i * 0.6 ,dop2 - i * 0.6,0,0,
-      &out[1023 * 2 * i],1023*2, 1.023e6 * 2 , 3.3, sign * sign2); // was 2.31 for -128.5 dBm 3.1 for -131.5
-    printf("%d sign %d \n", i + 1, sign * sign2);
+    mix_two_prns_oversampled_per_prn(prn_c1, prn_c2,dop1 + dop_error + i * 0.6 ,dop2 - i * 0.6,PI/2,0,
+      &out[1023 * SPC * i],1023* SPC, 1.023e6 * SPC, sigma , sign * sign2); // was 2.31 for -128.5 dBm 3.1 for -131.5
+    //printf("%d sign %d \n", i + 1, sign * sign2);
   }
+  //fixxx
+  /*
+  float fixxf[1024 * 2 * 2] = { 0 };
+  for (int j = 0; j < 1023 * 2; j++) { // xfer to float array
+    fixxf[j * 2 + 0] += out[ j].r ;
+    fixxf[j * 2 + 1] += out[ j].i ;
+  }
+  arm_cfft_radix2_instance_f32 ss;
+  arm_cfft_radix2_init_f32(&ss, 1024 * 2, 0, 1);
+  arm_cfft_radix2_f32(&ss, fixxf);
+  for (int m = 0; m < 1024 * 2; m++) {
+    float mag = sqrt(fixxf[m * 2] * fixxf[m * 2] + fixxf[m * 2 + 1] * fixxf[m * 2 + 1]);
+    //printf("Fixxx: %d, %f \n", m, mag);
+  }
+  //return;
+  */
   // use FFTs 
-  float fft_replica[1024 * 2 * 2] = { 0 };
+  float fft_replica[1024 * SPC * 2] = { 0 };
   arm_cfft_radix2_instance_f32 s;
   memset(fft_replica, 0, sizeof(fft_replica));
-  arm_cfft_radix2_init_f32(&s, 1024 * 2, 0, 1);
+  arm_cfft_radix2_init_f32(&s, 1024 * SPC, 0, 1);
   // xfer to float array
-  for (int i = 0; i < 1023 * 2; i++) {
+  for (int i = 0; i < 1023 * SPC; i++) {
     fft_replica[i * 2 + 0] = replica[i].r * 0.25;
     fft_replica[i * 2 + 1] = replica[i].i * 0.25;
   }
   arm_cfft_radix2_f32(&s, fft_replica);
   
-  float fft_data[1024 * 2 * 2] = { 0 };
+  float fft_data[1024 * SPC * 2] = { 0 };
   for (int center = window/2; center <= nci - window/2; center++) {
     // use linearity to sum the ncis coherently in moving window
     memset(fft_data, 0, sizeof(fft_data));
     for (int windex = center - window /2; windex < center + window/5; windex++) {
-      for (int j = 0; j < 1023 * 2; j++) { // xfer to float array
-        fft_data[j * 2 + 0] += out[(1023 * 2 * windex) + j].r * 0.25;
-        fft_data[j * 2 + 1] += out[(1023 * 2 * windex) + j].i * 0.25;
+      for (int j = 0; j < 1023 * SPC; j++) { // xfer to float array
+        fft_data[j * 2 + 0] += out[(1023 * SPC * windex) + j].r * 0.25;
+        fft_data[j * 2 + 1] += out[(1023 * SPC * windex) + j].i * 0.25;
       }
     } // for coherent integrations
     // need a better normalization strategy if using fixed point to avoid overflow
-    for (int j = 0; j < 1023 * 2 * 2; j++) { fft_data[j] /= (float)window; }
-    arm_cfft_radix2_init_f32(&s, 1024 * 2, 0, 1);
+    for (int j = 0; j < 1023 * SPC * 2; j++) { fft_data[j] /= (float)window; }
+    arm_cfft_radix2_init_f32(&s, 1024 * SPC, 0, 1);
     arm_cfft_radix2_f32(&s, fft_data);
     // pt-wise multiply with conj of replica
-    float fft_prod[1024 * 2 * 2] = { 0 };
-    for (int k = 0; k < 1024 * 2; k++) {
+    float fft_prod[1024 * SPC * 2] = { 0 };
+    for (int k = 0; k < 1024 * SPC; k++) {
       float Ar = fft_data[k * 2 + 0], Ai = fft_data[k * 2 + 1];
       float Rr = fft_replica[k * 2 + 0], Ri = fft_replica[k * 2 + 1]; // conj
       // A * conj(R) and add this product coherently
@@ -638,11 +736,11 @@ void test_quasi_pilot() {
     }
 
     // inverse FFT
-    arm_cfft_radix2_init_f32(&s, 1024 * 2, 1, 1);
+    arm_cfft_radix2_init_f32(&s, 1024 * SPC, 1, 1);
     arm_cfft_radix2_f32(&s, fft_prod);
 
     float max = 0; int pos = 0;
-    for (int m = 0; m < 1024 * 2; m++) {
+    for (int m = 0; m < 1024 * SPC; m++) {
       float mag = sqrt(fft_prod[m * 2] * fft_prod[m * 2] + fft_prod[m * 2 + 1] * fft_prod[m * 2 + 1]);
       //fprintf(fp_out, "%d, %f \n", m, mag);
       if (mag > max) { max = mag; pos = m; }
@@ -669,21 +767,82 @@ void test_quasi_pilot() {
   free(out);
 }
 
+void test_quasi_pilot2() {
+  srand((unsigned int)time(NULL)); // randomise seed
+  // Test the quasi pilot generation
+  int nci = 200;
+  int len = 1023 * 2 * nci; // 2 samples per chip and 100 ms
+  int min_idx = 0;
+  int loc_cnt = 19;
+  float min_val = 1e5;
+  c32* out = (c32*)malloc(len * sizeof(c32));
+  if (out == NULL) {
+    fprintf(stderr, "Memory allocation failed for 100 ms I&Q array.\n");
+    return;
+  }
+  // was {-1}
+  int locations[50] =  { 10, 20, 30, 40, 50, 60, 70, 80, 90, 100, 110, 120, 130, 140, 150, 160, 170, 180, 190, 200 };// { 19, 39, 60, 79, 99, 119, 140, 159, 180 };// { -1 };// { 19, 39, 59, 79, 99, 119, 139, 159, 179 };// index into locations of bit transitions
+  int window = 40; // 3 ms either side
+  
+  int code_phase = 555; // which chip to set the code phase to
+  float carrier_phase = 30; // deg
+  int prn1 = 4, prn2 = 8;
+  float dop1 = 2000, dop2 = -3000;
+  float dop_error = 20; // full 250 Hz error in wipeoff
+  float sigma = 2.00;// 3.4; // noise level
+  int prn_c1[1023 * 2], prn_c2[1023 * 2];
+  
+  getCode(1023, 2, prn1, prn_c1);
+  getCode(1023, 2, prn2, prn_c2);
+  
+  // now advance code-phase
+  rotate_fwd(prn_c1, 1023 * 2, code_phase); // code phase 1/4 way
+  int sign = 1;  // sign applied as part of simulation
+  int sign2 = 1; // sign applied a posteriori after finding BTT
+  stat_s stat;
+  stat_init(&stat); // moving average of peak values window size = 3
+  for (int i = 0; i < nci; i++) {
+    sign *= ((i + 1) % 10) == 0 ? -1 : 1; // change sign every 20 ms
+    for (int j = 0; j < 50; j++) {
+      if (locations[j] == i) { sign2 *= -1; break; } // change sign at the bit transitions
+    }
+    // offset doppler by 250 Hz and add a residual doppler ramp of 0.1 Hz per ms
+    mix_two_prns_oversampled_per_prn(prn_c1, prn_c2, dop1 + dop_error + i * 0.0, dop2 - i * 0.0, carrier_phase * D2R, 0,
+      &out[1023 * 2 * i], 1023 * 2, 1.023e6 * 2, sigma, sign * sign2); // was 2.31 for -128.5 dBm 3.1 for -131.5
+    //printf("%d sign %d \n", i + 1, sign * sign2);
+  }
+
+  getCode(1023, 2, prn1, prn_c1);
+  float dop_out, pwr_out;
+  int code_out;
+  for (int windex = 0; windex < 200; windex++) { 
+    float phase = recover_prn_phase_deg_with_doppler(&out[(1023 * 2 * windex)], 1023 * 2, 
+      prn_c1, code_phase, dop1, 2.046e6, &code_out, &dop_out, &pwr_out);
+    printf("window=%d best_off=%d dop_out=%f pwr_out=%f phase=%f\n", windex, code_out, dop_out, pwr_out, phase);
+  } // for center
+  
+  for (int i = 0; i < loc_cnt; i++) {
+    printf("Bit transition at %d ms \n", locations[i]);
+  }
+  printf("Random number: %d\n", rand());
+  free(out);
+}
+
 /**
  * Main for testing and developing under Visual Studio 2022
  */
 int main(int argc,char* argv[])
 {
   float T = (float) (1.0 / 500.0); // Period for the test sine wave (1/500 seconds = 2ms period)
-  const int multK = 16; // multiple of 1K size can be used for 1,2,4,8,or 16 (has not been tested for less than 1K)
+  const int multK = 1; // multiple of 1K size can be used for 1,2,4,8,or 16 (has not been tested for less than 1K)
   float F1 = 50.0f; // Frequency of the first sine wave
-  float F2 = 0;// 80.0f; // Frequency of the second sine wave
-  float F3 = 0;// 155.0f; // Frequency of the third sine wave (not used in this example, but can be added for more complexity)
+  float F2 = 80.0f;// 80.0f; // Frequency of the second sine wave
+  float F3 = 155.0f;// 155.0f; // Frequency of the third sine wave (not used in this example, but can be added for more complexity)
   float F4 = 230.0f; // Frequency of the third sine wave (not used in this example, but can be added for more complexity)
   
 // File lengths are too long to do float and radix4 and radix2 serially: use compile flags
 //#define DO_FLOAT
-#define DO_Q15_RADIX2
+//#define DO_Q15_RADIX2
 //#define DO_Q15_RADIX4
 //#define DO_Q31_RADIX2 
 //#define DO_Q31_RADIX4 
@@ -719,10 +878,12 @@ int main(int argc,char* argv[])
   float test[1024 * multK * 2];
 
   memset(test, 0, sizeof(test));
+  int code[1024 * 1] = { 1 };
+  getCode(1024, 1, 23, code);
   for (int i = 0; i < 1024 * multK; i++) {
     double x = i * T;
-    test[i*2] = 0.5 * signalf(x,F1,F2,F3,F4);
-    test[i * 2 + 1] = 0; // set the imaginary part to 0
+    test[i * 2 + 0] =  cos(F1 * 2.0 * PI * x) + code[i * 2 + 0] * cos(F2 * 2.0 * PI * x);// 0.5 * signalf(x, F1, F2, F3, F4);
+    test[i * 2 + 1] =  sin(F1 * 2.0 * PI * x) + code[i * 2 + 1] * sin(F2 * 2.0 * PI * x);// cos(F1 * 2.0 * PI * x); // set the imaginary part to 0
   }
   
   arm_cfft_radix2_instance_f32 s;
