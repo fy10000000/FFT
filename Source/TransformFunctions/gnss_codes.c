@@ -1,5 +1,6 @@
 
 #include "gnss_codes.h"
+#include "up_sample.h"
 
 /* Convert one hex digit to value 0..15, or -1 on error. */
 static int hex_nibble(int c) {
@@ -56,6 +57,28 @@ static int hexstream_to_e1b_chips(const char* hex_stream, int8_t chips[E1B_CODE_
     }
   }
   return (chip_idx == E1B_CODE_LEN) ? 0 : -1;
+}
+
+/* Unpack MSB-first packed bits into +/-1 chips.
+   Input:
+     packed: pointer to packed bits, MSB-first in each byte (bit 7 is first)
+     nbits:  number of valid bits; must be >= 10230
+   Output:
+     code: length 10230, values +1 or -1 (int8_t)
+   Mapping: bit 0 -> +1, bit 1 -> -1 (change if your convention differs)
+*/
+static int hexstream_to_e5a_chips(const char* hex_stream, int8_t chips[E5A_CODE_LEN]) {
+  int chip_idx = 0;
+  for (const char* p = hex_stream; *p && chip_idx < E5A_CODE_LEN; ++p) {
+    int v = hex_nibble((unsigned char)*p);
+    if (v < 0) continue; // skip non-hex
+    // MSB-first within nibble: bits 3,2,1,0
+    for (int b = 3; b >= 0 && chip_idx < E5A_CODE_LEN; --b) {
+      int bit = (v >> b) & 1;
+      chips[chip_idx++] = logic_to_chip_icd(bit);
+    }
+  }
+  return (chip_idx == E5A_CODE_LEN) ? 0 : -1;
 }
 
 /* Trim leading/trailing whitespace in-place; returns pointer to first nonspace. */
@@ -160,6 +183,73 @@ int load_e1b_primary_codes(char* path, int8_t out[E1B_MAX_PRN + 1][E1B_CODE_LEN]
   return loaded;
 }
 
+/* Load E5-A codes from a file.
+   Formats supported:
+     - CSV/TXT: "<PRN><sep><1023-hex>" per line (sep can be ',', ';', space, or tab)
+     - HEX-only: "<1023-hex>" per line, PRNs assigned by line number (1..50)
+   Returns number of PRNs successfully loaded (0..50), or <0 on file open/read error. */
+int load_e5a_primary_codes(char* path, int8_t out[E5A_CODE_LEN], int target_prn) {
+  FILE* f = fopen(path, "rb");
+  if (!f) { return -1; }  
+
+  char line[E5A_HEX_LEN + 512];
+  int loaded = 0;
+  int next_prn_seq = 1;
+
+  while (fgets(line, (int)sizeof(line), f)) {
+    char* raw = trim_inplace(line);
+    if (*raw == '\0') continue;           // empty
+    if (*raw == '#')  continue;           // comment
+
+    // If the line is suspiciously short in hex, skip early
+    // (still allow separators; we’ll count hex later)
+    int hex_chars = 0;
+    for (char* c = raw; *c; ++c) {
+      if (isxdigit((unsigned char)*c)) { ++hex_chars; }
+    }
+    if (hex_chars == 0) {
+      continue;
+    }
+
+    int prn = 0;
+    const char* hex_start = parse_prnnd_hex_start(raw, &prn);
+
+    if (prn != target_prn) {
+      continue;
+    }
+
+    if (!hex_start) {
+      // No explicit PRN; treat as hex-only line
+      if (next_prn_seq > E5A_MAX_PRN) continue; // extra lines ignored
+      prn = next_prn_seq++;
+      hex_start = raw;
+    }
+
+    // Copy only hex digits into a temporary buffer to ensure exactly 1023 nibbles are considered.
+    char hexbuf[E5A_HEX_LEN + 1];
+    int h = 0;
+    for (const char* p = hex_start; *p && h < E5A_HEX_LEN; ++p) {
+      if (isxdigit((unsigned char)*p)) hexbuf[h++] = *p;
+    }
+    hexbuf[h] = '\0';
+
+    if (h != E5A_HEX_LEN) {
+      // Try to keep reading more hex from the remainder of the current line (already done) – not enough.
+      // Some files may wrap the hex across multiple lines; this loader assumes one line per PRN.
+      // You can extend here to accumulate across lines if needed.
+      // Skip malformed line
+      continue;
+    }
+
+    if (hexstream_to_e5a_chips(hexbuf, out) == 0) {
+      loaded++;
+    }
+  }
+
+  fclose(f);
+  return loaded;
+}
+
 void sincosf_fast(float phia, float* sine, float* cosine) {
   *sine = sin(phia);
   *cosine = cos(phia);
@@ -169,6 +259,141 @@ extern void getGalCode(int prn, int* out, int size) {
   for (int i = 0; i < size; i++) {
     out[i] = E1B_Code[prn][i];
   }
+}
+
+static size_t gcd_size_t(size_t a, size_t b) {
+  while (b) {
+    size_t t = a % b;
+    a = b;
+    b = t;
+  }
+  return a;
+}
+
+// Rotate array a[0..len-1] right by N positions (forward).
+void rotate_right_i8_cycles(int8_t* a, size_t len, long long N) {
+  if (!a || len == 0) return;
+
+  long long kll = N % (long long)len;
+  if (kll < 0) kll += (long long)len; // handle negative
+  size_t k = (size_t)kll;
+  if (k == 0) return;
+
+  size_t g = gcd_size_t(len, k);
+  for (size_t start = 0; start < g; ++start) {
+    int8_t tmp = a[start];
+    size_t i = start;
+
+    while (1) {
+      size_t next = i + k;
+      if (next >= len) next -= len;
+      if (next == start) break;
+
+      a[i] = a[next];
+      i = next;
+    }
+    a[i] = tmp;
+  }
+}
+
+//   prn              : PRN number
+//   doppler          : carrier Doppler (Hz) per PRN
+//   phi   _rad       : initial carrier phase (rad) at sample 0
+//   code_phase       : initial code phase (chips) in [0,4092)
+//   fs_hz            : sample rate
+//   code_rate_cps    : nominal code chip rate (1.023e6 for E1), set per-PRN Doppler via scaling if desired
+//   N                : number of samples
+//   out              : output buffer of c32 length N
+extern void synth_e5a_prn(
+  int prn, // one based indexing
+  float doppler,
+  size_t N,
+  c32* out,
+  int rotate_offset
+  ) {
+  float phi_rad = 0.0;
+  float code_phase = 0.0;
+  const float fs_hz = 10.23e6;// Mspc
+  const float code_rate_cps = 10.23e6f;
+
+  int8_t code_loc[E5A_CODE_LEN] = { 0 };
+  int ret = load_e5a_primary_codes((char*)"C:/work/Baseband/HEX_E5AI.txt", code_loc, prn);
+  if (ret < 0) { printf("Error loading Galileo codes; check path in synth_e5b_prn()\n"); return; }
+
+  if (rotate_offset) {
+    int size = E5A_CODE_LEN;
+    int8_t* temp = (int8_t*)malloc(sizeof(int8_t) * size);
+    if (temp == NULL) { printf("rotate_fwd's malloc failed");  return; }
+    for (int i = 0; i < size; i++) {
+      if (i - rotate_offset < 0) { temp[i] = code_loc[size + (i - rotate_offset)]; }
+      else { temp[i] = code_loc[i - rotate_offset]; }
+    }
+    memcpy(code_loc, temp, sizeof(int8_t) * size);
+    free(temp);
+  }
+
+  
+  const int L = E5A_CODE_LEN;
+  const int8_t* ca = code_loc;
+
+  float dchips = (code_rate_cps) / fs_hz;
+  float dphia = 2.0f * (float)PI * (doppler) / fs_hz; // phase increment per sample
+  float chips = code_phase;
+  float phia = phi_rad;
+  c32 in[E5A_CODE_LEN];
+  for (size_t n = 0; n < L; ++n) {
+    // PRN a
+    float frac = chips - floorf(chips);
+    int code = code_chip_at(ca, chips, L);
+    float sca = 1.0;// cboc_e1b_weight(frac);
+    float ampa = (float)code * sca; // data assumed +1
+
+    float sa, ca;
+    sincosf_fast(phia, &sa, &ca);
+    c32 xa = { ampa * ca, ampa * sa };
+
+    out[n].r = xa.r;
+    out[n].i = xa.i;
+
+    // advance
+    chips += dchips;
+    if (chips >= L) { chips -= L; }
+    else if (chips < 0) { chips += L; }
+
+    phia += dphia;
+    if (phia > 1e9f || phia < -1e9f) {
+      phia = fmodf(phia, 2.0f * PI);
+    }
+
+  }
+
+  
+ 
+ 
+
+}
+
+void up_sample_10k_to_16k(c32* in , c32* out) {
+  // wrapper around the function doing this
+  const double Fin = 10230e3;
+  const double Fout = 16384e3;
+  const int    NTAPS = 12;      // try 8, 12, or 16
+  const double CUTOFF = 0.45;
+
+  iq_resamp_zp_t* rs = iq_resamp_zp_init(Fin, Fout, NTAPS, CUTOFF);
+  if (!rs) { fprintf(stderr, "init failed\n"); return ; }
+
+  size_t Nin = 10230; // 1 ms at 10.23 Msps
+  //c32* in = (c32*)calloc(Nin, sizeof(c32));
+  // fill 'in' ...
+
+  size_t Nout_cap = (size_t)llround(Nin * (Fout / Fin)) + 8;
+  //c32* out = (c32*)malloc(Nout_cap * sizeof(c32));
+
+  size_t Nout = iq_resamp_process_zero_phase(rs, in, Nin, out, Nout_cap);
+  printf("Produced %zu samples (expected ~16384)\n", Nout);
+
+  iq_resamp_zp_free(rs);
 }
 
 // -------------------------------
@@ -297,10 +522,10 @@ extern void getCode(int num, int samplesPerChip, const int prn, int* out)
   }
 }
 
-void mix_prn(const int32_t prn_a[1023 * 4],
-  const double doppler_a_hz, const double phase_a_deg, c32* signal, int size)
+void mix_prn(const int32_t* prn_a,
+  const double doppler_a_hz, const double phase_a_deg, c32* signal, int size, int spc)
 {
-  double FS = 1.023e6 * 4;
+  double FS = 1.023e6 * spc;
   // PRN A phasor increment and initial phase
   const double dth_a = 2.0 * PI * (double)doppler_a_hz / (double)FS;
   const double ca_inc = (double)cos(dth_a);
@@ -331,10 +556,10 @@ void mix_prn(const int32_t prn_a[1023 * 4],
 }
 
 
-void synth_gps_prn(int prn, float doppler, size_t size, c32*  replica) {
+void synth_gps_prn(int prn, float doppler, size_t size, c32*  replica, int spc) {
   int* code = (int*)malloc(sizeof(int) * size);
-  getCode(size/4, 4, prn, code);
-  mix_prn(code,doppler,0, replica, size);
+  getCode(size/ spc, spc, prn, code);
+  mix_prn(code,doppler,0, replica, size, spc);
   free(code);
 }
 

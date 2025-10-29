@@ -747,6 +747,9 @@
     <ClCompile Include="..\Source\TransformFunctions\quasi_pilot_tests.c">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="..\Source\TransformFunctions\up_sample.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="..\Include\arm_common_tables.h">
@@ -909,6 +912,12 @@
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="..\Include\gnss_codes.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="..\Include\up_sample.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="..\Include\cplx_types.h">
       <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>

@@ -374,6 +374,7 @@
     <ClCompile Include="..\Source\TransformFunctions\quasi_pilot_tests.c" />
     <ClCompile Include="..\Source\TransformFunctions\TransformFunctions.c" />
     <ClCompile Include="..\Source\TransformFunctions\TransformFunctionsF16.c" />
+    <ClCompile Include="..\Source\TransformFunctions\up_sample.c" />
     <ClCompile Include="CMSIS.cpp" />
   </ItemGroup>
   <ItemGroup>
@@ -393,6 +394,7 @@
     <ClInclude Include="..\Include\arm_neon_tables_f16.h" />
     <ClInclude Include="..\Include\arm_vec_math.h" />
     <ClInclude Include="..\Include\arm_vec_math_f16.h" />
+    <ClInclude Include="..\Include\cplx_types.h" />
     <ClInclude Include="..\Include\dsp\basic_math_functions.h" />
     <ClInclude Include="..\Include\dsp\basic_math_functions_f16.h" />
     <ClInclude Include="..\Include\dsp\bayes_functions.h" />
@@ -427,6 +429,7 @@
     <ClInclude Include="..\Include\dsp\utils.h" />
     <ClInclude Include="..\Include\dsp\window_functions.h" />
     <ClInclude Include="..\Include\gnss_codes.h" />
+    <ClInclude Include="..\Include\up_sample.h" />
     <ClInclude Include="..\PrivateInclude\arm_neon_private.h" />
     <ClInclude Include="..\PrivateInclude\arm_sorting.h" />
     <ClInclude Include="..\PrivateInclude\arm_vec_fft.h" />
