@@ -787,12 +787,15 @@ void sim_E5A() {
   int prn_a = 5;
   double doppler_b = -2580;
   int prn_b = 15;
+  int offset = 5011;
+  float up_offset = (float)offset * 16384.0f / 10230.0f; // upsampled offset
+  printf("should be %f \n", up_offset);
 
   c32* samp_a  = (c32*)malloc(E5A_CODE_LEN * sizeof(c32));
   c32* samp_b  = (c32*)malloc(E5A_CODE_LEN * sizeof(c32));
   c32* repli_a = (c32*)malloc(E5A_CODE_LEN * sizeof(c32));
   
-  synth_e5a_prn(prn_a, doppler_a, SIZE, samp_a,5000);
+  synth_e5a_prn(prn_a, doppler_a, SIZE, samp_a, offset);
   synth_e5a_prn(prn_b, doppler_b, SIZE, samp_b, 0);
   synth_e5a_prn(prn_a, doppler_a + 100, SIZE, repli_a, 0);
 
@@ -810,12 +813,14 @@ void sim_E5A() {
   up_sample_10k_to_16k(repli_a, up_repli);
   free(samp_a); free(repli_a);
 
+  /*
   FILE* dbg_fp = NULL;
   fopen_s(&dbg_fp, "C:/Python/check.csv", "w");
   for (int i = 0; i < FFT_SIZE; i++) {
     fprintf(dbg_fp, "%d, %f, %f \n", i, up_samp[i].r, up_samp[i].i);
   }
   fclose(dbg_fp);
+  */
 
   //now do the FFT based correlation
   float* actual = (float*)malloc(FFT_SIZE * 2 * sizeof(float));
@@ -855,7 +860,7 @@ void sim_E5A() {
   float max = 0;
   int pos = 0;
 
-  dbg_fp = NULL;
+  FILE* dbg_fp = NULL;
   fopen_s(&dbg_fp, "C:/Python/out6.csv", "w");
   for (int i = 0; i < FFT_SIZE; i++) {
     float mag = sqrt(prod[2 * i] * prod[2 * i] + prod[2 * i + 1] * prod[2 * i + 1]);
@@ -867,6 +872,7 @@ void sim_E5A() {
   printf("max_float = %f pos=%d\n", max, pos);
 }
 
+/////////////////////////////////////////////////////////////////////////////
 void read_E5A(char* input) {
   FILE* fp_1bitcsv = NULL;
   fopen_s(&fp_1bitcsv, input, "r");
@@ -891,19 +897,19 @@ void read_E5A(char* input) {
   #define SPC 1
   #define SIZE 1024*SPC * 16 // FFT size 16K for Galileo and 4K for GPS
   int prn = 36;// 4;// 10;// 4;// 11;
-  double doppler = 1580 + 1e6 - 2500;// -582;// 59;// -921.0;
+  double doppler = 1580 + 1e6 + 2500;// -582;// 59;// -921.0;
   /////////////////////////////////////////////////////
 
-  c32* iandq = (c32*)malloc(SIZE * sizeof(c32));
+  c32* sampl = (c32*)malloc(SIZE * sizeof(c32));
   c32* repli = (c32*)malloc(SIZE * sizeof(c32));
   for (int i = 0; i < SIZE; i++) {
-    iandq[i].r = 0.0f; iandq[i].i = 0.0f;
+    sampl[i].r = 0.0f; sampl[i].i = 0.0f;
     repli[i].r = 0.0f; repli[i].i = 0.0f;
   }
   
-  if (iandq == NULL || repli == NULL) {
+  if (sampl == NULL || repli == NULL) {
     fprintf(stderr, "Memory allocation failed for q32 array.\n");
-    free(iandq); free(repli);
+    free(sampl); free(repli);
     return;
   }
   
@@ -917,10 +923,10 @@ void read_E5A(char* input) {
       char* token = strtok_s(line, ",", &context); // eat up the first ordinal
       token = strtok_s(NULL, ",", &context);
       if (token != NULL) {
-        iandq[idx].r = (float)atof(token);
+        sampl[idx].r = (float)atof(token);
         token = strtok_s(NULL, ",", &context);
         if (token != NULL) {
-          iandq[idx].i = (float)atof(token);
+          sampl[idx].i = (float)atof(token);
         }
         idx++;
       }
@@ -947,18 +953,26 @@ void read_E5A(char* input) {
     synth_gps_prn(prn, -doppler, SIZE, repli, SPC);
   }
 
+  //up sample
+  c32* up_samp = (c32*)malloc(FFT_SIZE * sizeof(c32));
+  c32* up_repli = (c32*)malloc(FFT_SIZE * sizeof(c32));
+
+  up_sample_10k_to_16k(sampl, up_samp);
+  up_sample_10k_to_16k(repli, up_repli);
+  free(sampl); free(repli);
+
   if (1) {
     arm_cfft_radix2_instance_f32 as;
     arm_cfft_radix2_instance_f32 rs;
 
     for (int i = 0; i < SIZE; i++) {
-      actual[2 * i] = iandq[i].r * 0.25;
-      actual[2 * i + 1] = iandq[i].i * 0.25;
-      replica[2 * i] = repli[i].r * 0.25;
-      replica[2 * i + 1] = repli[i].i * 0.25;
+      actual[2 * i]      = up_samp[i].r * 0.25;
+      actual[2 * i + 1]  = up_samp[i].i * 0.25;
+      replica[2 * i]     = up_repli[i].r * 0.25;
+      replica[2 * i + 1] = up_repli[i].i * 0.25;
     }
-    if (iandq != NULL) { free(iandq); }
-    if (repli != NULL) { free(repli); }
+    if (up_samp  != NULL) { free(up_samp); }
+    if (up_repli != NULL) { free(up_repli); }
 
     // do the float thing
     arm_cfft_radix2_init_f32(&as, SIZE, 0, 1); // Initialize the CFFT instance for 8-point FFT
@@ -987,7 +1001,7 @@ void read_E5A(char* input) {
       fprintf(fp_out, "%d, %f \n", i, mag);
       if (mag > max) { max = mag; pos = i; }
     }
-    printf("max_float = %f pos=%d\n", max, pos);
+    printf("max_float = %f pos=%d frac=%f\n", max, pos, (pos / 16384.0));
   }
 
   if (0) { // q31 
@@ -996,13 +1010,13 @@ void read_E5A(char* input) {
     q31_t  actual[SIZE * 2] = { 0 };
     q31_t replica[SIZE * 2] = { 0 };
     for (int i = 0; i < SIZE; i++) {
-      actual[2 * i] = f2q31(iandq[i].r * 0.00001);
-      actual[2 * i + 1] = f2q31(iandq[i].i * 0.00001);
-      replica[2 * i] = f2q31(repli[i].r * 0.00001);
-      replica[2 * i + 1] = f2q31(repli[i].i * 0.00001);
+      actual[2 * i] = f2q31(up_samp[i].r * 0.00001);
+      actual[2 * i + 1] = f2q31(up_samp[i].i * 0.00001);
+      replica[2 * i] = f2q31(up_repli[i].r * 0.00001);
+      replica[2 * i + 1] = f2q31(up_repli[i].i * 0.00001);
     }
-    if (iandq != NULL) { free(iandq); }
-    if (repli != NULL) { free(repli); }
+    if (up_samp != NULL) { free(up_samp); }
+    if (up_repli != NULL) { free(up_repli); }
 
     arm_cfft_radix4_init_q31(&aq, SIZE, 0, 1); // Initialize the CFFT instance for 8-point FFT
     arm_cfft_radix4_q31(&aq, actual);
@@ -1247,14 +1261,14 @@ int main(int argc,char* argv[])
     return 0;
   }
 
-  if (1) {
+  if (0) {
     sim_E5A();
     return 0;
   }
 
-  if (0) {
+  if (1) {
     
-    read_E5A((char*)"C:/work/Baseband/TestData/E5/t14/G_2024_10_21_22_29_43.047-16384.csv");
+    read_E5A((char*)"C:/work/Baseband/TestData/E5/t14/G_2024_10_21_22_29_43.047.csv");
     //read_E5A((char*)"C:/work/Baseband/TestData/E5/t14/G_2024_10_21_22_32_30.500_resampled_16368Hz.csv");
     //read_E5A((char*)"C:/work/Baseband/TestData/E5/t14/G_2024_10_21_22_29_43.047_resampled_16368Hz.csv");
     return 0;

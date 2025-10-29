@@ -72,6 +72,11 @@ void mix_two_prns_oversampled_per_prn(const int32_t* prn_a, const int32_t* prn_b
 void make_replica(const int32_t* prn_a, c32* out_iandq, float doppler, int size, float samp_freq);
 void rotate_fwd(int array[], int size, int offset);
 
+int8_t quantize_pm13(double x);
+int8_t quantize_pm1(double x);
+
+double noise(double sigma);
+
 #ifdef __cplusplus
 }
 #endif

@@ -42,14 +42,6 @@ extern c32 c_mul_conj(c32 a, c32 b) { // a * conj(b)
   return (c32) { a.r* b.r + a.i * b.i, a.i* b.r - a.r * b.i };
 }
 
-#define Q13_THRESHOLD 0.568 //0.5
-static inline int8_t quantize_pm13(double x) {
-  double thr = Q13_THRESHOLD;
-  if (thr < 0.0) thr = 0.0;
-  if (thr > 1.0) thr = 1.0;
-  int8_t mag = (fabs(x) >= thr) ? 3 : 1;
-  return (x < 0.0) ? (int8_t)(-mag) : mag;
-}
 
 // Fast sincos
 static inline void sincosf_fast(float x, float *s, float *c){
@@ -88,14 +80,6 @@ static inline int code_chip_at(const int8_t *code, float code_phase_chips, int L
     return code[idx];
 }
 
-extern double noise(double sigma) {
-  double u1 = 0.0;
-  do { u1 = (double)rand() / RAND_MAX; } while (u1 == 0.0); // avoid log(0)
-  double u2 = (double)rand() / RAND_MAX;
-  double ans = sigma * sqrt(-2.0 * log(u1)) * cos(2.0 * PI * u2);
-  //printf("%f ", ans);
-  return ans;
-}
 
 // Per-PRN Doppler mixer:
 // - Each PRN has its own Doppler (Hz) and initial carrier phase (deg).

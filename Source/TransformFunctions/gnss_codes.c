@@ -321,6 +321,7 @@ extern void synth_e5a_prn(
   if (ret < 0) { printf("Error loading Galileo codes; check path in synth_e5b_prn()\n"); return; }
 
   if (rotate_offset) {
+    //rotate_right_i8_cycles(code_loc, E5A_CODE_LEN, rotate_offset); //still a bug in this
     int size = E5A_CODE_LEN;
     int8_t* temp = (int8_t*)malloc(sizeof(int8_t) * size);
     if (temp == NULL) { printf("rotate_fwd's malloc failed");  return; }
@@ -331,7 +332,6 @@ extern void synth_e5a_prn(
     memcpy(code_loc, temp, sizeof(int8_t) * size);
     free(temp);
   }
-
   
   const int L = E5A_CODE_LEN;
   const int8_t* ca = code_loc;
@@ -352,8 +352,8 @@ extern void synth_e5a_prn(
     sincosf_fast(phia, &sa, &ca);
     c32 xa = { ampa * ca, ampa * sa };
 
-    out[n].r = xa.r;
-    out[n].i = xa.i;
+    out[n].r = xa.r;// quantize_pm1(xa.r + noise(1.0));
+    out[n].i = xa.i;// quantize_pm1(xa.i + noise(1.0));
 
     // advance
     chips += dchips;
@@ -366,11 +366,6 @@ extern void synth_e5a_prn(
     }
 
   }
-
-  
- 
- 
-
 }
 
 void up_sample_10k_to_16k(c32* in , c32* out) {
@@ -563,3 +558,25 @@ void synth_gps_prn(int prn, float doppler, size_t size, c32*  replica, int spc) 
   free(code);
 }
 
+#define Q13_THRESHOLD 0.568 //0.5
+int8_t quantize_pm13(double x) {
+  double thr = Q13_THRESHOLD;
+  if (thr < 0.0) thr = 0.0;
+  if (thr > 1.0) thr = 1.0;
+  int8_t mag = (fabs(x) >= thr) ? 3 : 1;
+  return (x < 0.0) ? (int8_t)(-mag) : mag;
+}
+
+int8_t quantize_pm1(double x) {
+  // Symmetric tie-break: zero maps to +1
+  return (x >= 0.0f) ? +1 : -1;
+}
+
+double noise(double sigma) {
+  double u1 = 0.0;
+  do { u1 = (double)rand() / RAND_MAX; } while (u1 == 0.0); // avoid log(0)
+  double u2 = (double)rand() / RAND_MAX;
+  double ans = sigma * sqrt(-2.0 * log(u1)) * cos(2.0 * PI * u2);
+  //printf("%f ", ans);
+  return ans;
+}
