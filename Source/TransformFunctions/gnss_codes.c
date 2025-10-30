@@ -332,6 +332,14 @@ extern void synth_e5a_prn(
     memcpy(code_loc, temp, sizeof(int8_t) * size);
     free(temp);
   }
+
+  //FILE* fp_out = NULL; //output file
+  //errno_t er = fopen_s(&fp_out, "C:/Python/prn36.csv", "w");
+  //for (int i = 0; i < E5A_CODE_LEN; i++) {
+  //  fprintf(fp_out, "%d, %d\n",i, -code_loc[i]);
+  //}
+  //fclose(fp_out);
+
   
   const int L = E5A_CODE_LEN;
   const int8_t* ca = code_loc;
