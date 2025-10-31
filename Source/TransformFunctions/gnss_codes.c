@@ -349,6 +349,7 @@ extern void synth_e5a_prn(
   float chips = code_phase;
   float phia = phi_rad;
   c32 in[E5A_CODE_LEN];
+  int8_t no_quant = 1; // 0 for quantization
   for (size_t n = 0; n < L; ++n) {
     // PRN a
     float frac = chips - floorf(chips);
@@ -360,8 +361,8 @@ extern void synth_e5a_prn(
     sincosf_fast(phia, &sa, &ca);
     c32 xa = { ampa * ca, ampa * sa };
 
-    out[n].r = xa.r;// quantize_pm1(xa.r + noise(1.0));
-    out[n].i = xa.i;// quantize_pm1(xa.i + noise(1.0));
+    out[n].r = no_quant ? xa.r : quantize_pm1(xa.r + noise(1.0));
+    out[n].i = no_quant ? xa.i : quantize_pm1(xa.i + noise(1.0));
 
     // advance
     chips += dchips;
