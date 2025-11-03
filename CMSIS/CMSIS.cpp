@@ -897,8 +897,9 @@ void read_E5A(char* input) {
 #define SPC 1
 #define FFT_SIZE 16384 
 #define SAMP 10230 // for 1 ms at 10.23 MHz
-  int prn = 9;// 36
-  double doppler = -1*(1725 + 1e6 +2500);// 1580
+  // only 9 and 36 with q31; 10, 6 also works with float
+  int prn = 36;// 9;// 36
+  double doppler = -1*(1580 + 1e6 +2500);// 1580
 #define DO_FLOAT // q31 ifndef
   /////////////////////////////////////////////////////
   
