@@ -898,8 +898,8 @@ void read_E5A(char* input) {
 #define FFT_SIZE 16384 
 #define SAMP 10230 // for 1 ms at 10.23 MHz
   // only 9 and 36 with q31; 10, 6 also works with float
-  int prn = 36;// 9;// 36
-  double doppler = -1*(1580 + 1e6 +2500);// 1580
+  int prn = 6;// 6;// 36;// 9;// 36
+  double doppler = -1*(1261 + 1e6 +2500);// 1580
 #define DO_FLOAT // q31 ifndef
   /////////////////////////////////////////////////////
   
@@ -945,7 +945,7 @@ void read_E5A(char* input) {
     synth_e5a_prn(prn, -doppler, SAMP, repli, 0);
   }
   else { // GPS
-    synth_gps_prn(prn, -doppler, SAMP, repli, SPC);
+    synth_L5I_prn(prn, -doppler, SAMP, repli, 0);
   }
   up_sample_10k_to_16k(repli, up_repli);
   free(repli);

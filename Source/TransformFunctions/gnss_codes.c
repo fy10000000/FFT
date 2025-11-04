@@ -2,6 +2,189 @@
 #include "gnss_codes.h"
 #include "up_sample.h"
 
+#include <stdbool.h>
+
+
+//  GPS L5 I-channel spreading code generator.
+//
+//  References:
+//    - IS-GPS-705 (L5), publicly available ICD.
+//    - Chip rate: 10.23 MHz, code length: 10,230 chips (1 ms).
+//    - Two 13-stage LFSRs, G1 and G2, with all-ones initialization.
+//    - Output chip c[n] = g1[n] XOR g2[s1[n]] XOR g2[s2[n]] where s1,s2 are PRN-specific taps.
+//      Here we implement as XOR of two selected G2 tap outputs (Gold-like with phase selectors).
+//    - This implementation returns chips as +1/-1 (bipolar) or 0/1 depending on flag.
+//
+//  Conventions:
+//    - LFSR state bits: bit 0 = stage 1 (rightmost), bit 12 = stage 13 (leftmost).
+//    - At each step, output is the bit of stage 13 (leftmost) OR as per ICD definition; the
+//      XOR tap positions below are defined accordingly so that generated sequence matches ICD.
+//    - Initialization: all stages = 1.
+//
+//  WARNING:
+//    Different sources label stages left-to-right differently. The taps below are defined for
+//    the shift/update implemented here. If you use a different shifting convention, adjust.
+
+
+
+// Choose output mapping: bipolar (+1/-1) or binary (0/1) 
+//typedef enum { L5_OUT_BINARY = 0, L5_OUT_BIPOLAR = 1 } l5_out_t;
+
+// LFSR polynomials (tap masks) for 13-stage registers.
+//   We implement right-shift with new bit injected at bit 12 (MSB), output taken from bit 0 (LSB).
+//   Feedback bit = XOR of tapped bits of current state.
+//   Taps chosen to realize: c.f. p 14 IS-GPS-705J.pdf
+//   XA: 1+ x9 + x10 + x12 + x13
+//   XBIi or XBQi: 1 + x + x3 + x4 + x6 + x7 + x8 + x12 + x13
+//     G1: x^13 + x^12 + x^10 + x^9 + 1
+//     G2: x^13 + x^12 + x^8 + x^7 + x^6 + x^4 + x^3 + x^1 + 1
+//
+//   With LSB as stage 1, MSB as stage 13, the feedback mask marks stages that are XORed.
+//   Mask bit i corresponds to stage (i+1).
+static inline uint16_t g1_feedback(uint16_t s) {
+  // taps at stages: 13,12,10,9,1 => bits 12,11,9,8,0 
+  unsigned b = ((s >> 12) ^ (s >> 11) ^ (s >> 9) ^ (s >> 8) ^ (s >> 0)) & 1u;
+  return (uint16_t)b;
+}
+static inline uint16_t g2_feedback(uint16_t s) {
+  // taps at stages: 13,12,8,7,6,4,3,1 => bits 12,11,7,6,5,3,2,0 
+  unsigned b = ((s >> 12) ^ (s >> 11) ^ (s >> 7) ^ (s >> 6) ^ (s >> 5) ^ (s >> 3) ^ (s >> 2) ^ (s >> 0)) & 1u;
+  return (uint16_t)b;
+}
+
+// One LFSR step: right shift, inject new bit at MSB (bit 12), output old LSB (bit 0) 
+static inline unsigned lfsr_step(uint16_t* state, unsigned (*fb)(uint16_t)) {
+  unsigned out = *state & 1u;                 // output = stage 1 (LSB) 
+  unsigned f = fb(*state);
+  *state = (uint16_t)((*state >> 1) | (f << 12));
+  return out;
+}
+
+// PRN-specific G2 tap selector pairs for L5 I-channel.
+//   Each PRN uses XOR of two delayed taps from G2. Values are 1..13 (stage numbers).
+//   Note: Below is an example table for a subset of PRNs. Fill as per ICD annex for full set.
+//   For demonstration, we include PRNs 1..10. Extend to all satellites as needed.
+//
+typedef struct { uint8_t tap1; uint8_t tap2; } L5TapPair;
+
+// Example subset; replace/extend with full ICD mapping for operational use 
+static const L5TapPair L5I_TAPS[] = {
+  // index 0 unused to make PRN index 1-based 
+  {0,0}, // 1-37
+  {1, 5}, {2, 6}, {3, 7}, {4, 8}, {0, 8}, {1, 9}, {0, 7}, {1, 8}, {2, 9}, {1, 2},
+  {2, 3}, {4, 5}, {5, 6}, {6, 7}, {7, 8}, {8, 9}, {0, 3}, {1, 4}, {2, 5}, {3, 6},
+  {4, 7}, {5, 8}, {0, 2}, {3, 5}, {4, 6}, {5, 7}, {6, 8}, {7, 9}, {0, 5}, {1, 6},
+  {2, 7}, {3, 8}, {4, 9}, {3, 9}, {0, 6}, {1, 7}, {3, 9},
+  // ... fill out to PRN as needed 
+};
+
+// Number of PRNs implemented in table (max index) 
+#define L5I_MAX_PRN ((int)(sizeof(L5I_TAPS)/sizeof(L5I_TAPS[0])) - 1)
+
+// Extract stage k (1..13) bit from LFSR state with LSB as stage 1 
+static inline unsigned stage_bit(uint16_t s, unsigned k) {
+  return (s >> (k - 1u)) & 1u;
+}
+
+// Generate N chips of L5 I-channel code for a given PRN.
+//   - prn: 1..L5I_MAX_PRN (extend table for full constellation)
+//   - out: destination buffer of length N
+//   - start_at_epoch: if true, start from code phase 0 (all ones initial state)
+//   - init_state optional: if start_at_epoch is false and init_state provided, use it to resume.
+//
+//   Returns false if PRN unsupported.
+typedef struct {
+  uint16_t g1; // 13-bit state, LSB=stage1, initialize to 0x1FFF (13 ones) 
+  uint16_t g2;
+  uint32_t chip_index; // modulo 10230 if desired 
+} L5State;
+
+static void l5_reset(L5State* st) {
+  st->g1 = 0x1FFFu; // 13 ones 
+  st->g2 = 0x1FFFu;
+  st->chip_index = 0;
+}
+
+bool l5_generate_I(int prn, int8_t* out, size_t N, bool start_at_epoch, L5State* state_io)
+{
+  if (prn <= 0 || prn > L5I_MAX_PRN) return false;
+
+  L5State st_local;
+  L5State* st = &st_local;
+
+  if (!start_at_epoch && state_io && state_io->g1 && state_io->g2) {
+    *st = *state_io;
+  }
+  else {
+    l5_reset(st);
+  }
+
+  const L5TapPair tp = L5I_TAPS[prn];
+
+  for (size_t i = 0; i < N; ++i) {
+    // Output taps from current states BEFORE stepping 
+    unsigned g1_out = stage_bit(st->g1, 13); // Some conventions use stage 13; adjust if needed 
+    // For robustness, use the same output definition for both: 
+    // Alternatively use LSB as output; then adjust taps accordingly. 
+
+    // G2 selector outputs: tap1 XOR tap2 (stage indices 1..13) 
+    unsigned g2_t1 = stage_bit(st->g2, tp.tap1);
+    unsigned g2_t2 = stage_bit(st->g2, tp.tap2);
+    unsigned g2_sel = g2_t1 ^ g2_t2;
+
+    unsigned chip = g1_out ^ g2_sel;
+
+    if (1) {
+      out[i] = chip ? -1 : +1; // map 0->+1, 1->-1 
+    }
+    else {
+      out[i] = (int8_t)chip;
+    }
+
+    // Advance both LFSRs one chip 
+    (void)lfsr_step(&st->g1, g1_feedback);
+    (void)lfsr_step(&st->g2, g2_feedback);
+
+    st->chip_index++;
+    if (st->chip_index == L5_CODE_LEN) {
+      st->chip_index = 0;
+      // Optionally, reinitialize at each ms if desired: l5_reset(st); 
+    }
+  }
+
+  if (state_io) {
+    *state_io = *st;
+  }
+  return true;
+}
+
+// Helper to generate one full 1 ms epoch for a PRN (10,230 chips) 
+bool l5_generate_I_epoch(int prn, int8_t* out)
+{
+  L5State st; l5_reset(&st);
+  return l5_generate_I(prn, out, L5_CODE_LEN, true, &st);
+}
+
+/* Demo main: generate first 64 chips of PRN 1, print as +1/-1 */
+#ifdef L5_DEMO
+int main(void) {
+  const int PRN = 1;
+  int8_t chips[64];
+
+  //if (!l5_generate_I(PRN, chips, 64, L5_OUT_BIPOLAR, true, NULL)) {
+  if (!l5_generate_I(PRN, chips, 64, true, NULL)) {
+    fprintf(stderr, "Unsupported PRN\n");
+    return 1;
+  }
+  for (int i = 0; i < 64; ++i) {
+    printf("%d%s", (int)chips[i], (i % 32 == 31) ? "\n" : " ");
+  }
+  return 0;
+}
+#endif
+
+///--------------------------------------------------------
+
 /* Convert one hex digit to value 0..15, or -1 on error. */
 static int hex_nibble(int c) {
   if (c >= '0' && c <= '9') { return c - '0'; }
@@ -355,6 +538,104 @@ extern void synth_e5a_prn(
     float frac = chips - floorf(chips);
     int code = code_chip_at(ca, chips, L);
     float sca = 1.0;// cboc_e1b_weight(frac);
+    float ampa = (float)code * sca; // data assumed +1
+
+    float sa, ca;
+    sincosf_fast(phia, &sa, &ca);
+    c32 xa = { ampa * ca, ampa * sa };
+
+    out[n].r = no_quant ? xa.r : quantize_pm1(xa.r + noise(1.0));
+    out[n].i = no_quant ? xa.i : quantize_pm1(xa.i + noise(1.0));
+
+    // advance
+    chips += dchips;
+    if (chips >= L) { chips -= L; }
+    else if (chips < 0) { chips += L; }
+
+    phia += dphia;
+    if (phia > 1e9f || phia < -1e9f) {
+      phia = fmodf(phia, 2.0f * PI);
+    }
+
+  }
+}
+
+void readL5Icode(int prn, int8_t* out) {
+  FILE* f = NULL;
+  errno_t er = fopen_s(&f, "C:/work/Baseband/codes_L5I.csv", "r");
+  if (er != 0 || f == NULL) {
+    printf("Error opening L5I code file\n");
+    return;
+  }
+  char line[128];
+  // prn N is in the N-1 th column
+  int line_num = 0; 
+  char* token = NULL;
+  char* context = NULL;
+  while (fgets(line, sizeof(line), f)) {
+    for (int i = 0; i < 32; i++) {
+      token = (i == 0) ? strtok_s(line, ",", &context) : strtok_s(NULL,",", &context);
+      if (i == (prn - 1)) {
+        out[line_num] = atoi(token);
+        break;
+      }
+    }
+    line_num++;
+  }
+  if (line_num != L5_CODE_LEN) {
+    printf("Error reading L5I code for PRN %d\n", prn);
+  }
+  fclose(f);
+}
+
+extern void synth_L5I_prn(
+  int prn, // one based indexing
+  float doppler,
+  size_t N,
+  c32* out,
+  int rotate_offset
+) {
+  float phi_rad = 0.0;
+  float code_phase = 0.0;
+  const float fs_hz = 10.23e6;// Mspc
+  const float code_rate_cps = 10.23e6f;
+
+  int8_t code_loc[L5_CODE_LEN] = { 0 };
+
+  readL5Icode(prn, code_loc);
+  //if (!l5_generate_I(prn, code_loc, L5_CODE_LEN, true, NULL)) {
+  //  fprintf(stderr, "Unsupported PRN\n");
+  //  return 1;
+  //}
+ 
+
+  if (rotate_offset) {
+    int size = L5_CODE_LEN;
+    int8_t* temp = (int8_t*)malloc(sizeof(int8_t) * size);
+    if (temp == NULL) { printf("rotate_fwd's malloc failed");  return; }
+    for (int i = 0; i < size; i++) {
+      if (i - rotate_offset < 0) { temp[i] = code_loc[size + (i - rotate_offset)]; }
+      else { temp[i] = code_loc[i - rotate_offset]; }
+    }
+    memcpy(code_loc, temp, sizeof(int8_t) * size);
+    free(temp);
+  }
+
+ 
+  const int L = L5_CODE_LEN;
+  const int8_t* ca = code_loc;
+
+  float dchips = (code_rate_cps) / fs_hz;
+  float dphia = 2.0f * (float)PI * (doppler) / fs_hz; // phase increment per sample
+  float chips = code_phase;
+  float phia = phi_rad;
+  c32 in[L5_CODE_LEN];
+  int8_t no_quant = 1; // 0 for quantization
+  for (size_t n = 0; n < L; ++n) {
+    // PRN a
+    float frac = chips - floorf(chips);
+    int code = code_chip_at(ca, chips, L);
+    float sca = 1.0;
     float ampa = (float)code * sca; // data assumed +1
 
     float sa, ca;

@@ -13,6 +13,8 @@
 
 #include "cplx_types.h"
 
+ // L5 code length per epoch 
+#define L5_CODE_LEN 10230
 
 #define E1B_CODE_LEN 4092
 #define E5A_CODE_LEN 10230
@@ -51,6 +53,14 @@ void synth_e1b_prn(
 );
 
 void synth_e5a_prn(
+  int prn, // one based indexing
+  float doppler,
+  size_t N,
+  c32* out,
+  int rotate_offset
+);
+
+void synth_L5I_prn(
   int prn, // one based indexing
   float doppler,
   size_t N,
