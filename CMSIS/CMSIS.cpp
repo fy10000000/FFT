@@ -1138,13 +1138,11 @@ void test_quasi_pilot() {
   arm_cfft_radix2_f32(&s, fft_replica);
   
   // Compute circular correlation C_k(τ) = FFT^-1{ FFT[x_d,k] · conj(FFT[code]) }.
-  float coh_sum[1024 * SPC * 2] = { 0 };
   float fft_data[1024 * SPC * 2] = { 0 };
   float fft_prod[1024 * SPC * 2] = { 0 };
   for (int center = window/2; center <= nci - window/2; center++) {
     // use linearity to sum the ncis coherently in moving window
     memset(fft_data, 0, sizeof(fft_data));
-    memset(coh_sum, 0, sizeof(coh_sum));
     memset(fft_prod, 0, sizeof(fft_prod));
     for (int windex = center - window /2; windex < center + window/2; windex++) {
       for (int j = 0; j < 1023 * SPC; j++) { // xfer to float array
@@ -1163,23 +1161,17 @@ void test_quasi_pilot() {
         fft_prod[k * 2 + 0] += (Ar * Rr + Ai * Ri);     // (Ar + jAi) * (Rr - jRi)
         fft_prod[k * 2 + 1] += (Ai * Rr - Ar * Ri);     // 
       }
-
     } // for windex 
 
     // inverse FFT
     arm_cfft_radix2_init_f32(&s, 1024 * SPC, 1, 1);
     arm_cfft_radix2_f32(&s, fft_prod);
-
-    // sum coherently
-    for (int k = 0; k < 1024 * SPC * 2; k++) {
-      coh_sum[k] = fft_prod[k];
-    }
     
     if (0) {
       FILE* fp_out = NULL; //output file
       errno_t er = fopen_s(&fp_out, "C:/Python/nci_sum4.csv", "w");
       for (int m = 0; m < 1024 * SPC; m++) {
-        double mag = sqrt(coh_sum[m * 2] * coh_sum[m * 2] + coh_sum[m * 2 + 1] * coh_sum[m * 2 + 1]);
+        double mag = sqrt(fft_prod[m * 2] * fft_prod[m * 2] + fft_prod[m * 2 + 1] * fft_prod[m * 2 + 1]);
         fprintf(fp_out, "%d, %f\n", m, mag);
         //fprintf(fp_out, "%d, %f, %f \n", m, coh_sum[m * 2], coh_sum[m * 2 + 1]);
       }
@@ -1188,7 +1180,7 @@ void test_quasi_pilot() {
 
     float max_coh = 0; int pos_coh = 0;
     for (int m = 0; m < 1024 * SPC; m++) {
-      float mag_coh = sqrt(coh_sum[m * 2] * coh_sum[m * 2] + coh_sum[m * 2 + 1] * coh_sum[m * 2 + 1]);
+      float mag_coh = sqrt(fft_prod[m * 2] * fft_prod[m * 2] + fft_prod[m * 2 + 1] * fft_prod[m * 2 + 1]);
       //fprintf(fp_out, "%d, %f \n", m, mag);
       if (mag_coh > max_coh) { max_coh = mag_coh; pos_coh = m; }
     }
