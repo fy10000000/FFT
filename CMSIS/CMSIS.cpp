@@ -1087,8 +1087,8 @@ void test_quasi_pilot() {
   int loc_cnt = 0;
   float min_val = 1e5;
   
-  int locations[50] = { 20, 40, 60, 80, 100, 120, 140, 160, 180, 200, 220, 240, 260, 280}; //{ 10, 20, 30, 40, 50, 60, 70, 80, 90, 100, 110, 120, 130, 140, 150, 160, 170, 180, 190, 200 };// { 19, 39, 60, 79, 99, 119, 140, 159, 180 };// { -1 };// { 19, 39, 59, 79, 99, 119, 139, 159, 179 };// index into locations of bit transitions
-  int window = 2; // 3 ms either side
+  int locations[50] = { 20, 40, 60, 80, 100, 120, 140, 160, 180, 200, 220, 240, 260, 280 };
+  int window = 3; // 2 * window ms either side of center (window>=6 does not work)
   int nci = 300;
 #define SPC 4 // samples per chip
   int len = 1023 * SPC * nci; // 4 samples per chip and 100 ms
@@ -1139,13 +1139,13 @@ void test_quasi_pilot() {
   
   // Compute circular correlation C_k(τ) = FFT^-1{ FFT[x_d,k] · conj(FFT[code]) }.
   float coh_sum[1024 * SPC * 2] = { 0 };
-  float nci_sum[1024 * SPC] = { 0 };
   float fft_data[1024 * SPC * 2] = { 0 };
+  float fft_prod[1024 * SPC * 2] = { 0 };
   for (int center = window/2; center <= nci - window/2; center++) {
     // use linearity to sum the ncis coherently in moving window
     memset(fft_data, 0, sizeof(fft_data));
     memset(coh_sum, 0, sizeof(coh_sum));
-    memset(nci_sum, 0, sizeof(nci_sum));
+    memset(fft_prod, 0, sizeof(fft_prod));
     for (int windex = center - window /2; windex < center + window/2; windex++) {
       for (int j = 0; j < 1023 * SPC; j++) { // xfer to float array
         fft_data[j * 2 + 0] = out[(1023 * SPC * windex) + j].r * 0.25;
@@ -1156,7 +1156,6 @@ void test_quasi_pilot() {
       arm_cfft_radix2_f32(&s, fft_data);
 
       // pt-wise multiply with conj of replica
-      float fft_prod[1024 * SPC * 2] = { 0 };
       for (int k = 0; k < 1024 * SPC; k++) {
         float Ar = fft_data[k * 2 + 0], Ai = fft_data[k * 2 + 1];
         float Rr = fft_replica[k * 2 + 0], Ri = fft_replica[k * 2 + 1]; // conj
@@ -1165,52 +1164,43 @@ void test_quasi_pilot() {
         fft_prod[k * 2 + 1] += (Ai * Rr - Ar * Ri);     // 
       }
 
-      // inverse FFT
-      arm_cfft_radix2_init_f32(&s, 1024 * SPC, 1, 1);
-      arm_cfft_radix2_f32(&s, fft_prod);
-
-      // sum coherently
-      for (int k = 0; k < 1024 * SPC * 2; k++) {
-        coh_sum[k] += fft_prod[k];
-      }
-
-      // sum non-coherently
-      for (int k = 0; k < 1024 * SPC; k++) {
-        nci_sum[k] += sqrt(fft_prod[k*2] * fft_prod[k*2] + fft_prod[k*2 + 1] * fft_prod[k*2 + 1]);
-      }
     } // for windex 
+
+    // inverse FFT
+    arm_cfft_radix2_init_f32(&s, 1024 * SPC, 1, 1);
+    arm_cfft_radix2_f32(&s, fft_prod);
+
+    // sum coherently
+    for (int k = 0; k < 1024 * SPC * 2; k++) {
+      coh_sum[k] = fft_prod[k];
+    }
     
     if (0) {
       FILE* fp_out = NULL; //output file
-      errno_t er = fopen_s(&fp_out, "C:/Python/nci_sum2.csv", "w");
+      errno_t er = fopen_s(&fp_out, "C:/Python/nci_sum4.csv", "w");
       for (int m = 0; m < 1024 * SPC; m++) {
         double mag = sqrt(coh_sum[m * 2] * coh_sum[m * 2] + coh_sum[m * 2 + 1] * coh_sum[m * 2 + 1]);
-        fprintf(fp_out, "%d, %f, %f \n", m, mag, nci_sum[m]);
+        fprintf(fp_out, "%d, %f\n", m, mag);
+        //fprintf(fp_out, "%d, %f, %f \n", m, coh_sum[m * 2], coh_sum[m * 2 + 1]);
       }
       fclose(fp_out);
     }
 
     float max_coh = 0; int pos_coh = 0;
-    float max_nci = 0; int pos_nci = 0;
     for (int m = 0; m < 1024 * SPC; m++) {
       float mag_coh = sqrt(coh_sum[m * 2] * coh_sum[m * 2] + coh_sum[m * 2 + 1] * coh_sum[m * 2 + 1]);
-      float mag_nci = nci_sum[m];
       //fprintf(fp_out, "%d, %f \n", m, mag);
       if (mag_coh > max_coh) { max_coh = mag_coh; pos_coh = m; }
-      if (mag_nci > max_nci) { max_nci = mag_nci; pos_nci = m; }
     }
-    printf("coh pos =%d max=%5.0f \n", pos_coh, max_coh);
-    float ratio = (max_coh / max_nci);
-    printf("nci pos =%d max=%5.0f ratio=%2.6f \n", pos_nci, max_nci, ratio);
-    stat_add(&stat, (max_coh / max_nci));
-  
+   
+    stat_add(&stat, max_coh);
     float mean2 = stat_mean(&stat);
     // was if (ratio < min_val && ratio < mean2 - 20 && ratio < 20)
-    if (ratio < min_val && ratio < mean2 - 0.05 && ratio < 0.85) {
-      min_val = ratio;
+    if (max_coh < min_val && max_coh < mean2 - 80 && max_coh < 150) {
+      min_val = max_coh;
       min_idx = center;
     }
-    if ((center == min_idx + 1) && (ratio > min_val) ) {
+    if ((center == min_idx + 1) && (max_coh > min_val) ) {
       locations[loc_cnt++] = min_idx; // empirically the wider the window the earlier the bit transition appears
       min_val = 1e5;
       min_idx = 0;
@@ -1226,6 +1216,142 @@ void test_quasi_pilot() {
 }
 
 void test_quasi_pilot2() {
+  srand((unsigned int)time(NULL)); // randomise seed
+  // Test the quasi pilot generation
+
+  int min_idx = 0;
+  int loc_cnt = 0;
+  float min_val = 1e5;
+
+  int locations[50] = { 20, 40, 60, 80, 100, 120, 140, 160, 180, 200, 220, 240, 260, 280 };
+  int window = 3; // 2 * window ms either side
+  int nci = 300;
+#define SPC 4 // samples per chip
+  int len = 1023 * SPC * nci; // 4 samples per chip and 100 ms
+  int c_phase = 3333; // which chip to set the code phase to
+  int prn1 = 4, prn2 = 8;
+  float dop1 = 2000, dop2 = -3000;
+  float dop_error = 10;// 10; // full 250 Hz error in wipeoff
+  float dop_err_rate = 0.6;// 0.6;//Hz per ms
+  float sigma = 3.4;// 3.4; // noise level
+  c32* out = (c32*)malloc(len * sizeof(c32));
+  if (out == NULL) {
+    fprintf(stderr, "Memory allocation failed for 100 ms I&Q array.\n");
+    return;
+  }
+  int prn_c1[1023 * SPC], prn_c2[1023 * SPC];
+  c32 replica[1023 * SPC] = { 0 }; // fixed replica used for FFT
+  getCode(1023, SPC, prn1, prn_c1);
+  getCode(1023, SPC, prn2, prn_c2);
+  make_replica(prn_c1, replica, dop1 + 250, 1023 * SPC, 1.023e6 * SPC);
+  // now advance code-phase
+  rotate_fwd(prn_c1, 1023 * SPC, c_phase); // code phase 1/4 way
+  int sign = 1;  // sign applied as part of simulation
+  int sign2 = 1; // sign applied a posteriori after finding BTT
+  stat_s stat;
+  stat_init(&stat); // moving average of peak values window size = 3
+  for (int i = 0; i < nci; i++) {
+    sign *= ((i + 1) % 1000) == 0 ? -1 : 1; // change sign every 20 ms
+    for (int j = 0; j < 50; j++) {
+      if (locations[j] == i) { sign2 *= -1; break; } // change sign at the bit transitions
+    }
+    // offset doppler by 250 Hz and add a residual doppler ramp of 0.1 Hz per ms
+    mix_two_prns_oversampled_per_prn(prn_c1, prn_c2, dop1 + dop_error + i * dop_err_rate, dop2 - i * dop_err_rate, PI / 2, 0,
+      &out[1023 * SPC * i], 1023 * SPC, 1.023e6 * SPC, sigma, sign * sign2); // was 2.31 for -128.5 dBm 3.1 for -131.5
+    //printf("%d sign %d \n", i + 1, sign * sign2);
+  }
+
+  // use FFTs 
+  float fft_replica[1024 * SPC * 2] = { 0 };
+  arm_cfft_radix2_instance_f32 s;
+  memset(fft_replica, 0, sizeof(fft_replica));
+  arm_cfft_radix2_init_f32(&s, 1024 * SPC, 0, 1);
+  // xfer to float array
+  for (int i = 0; i < 1023 * SPC; i++) {
+    fft_replica[i * 2 + 0] = replica[i].r * 0.25;
+    fft_replica[i * 2 + 1] = replica[i].i * 0.25;
+  }
+  arm_cfft_radix2_f32(&s, fft_replica);
+
+  // Compute circular correlation C_k(τ) = FFT^-1{ FFT[x_d,k] · conj(FFT[code]) }.
+  float nci_sum[1024 * SPC] = { 0 };
+  float fft_data[1024 * SPC * 2] = { 0 };
+  for (int center = window / 2; center <= nci - window / 2; center++) {
+    // use linearity to sum the ncis coherently in moving window
+    memset(fft_data, 0, sizeof(fft_data));
+    memset(nci_sum, 0, sizeof(nci_sum));
+    for (int windex = center - window / 2; windex < center + window / 2; windex++) {
+      for (int j = 0; j < 1023 * SPC; j++) { // xfer to float array
+        fft_data[j * 2 + 0] += out[(1023 * SPC * windex) + j].r * 0.25;
+        fft_data[j * 2 + 1] += out[(1023 * SPC * windex) + j].i * 0.25;
+      }
+    }// for windex
+
+    arm_cfft_radix2_init_f32(&s, 1024 * SPC, 0, 1);
+    arm_cfft_radix2_f32(&s, fft_data);
+
+    // pt-wise multiply with conj of replica
+    float fft_prod[1024 * SPC * 2] = { 0 };
+    for (int k = 0; k < 1024 * SPC; k++) {
+      float Ar = fft_data[k * 2 + 0], Ai = fft_data[k * 2 + 1];
+      float Rr = fft_replica[k * 2 + 0], Ri = fft_replica[k * 2 + 1]; // conj
+      // A * conj(R) and add this product coherently
+      fft_prod[k * 2 + 0] += (Ar * Rr + Ai * Ri);     // (Ar + jAi) * (Rr - jRi)
+      fft_prod[k * 2 + 1] += (Ai * Rr - Ar * Ri);     // 
+    }
+
+    // inverse FFT
+    arm_cfft_radix2_init_f32(&s, 1024 * SPC, 1, 1);
+    arm_cfft_radix2_f32(&s, fft_prod);
+
+
+    // sum non-coherently
+    for (int k = 0; k < 1024 * SPC; k++) {
+      nci_sum[k] += sqrt(fft_prod[k * 2] * fft_prod[k * 2] + fft_prod[k * 2 + 1] * fft_prod[k * 2 + 1]);
+    }
+
+
+    if (0) {
+      FILE* fp_out = NULL; //output file
+      errno_t er = fopen_s(&fp_out, "C:/Python/nci_sum3.csv", "w");
+      for (int k = 0; k < 1024 * SPC; k++) {
+        fprintf(fp_out, "%d, %f, %f \n", k, fft_prod[k * 2 + 0], fft_prod[k * 2 + 1]);
+      }
+      fclose(fp_out);
+    }
+
+    float max_nci = 0; int pos_nci = 0;
+    for (int m = 0; m < 1024 * SPC; m++) {
+      float mag_nci = nci_sum[m];
+      //fprintf(fp_out, "%d, %f \n", m, mag);
+      if (mag_nci > max_nci) { max_nci = mag_nci; pos_nci = m; }
+    }
+    
+    printf("nci pos =%d max=%5.0f \n", pos_nci, max_nci);
+    stat_add(&stat, (max_nci));
+
+    float mean2 = stat_mean(&stat);
+    // was if (ratio < min_val && ratio < mean2 - 20 && ratio < 20)
+    if (max_nci < min_val && max_nci < mean2 - 20 && max_nci < 20) {
+      min_val = max_nci;
+      min_idx = center;
+    }
+    if ((center == min_idx + 1) && (max_nci > min_val)) {
+      locations[loc_cnt++] = min_idx; // empirically the wider the window the earlier the bit transition appears
+      min_val = 1e5;
+      min_idx = 0;
+    }
+    printf("center=%d max=%5.0f pos=%d mean=%2.6f\n", center, max_nci, pos_nci, mean2);
+  } // for center
+
+  for (int i = 0; i < loc_cnt; i++) {
+    printf("Bit transition at %d ms \n", locations[i]);
+  }
+  printf("Random number: %d\n", rand());
+  free(out);
+}
+
+void test_quasi_pilot3() {
   srand((unsigned int)time(NULL)); // randomise seed
   // Test the quasi pilot generation
   int nci = 200;
