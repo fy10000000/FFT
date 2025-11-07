@@ -1092,59 +1092,64 @@ void test_quasi_pilot() {
   int nci = 300;
 #define SPC 4 // samples per chip
   int len = 1023 * SPC * nci; // 4 samples per chip and 100 ms
-  int c_phase = 3333; // which chip to set the code phase to
+  int c_phase = 500; // which chip to set the code phase to
   int prn1 = 4, prn2 = 8;
   float dop1 = 2000, dop2 = -3000;
-  float dop_error = 10;// 10; // full 250 Hz error in wipeoff
-  float dop_err_rate = 0.6;// 0.6;//Hz per ms
-  float sigma = 3.4;// 3.4; // noise level
+  float dop_error = 250;// 10; // full 2*250 Hz error in wipeoff
+  float dop_err_rate = 0.6;// 0.6;// 0.6;//Hz per ms
+  float sigma = 3.5;// 3.5; // noise level
   c32* out = (c32*)malloc(len * sizeof(c32));
   if (out == NULL) {
     fprintf(stderr, "Memory allocation failed for 100 ms I&Q array.\n");
     return;
   }
-  int prn_c1[1023 * SPC], prn_c2[1023 * SPC];
-  c32 replica[1023 * SPC] = { 0 }; // fixed replica used for FFT
+  int* prn_c1  = (int*)malloc(sizeof(int) * 1023 * SPC);
+  int* prn_c2  = (int*)malloc(sizeof(int) * 1023 * SPC);
+  c32* replica = (c32*)malloc(sizeof(c32) * 1023 * SPC);;
   getCode(1023, SPC, prn1, prn_c1);
   getCode(1023, SPC, prn2, prn_c2);
-  make_replica(prn_c1, replica, dop1 + 250, 1023* SPC, 1.023e6 * SPC);
+  make_replica(prn_c1, replica, dop1 + dop_error, 1023* SPC, 1.023e6 * SPC);
   // now advance code-phase
   rotate_fwd(prn_c1, 1023 * SPC, c_phase); // code phase 1/4 way
-  int sign = 1;  // sign applied as part of simulation
   int sign2 = 1; // sign applied a posteriori after finding BTT
   stat_s stat;
   stat_init(&stat); // moving average of peak values window size = 3
   for (int i = 0; i < nci; i++) {
-    sign *= ((i +1) % 1000) == 0 ? -1 : 1; // change sign every 20 ms
     for (int j = 0; j < 50; j++) {
       if (locations[j] == i) { sign2 *= -1; break; } // change sign at the bit transitions
     }
     // offset doppler by 250 Hz and add a residual doppler ramp of 0.1 Hz per ms
-    mix_two_prns_oversampled_per_prn(prn_c1, prn_c2,dop1 + dop_error + i * dop_err_rate,dop2 - i * dop_err_rate,PI/2,0,
-      &out[1023 * SPC * i],1023* SPC, 1.023e6 * SPC, sigma , sign * sign2); // was 2.31 for -128.5 dBm 3.1 for -131.5
+    mix_two_prns_oversampled_per_prn(prn_c1, prn_c2,dop1 + i * dop_err_rate,dop2 - i * dop_err_rate,PI/2,0,
+      &out[1023 * SPC * i],1023* SPC, 1.023e6 * SPC, sigma , sign2); // was 2.31 for -128.5 dBm 3.1 for -131.5
     //printf("%d sign %d \n", i + 1, sign * sign2);
   }
+  free(prn_c1); free(prn_c2);
   
   // use FFTs 
-  float fft_replica[1024 * SPC * 2] = { 0 };
+  float* fft_replica = (float*)malloc(sizeof(float) * 1024 * SPC * 2);
   arm_cfft_radix2_instance_f32 s;
-  memset(fft_replica, 0, sizeof(fft_replica));
+  memset(fft_replica, 0, sizeof(float) * 1024 * SPC * 2);
   arm_cfft_radix2_init_f32(&s, 1024 * SPC, 0, 1);
   // xfer to float array
   for (int i = 0; i < 1023 * SPC; i++) {
     fft_replica[i * 2 + 0] = replica[i].r * 0.25;
     fft_replica[i * 2 + 1] = replica[i].i * 0.25;
   }
+  free(replica);
   arm_cfft_radix2_f32(&s, fft_replica);
   
   // Compute circular correlation C_k(τ) = FFT^-1{ FFT[x_d,k] · conj(FFT[code]) }.
-  float fft_data[1024 * SPC * 2] = { 0 };
-  float fft_prod[1024 * SPC * 2] = { 0 };
+  float* fft_data = (float*)malloc(sizeof(float) * 1024 * SPC * 2); 
+  float* fft_prod = (float*)malloc(sizeof(float) * 1024 * SPC * 2);
+  if (fft_data == NULL || fft_prod == NULL) { printf("Error allocating fft_data or fft_prod\n"); return; }
   for (int center = window/2; center <= nci - window/2; center++) {
     // use linearity to sum the ncis coherently in moving window
-    memset(fft_data, 0, sizeof(fft_data));
-    memset(fft_prod, 0, sizeof(fft_prod));
+    memset(fft_data, 0, sizeof(float) * 1024 * SPC * 2);
+    memset(fft_prod, 0, sizeof(float) * 1024 * SPC * 2);
     for (int windex = center - window /2; windex < center + window/2; windex++) {
+      //c32 prn_a_out[1023 * SPC] = { {0} };
+      //mix_two_prns_oversampled_per_prn(prn_c1, prn_c2,dop1 + center * dop_err_rate,dop2 - center * dop_err_rate,PI/2,0,
+      //  prn_a_out,1023* SPC, 1.023e6 * SPC, sigma , sign2); // was 2.31 for -128.5 dBm 3.1 for -131.5
       for (int j = 0; j < 1023 * SPC; j++) { // xfer to float array
         fft_data[j * 2 + 0] = out[(1023 * SPC * windex) + j].r * 0.25;
         fft_data[j * 2 + 1] = out[(1023 * SPC * windex) + j].i * 0.25;
@@ -1187,8 +1192,9 @@ void test_quasi_pilot() {
    
     stat_add(&stat, max_coh);
     float mean2 = stat_mean(&stat);
-    // was if (ratio < min_val && ratio < mean2 - 20 && ratio < 20)
-    if (max_coh < min_val && max_coh < mean2 - 80 && max_coh < 150) {
+    if (max_coh < min_val && max_coh < mean2 - 45 && max_coh < 160) { // for 4 SPC
+    //if (max_coh < min_val && max_coh < mean2 - 15 && max_coh < 81) { // for 2 SPC
+    //if (max_coh < min_val && max_coh < mean2 - 10 && max_coh < 42) { // sigma = 2.0 for 1 SPC (odd missed detect)
       min_val = max_coh;
       min_idx = center;
     }
@@ -1197,14 +1203,14 @@ void test_quasi_pilot() {
       min_val = 1e5;
       min_idx = 0;
     }
-    printf("center=%d max=%5.0f pos=%d mean=%2.6f\n", center, max_coh, pos_coh, mean2);
+    printf("center=%d max=%6.1f pos=%d mean=%6.1f\n", center, max_coh, pos_coh, mean2);
   } // for center
 
   for (int i = 0; i < loc_cnt; i++) {
     printf("Bit transition at %d ms \n", locations[i]);
   }
-  printf("Random number: %d\n", rand());
-  free(out);
+  printf("BTs: %d Random number: %d\n", loc_cnt , rand());
+  free(out); free(fft_data); free(fft_prod); free(fft_replica);
 }
 
 void test_quasi_pilot2() {
@@ -1215,8 +1221,8 @@ void test_quasi_pilot2() {
   int loc_cnt = 0;
   float min_val = 1e5;
 
-  int locations[50] = { 20, 40, 60, 80, 100, 120, 140, 160, 180, 200, 220, 240, 260, 280 };
-  int window = 3; // 2 * window ms either side
+  int locations[50] = { -1 };// { 20, 40, 60, 80, 100, 120, 140, 160, 180, 200, 220, 240, 260, 280 };
+  int window = 20; // 2 * window ms either side
   int nci = 300;
 #define SPC 4 // samples per chip
   int len = 1023 * SPC * nci; // 4 samples per chip and 100 ms
@@ -1288,8 +1294,8 @@ void test_quasi_pilot2() {
       float Ar = fft_data[k * 2 + 0], Ai = fft_data[k * 2 + 1];
       float Rr = fft_replica[k * 2 + 0], Ri = fft_replica[k * 2 + 1]; // conj
       // A * conj(R) and add this product coherently
-      fft_prod[k * 2 + 0] += (Ar * Rr + Ai * Ri);     // (Ar + jAi) * (Rr - jRi)
-      fft_prod[k * 2 + 1] += (Ai * Rr - Ar * Ri);     // 
+      fft_prod[k * 2 + 0] = (Ar * Rr + Ai * Ri);     // (Ar + jAi) * (Rr - jRi)
+      fft_prod[k * 2 + 1] = (Ai * Rr - Ar * Ri);     // 
     }
 
     // inverse FFT
@@ -1307,7 +1313,8 @@ void test_quasi_pilot2() {
       FILE* fp_out = NULL; //output file
       errno_t er = fopen_s(&fp_out, "C:/Python/nci_sum3.csv", "w");
       for (int k = 0; k < 1024 * SPC; k++) {
-        fprintf(fp_out, "%d, %f, %f \n", k, fft_prod[k * 2 + 0], fft_prod[k * 2 + 1]);
+        float mag = sqrt(fft_prod[k * 2] * fft_prod[k * 2] + fft_prod[k * 2 + 1] * fft_prod[k * 2 + 1]);
+        fprintf(fp_out, "%d, %f \n", k, mag);
       }
       fclose(fp_out);
     }
@@ -1358,10 +1365,10 @@ void test_quasi_pilot3() {
   }
   // was {-1}
   int locations[50] =  { 10, 20, 30, 40, 50, 60, 70, 80, 90, 100, 110, 120, 130, 140, 150, 160, 170, 180, 190, 200 };// { 19, 39, 60, 79, 99, 119, 140, 159, 180 };// { -1 };// { 19, 39, 59, 79, 99, 119, 139, 159, 179 };// index into locations of bit transitions
-  int window = 40; // 3 ms either side
+  int window = 3; // 3 ms either side
   
   int code_phase = 555; // which chip to set the code phase to
-  float carrier_phase = 30; // deg
+  float carrier_phase = 90; // deg
   int prn1 = 4, prn2 = 8;
   float dop1 = 2000, dop2 = -3000;
   float dop_error = 20; // full 250 Hz error in wipeoff
@@ -1378,13 +1385,13 @@ void test_quasi_pilot3() {
   stat_s stat;
   stat_init(&stat); // moving average of peak values window size = 3
   for (int i = 0; i < nci; i++) {
-    sign *= ((i + 1) % 10) == 0 ? -1 : 1; // change sign every 20 ms
     for (int j = 0; j < 50; j++) {
       if (locations[j] == i) { sign2 *= -1; break; } // change sign at the bit transitions
     }
+    //printf("%d %d \n", i + 1,  sign2 );
     // offset doppler by 250 Hz and add a residual doppler ramp of 0.1 Hz per ms
-    mix_two_prns_oversampled_per_prn(prn_c1, prn_c2, dop1 + dop_error + i * 0.0, dop2 - i * 0.0, carrier_phase * D2R, 0,
-      &out[1023 * 2 * i], 1023 * 2, 1.023e6 * 2, sigma, sign * sign2); // was 2.31 for -128.5 dBm 3.1 for -131.5
+    mix_two_prns_oversampled_per_prn(prn_c1, prn_c2, dop1 + dop_error + i * 0.0, dop2 - i * 0.0, carrier_phase, 0,
+      &out[1023 * 2 * i], 1023 * 2, 1.023e6 * 2, sigma, sign); // was 2.31 for -128.5 dBm 3.1 for -131.5
     //printf("%d sign %d \n", i + 1, sign * sign2);
   }
 
