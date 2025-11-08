@@ -1,8 +1,27 @@
 
 #include "gnss_codes.h"
 #include "up_sample.h"
-
 #include <stdbool.h>
+#include <complex.h>
+
+//#include "transform_functions.h"
+//void fft_simple2(int size, complex float* w, bool fwd) {
+//  // interleaved real, imagmalloc(size * sizeof(float);
+//  float* fft_data = (float*)malloc(sizeof(float) * 2 * size);
+//  for (int i = 0; i < size; i++) {
+//    fft_data[2 * i] = crealf(w[i]);
+//    fft_data[2 * i + 1] = cimagf(w[i]);
+//  }
+//  arm_cfft_radix2_instance_f32 s;
+//  arm_cfft_radix2_init_f32(&s, size, fwd ? 0 : 1, 1);
+//  arm_cfft_radix2_f32(&s, fft_data);
+//  for (int i = 0; i < size; i++) {
+//    w[i] = fft_data[2 * i] + I * fft_data[2 * i + 1];
+//  }
+//  free(fft_data);
+//}
+
+
 
 
 //  GPS L5 I-channel spreading code generator.

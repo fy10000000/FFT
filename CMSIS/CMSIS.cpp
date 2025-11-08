@@ -14,6 +14,8 @@
 #include "gnss_codes.h"
 #include "up_sample.h"
 
+#include <complex> // not to be confused with complex.h
+
 
 #define Q31_MIN   ((int32_t)0x80000000)  // -2147483648
 #define Q31_MAX   ((int32_t)0x7FFFFFFF)  //  2147483647
@@ -190,6 +192,66 @@ static uint32_t U4(uint8_t* p)
   return value;
 }
 
+void fft_cpp(int size, std::complex<float>* w, bool fwd) {
+  // interleaved real, imagmalloc(size * sizeof(float);
+  float* fft_data = (float*)malloc(sizeof(float) * 2 * size); 
+  for (int i = 0; i < size; i++) {
+    fft_data[2 * i] = w[i].real();
+    fft_data[2 * i + 1] = w[i].imag();
+  }
+  arm_cfft_radix2_instance_f32 s;
+  arm_cfft_radix2_init_f32(&s, size, fwd ? 0:1, 1);
+  arm_cfft_radix2_f32(&s, fft_data);
+  for (int i = 0; i < size; i++) {
+    w[i] = std::complex<float>(fft_data[2 * i], fft_data[2 * i + 1]);
+  }
+  free(fft_data);
+}
+
+void fft_c32(int size, c32* w, bool fwd) {
+  // interleaved real, imag
+  float* fft_data = (float*)malloc(sizeof(float) * 2 * size);
+  memset(fft_data, 0, sizeof(float) * 2 * size);
+  for (int i = 0; i < size; i++) {
+    fft_data[2 * i] = w[i].r; // Use the real part
+    fft_data[2 * i + 1] = w[i].i; // Use the imaginary part
+  }
+  arm_cfft_radix2_instance_f32 s;
+  arm_cfft_radix2_init_f32(&s, size, fwd ? 0 : 1, 1);
+  arm_cfft_radix2_f32(&s, fft_data);
+  for (int i = 0; i < size; i++) {
+    w[i].r = fft_data[2 * i]; // Update the real part
+    w[i].i = fft_data[2 * i + 1]; // Update the imaginary part
+  }
+  free(fft_data);
+}
+
+c32 get_conj(const c32 x) {
+  c32 y;
+  y.r = x.r;
+  y.i = -x.i;
+  return y;
+}
+
+c32 mult(const c32 a, const c32 b) {
+  return c32{  //(a.r +j a.i) * (b.r +j b.i)
+    a.r * b.r - a.i * b.i,
+    a.r * b.i + a.i * b.r
+  };
+}
+
+c32 add(const c32 a, const c32 b) {
+  return c32{  //(a.r +j a.i) + (b.r +j b.i)
+    a.r + b.r,
+    a.i + b.i
+  };
+}
+
+float mag(const c32 in) {
+  return sqrtf(in.r * in.r + in.i * in.i);
+}
+
+
 double compute_gps_time(int year, int month, int day, int hour, int minute, int second)
 {
   struct tm refTime, epochTime;
@@ -303,7 +365,7 @@ double recover_prn_phase_deg_with_doppler(const c32* iandq,
   double best_pow = -1.0, best_re = 0.0, best_im = 0.0, best_doppler = 0.0;
   int best_off = 0;
 
-  float code_search_span = 0; //chip span was 2
+  float code_search_span = 10; //chip span was 2
   float code_low = code_offset - code_search_span;
   float code_high = code_offset + code_search_span;
   uint8_t wrap = 0;
@@ -311,7 +373,7 @@ double recover_prn_phase_deg_with_doppler(const c32* iandq,
   if (code_high > SIZE) { code_high -= SIZE;  wrap = 1; }
 
   float f_search_step_hz = 1.0; // Hz
-  float f_search_span_hz = 0; // Hz span was 2
+  float f_search_span_hz = 1; // Hz span was 2
   for (float f = -f_search_span_hz; f <= +f_search_span_hz + 1e-3f; f += f_search_step_hz) {
     // Frequency wipe for PRN A: multiply by e^{-j 2π f_a n / fs}
     double dtheta = 2.0 * PI * (doppler_a_hz + f) / (double)sampe_rate_hz;
@@ -1079,6 +1141,137 @@ void read_E5A(char* input) {
   //////////////////////////////////////////////////////
 }
 
+// try differential coherent integration. Insensitive to bit transitions
+void test_quasi_diff_pilot() {
+  srand((unsigned int)time(NULL)); // randomise seed
+  // Test the quasi pilot generation
+
+  int min_idx = 0;
+  int loc_cnt = 0;
+  float min_val = 1e5;
+
+  int locations[50] = { 20, 40, 60, 80, 100, 120, 140, 160, 180, 200, 220, 240, 260, 280 };
+  int window = 2; // 2 * window ms either side of center (window>=6 does not work)
+  int nci = 300;
+#define SPC 4 // samples per chip
+  int len = 1023 * SPC * nci; // 4 samples per chip and 100 ms
+  int c_phase = 4*4096 /8 ;// 1023 * SPC / 8; // which chip to set the code phase to
+  int prn1 = 5, prn2 = 15;
+  float dop1 = 2000, dop2 = -3000;
+  float dop_error = 250;// 10; // full 2*250 Hz error in wipeoff
+  float dop_err_rate = 0.0;// 0.6;// 0.6;//Hz per ms
+  float sigma = 3.4;// 3.4;// 3.5;// 3.5; // noise level
+  c32* out = (c32*)malloc(len * sizeof(c32));
+  if (out == NULL) {
+    fprintf(stderr, "Memory allocation failed for 100 ms I&Q array.\n");
+    return;
+  }
+  int* prn_c1 = (int*)malloc(sizeof(int) * 1023 * SPC);
+  int* prn_c2 = (int*)malloc(sizeof(int) * 1023 * SPC);
+  c32* replica = (c32*)malloc(sizeof(c32) * 1024 * SPC);
+  memset(replica, 0, sizeof(c32) * 1024 * SPC);
+  getCode(1023, SPC, prn1, prn_c1);
+  getCode(1023, SPC, prn2, prn_c2);
+  make_replica(prn_c1, replica, dop1 + dop_error, 1023 * SPC, 1.023e6 * SPC);
+  // now advance code-phase
+  rotate_fwd(prn_c1, 1023 * SPC, c_phase); // code phase 1/4 way
+  int sign2 = 1; // sign applied a posteriori after finding BTT
+  stat_s stat;
+  stat_init(&stat); // moving average of peak values window size = 3
+  for (int i = 0; i < nci; i++) {
+    for (int j = 0; j < 50; j++) {
+      if (locations[j] == i) { sign2 *= -1; break; } // change sign at the bit transitions
+    }
+    // offset doppler by 250 Hz and add a residual doppler ramp of 0.1 Hz per ms
+    mix_two_prns_oversampled_per_prn(prn_c1, prn_c2, dop1 + i * dop_err_rate, dop2 - i * dop_err_rate, PI / 2, 0,
+      &out[1023 * SPC * i], 1023 * SPC, 1.023e6 * SPC, sigma, sign2); // was 2.31 for -128.5 dBm 3.1 for -131.5
+    //printf("%d sign %d \n", i + 1, sign * sign2);
+  }
+  free(prn_c1); free(prn_c2);
+
+  fft_c32(1024 * SPC, replica, true);
+  
+  // Compute circular correlation C_k(τ) = FFT^-1{ FFT[x_d,k] · conj(FFT[code]) }.
+  c32* fft_data = (c32*)malloc(sizeof(c32) * 1024 * SPC);
+  //c32* fft_prod = (c32*)malloc(sizeof(c32) * 1024 * SPC);
+  c32* fft_prev = (c32*)malloc(sizeof(c32) * 1024 * SPC);
+  c32* diff_acc = (c32*)malloc(sizeof(c32) * 1024 * SPC);
+  bool have_prev = false;
+  if (fft_data == NULL ) { printf("Error allocating fft_data \n"); return; }
+  for (int center = window / 2; center <= nci - window / 2; center++) {
+    // use linearity to sum the ncis coherently in moving window
+    memset(fft_data, 0, sizeof(c32) * 1024 * SPC);
+    memset(fft_prev, 0, sizeof(c32) * 1024 * SPC);
+    memset(diff_acc, 0, sizeof(c32) * 1024 * SPC);
+    for (int windex = center - window / 2; windex < center + window / 2; windex++) {
+      for (int j = 0; j < 1023 * SPC; j++) { // xfer to float array
+        fft_data[j] = out[(1023 * SPC * windex) + j];
+      }
+
+      fft_c32(1024 * SPC, fft_data, true);
+    
+      // pt-wise multiply with conj of replica
+      for (int k = 0; k < 1024 * SPC; k++) {
+        fft_data[k] = mult(fft_data[k], get_conj(replica[k]));
+      }
+
+      // inverse FFT
+      fft_c32(1024 * SPC, fft_data, false);
+      
+      // multiply with conjugate of previous result and accumulate
+      if (have_prev) {
+        for (int k = 0; k < 1024 * SPC; k++) {
+          diff_acc[k] = add(diff_acc[k], mult(fft_data[k], get_conj(fft_prev[k])));
+        }
+      }
+      
+      memcpy(fft_prev, fft_data, sizeof(c32) * 1024 * SPC);
+      have_prev = true;
+    } // for windex 
+
+    float max_coh = 0; int pos_coh = 0;
+    for (int m = 0; m < 1024 * SPC; m++) {
+      float mag_coh = mag(diff_acc[m]);
+      //fprintf(fp_out, "%d, %f \n", m, mag);
+      if (mag_coh > max_coh) { max_coh = mag_coh; pos_coh = m; }
+    }
+
+    stat_add(&stat, max_coh);
+    float mean2 = stat_mean(&stat);
+    if (max_coh < min_val && max_coh < mean2 - 45 && max_coh < 160) { // for 4 SPC
+      //if (max_coh < min_val && max_coh < mean2 - 15 && max_coh < 81) { // for 2 SPC
+      //if (max_coh < min_val && max_coh < mean2 - 10 && max_coh < 42) { // sigma = 2.0 for 1 SPC (odd missed detect)
+      min_val = max_coh;
+      min_idx = center;
+    }
+    if ((center == min_idx + 1) && (max_coh > min_val)) {
+      locations[loc_cnt++] = min_idx; // empirically the wider the window the earlier the bit transition appears
+      min_val = 1e5;
+      min_idx = 0;
+    }
+    printf("center=%d max=%6.1f pos=%d mean=%6.1f\n", center, max_coh, pos_coh, mean2);
+
+    //if (fabs(max_coh - 3588) > 20) {
+    if (center == 100) {
+      FILE* fp_out = NULL; //output file
+      errno_t er = fopen_s(&fp_out, "C:/Python/diff_corr.csv", "w");
+      for (int m = 0; m < 1024 * SPC; m++) {
+        double magnitude = mag(diff_acc[m]);
+        fprintf(fp_out, "%d, %f\n", m, magnitude);
+        //fprintf(fp_out, "%d, %f, %f \n", m, coh_sum[m * 2], coh_sum[m * 2 + 1]);
+      }
+      fclose(fp_out);
+    }
+  } // for center
+
+  for (int i = 0; i < loc_cnt; i++) {
+    printf("Bit transition at %d ms \n", locations[i]);
+  }
+  printf("BTs: %d Random number: %d\n", loc_cnt, rand());
+  free(out); free(fft_data);
+  free(fft_prev); free(diff_acc); free(replica);
+}
+
 void test_quasi_pilot() {
   srand((unsigned int)time(NULL)); // randomise seed
   // Test the quasi pilot generation
@@ -1353,7 +1546,7 @@ void test_quasi_pilot2() {
 void test_quasi_pilot3() {
   srand((unsigned int)time(NULL)); // randomise seed
   // Test the quasi pilot generation
-  int nci = 200;
+  int nci = 300;
   int len = 1023 * 2 * nci; // 2 samples per chip and 100 ms
   int min_idx = 0;
   int loc_cnt = 19;
@@ -1364,7 +1557,8 @@ void test_quasi_pilot3() {
     return;
   }
   // was {-1}
-  int locations[50] =  { 10, 20, 30, 40, 50, 60, 70, 80, 90, 100, 110, 120, 130, 140, 150, 160, 170, 180, 190, 200 };// { 19, 39, 60, 79, 99, 119, 140, 159, 180 };// { -1 };// { 19, 39, 59, 79, 99, 119, 139, 159, 179 };// index into locations of bit transitions
+  int locations[50] =  { 10, 20, 30, 40, 50, 60, 70, 80, 90, 100, 110, 120, 130, 140, 150, 160, 170, 180, 
+    190, 200, 210, 220, 230, 240, 250, 260, 270, 280, 290 };
   int window = 3; // 3 ms either side
   
   int code_phase = 555; // which chip to set the code phase to
@@ -1377,34 +1571,31 @@ void test_quasi_pilot3() {
   
   getCode(1023, 2, prn1, prn_c1);
   getCode(1023, 2, prn2, prn_c2);
-  
-  // now advance code-phase
   rotate_fwd(prn_c1, 1023 * 2, code_phase); // code phase 1/4 way
-  int sign = 1;  // sign applied as part of simulation
+
   int sign2 = 1; // sign applied a posteriori after finding BTT
   stat_s stat;
   stat_init(&stat); // moving average of peak values window size = 3
+  int num_flips = 0;
   for (int i = 0; i < nci; i++) {
     for (int j = 0; j < 50; j++) {
-      if (locations[j] == i) { sign2 *= -1; break; } // change sign at the bit transitions
+      if (locations[j] == i) { sign2 *= -1; num_flips++;  break; } // change sign at the bit transitions
     }
-    //printf("%d %d \n", i + 1,  sign2 );
     // offset doppler by 250 Hz and add a residual doppler ramp of 0.1 Hz per ms
     mix_two_prns_oversampled_per_prn(prn_c1, prn_c2, dop1 + dop_error + i * 0.0, dop2 - i * 0.0, carrier_phase, 0,
-      &out[1023 * 2 * i], 1023 * 2, 1.023e6 * 2, sigma, sign); // was 2.31 for -128.5 dBm 3.1 for -131.5
-    //printf("%d sign %d \n", i + 1, sign * sign2);
+      &out[1023 * 2 * i], 1023 * 2, 1.023e6 * 2, sigma, sign2); // was 2.31 for -128.5 dBm 3.1 for -131.5
   }
 
   getCode(1023, 2, prn1, prn_c1);
   float dop_out, pwr_out;
   int code_out;
-  for (int windex = 0; windex < 200; windex++) { 
+  for (int windex = 0; windex < nci; windex++) {
     float phase = recover_prn_phase_deg_with_doppler(&out[(1023 * 2 * windex)], 1023 * 2, 
-      prn_c1, code_phase, dop1, 2.046e6, &code_out, &dop_out, &pwr_out);
+      prn_c1, code_phase - 9, dop1, 2.046e6, &code_out, &dop_out, &pwr_out);
     printf("window=%d best_off=%d dop_out=%f pwr_out=%f phase=%f\n", windex, code_out, dop_out, pwr_out, phase);
   } // for center
   
-  for (int i = 0; i < loc_cnt; i++) {
+  for (int i = 0; i < num_flips -1; i++) {
     printf("Bit transition at %d ms \n", locations[i]);
   }
   printf("Random number: %d\n", rand());
@@ -1469,7 +1660,7 @@ int main(int argc,char* argv[])
   }
 
   if (1) {
-    test_quasi_pilot();
+    test_quasi_diff_pilot();
     return 0;
   }
 
