@@ -1151,7 +1151,7 @@ void test_quasi_diff_pilot() {
   float min_val = 1e5;
 
   int locations[50] = { 20, 40, 60, 80, 100, 120, 140, 160, 180, 200, 220, 240, 260, 280 };
-  int window = 2; // 2 * window ms either side of center (window>=5 does not work)
+  int window = 2; // 2 * window ms either side of center (window>=5 does not work with noise window > 7 does not work with no noise)
   int nci = 300;
 #define SPC 4 // samples per chip
   int len = 1023 * SPC * nci; // 4 samples per chip and 100 ms
@@ -1245,14 +1245,13 @@ void test_quasi_diff_pilot() {
     }
     printf("center=%d max=%6.1f pos=%d mean=%6.1f\n", center, max_coh, pos_coh, mean2);
 
-    if (0) {//center - 123) {//fabs(pos_coh - c_phase) > 50) {
+    if (0) {//center == 270) {//fabs(pos_coh - c_phase) > 50) {
       printf("Warning: large code phase error at center %d pos_coh=%d c_phase=%d\n", center, pos_coh, c_phase);
       FILE* fp_out = NULL; //output file
       errno_t er = fopen_s(&fp_out, "C:/Python/diff_corr.csv", "w");
       for (int m = 0; m < 1024 * SPC; m++) {
         double magnitude = mag(diff_acc[m]);
         fprintf(fp_out, "%d, %f\n", m, magnitude);
-        //fprintf(fp_out, "%d, %f, %f \n", m, coh_sum[m * 2], coh_sum[m * 2 + 1]);
       }
       fclose(fp_out);
     }
