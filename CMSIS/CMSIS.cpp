@@ -1151,7 +1151,7 @@ void test_quasi_diff_pilot() {
   float min_val = 1e5;
 
   int locations[50] = { 20, 40, 60, 80, 100, 120, 140, 160, 180, 200, 220, 240, 260, 280 };
-  int window = 2; // 2 * window ms either side of center (window>=6 does not work)
+  int window = 2; // 2 * window ms either side of center (window>=5 does not work)
   int nci = 300;
 #define SPC 4 // samples per chip
   int len = 1023 * SPC * nci; // 4 samples per chip and 100 ms
@@ -1159,7 +1159,7 @@ void test_quasi_diff_pilot() {
   int prn1 = 5, prn2 = 15;
   float dop1 = 2000, dop2 = -3000;
   float dop_error = 250;// 10; // full 2*250 Hz error in wipeoff
-  float dop_err_rate = 0.0;// 0.6;// 0.6;//Hz per ms
+  float dop_err_rate = 0.6;// 0.6;// 0.6;//Hz per ms
   float sigma = 3.4;// 3.4;// 3.5;// 3.5; // noise level
   c32* out = (c32*)malloc(len * sizeof(c32));
   if (out == NULL) {
@@ -1185,7 +1185,6 @@ void test_quasi_diff_pilot() {
     // offset doppler by 250 Hz and add a residual doppler ramp of 0.1 Hz per ms
     mix_two_prns_oversampled_per_prn(prn_c1, prn_c2, dop1 + i * dop_err_rate, dop2 - i * dop_err_rate, PI / 2, 0,
       &out[1023 * SPC * i], 1023 * SPC, 1.023e6 * SPC, sigma, sign2); // was 2.31 for -128.5 dBm 3.1 for -131.5
-    //printf("%d sign %d \n", i + 1, sign * sign2);
   }
   free(prn_c1); free(prn_c2);
 
@@ -1193,30 +1192,26 @@ void test_quasi_diff_pilot() {
   
   // Compute circular correlation C_k(τ) = FFT^-1{ FFT[x_d,k] · conj(FFT[code]) }.
   c32* fft_data = (c32*)malloc(sizeof(c32) * 1024 * SPC);
-  //c32* fft_prod = (c32*)malloc(sizeof(c32) * 1024 * SPC);
   c32* fft_prev = (c32*)malloc(sizeof(c32) * 1024 * SPC);
   c32* diff_acc = (c32*)malloc(sizeof(c32) * 1024 * SPC);
   bool have_prev = false;
   if (fft_data == NULL ) { printf("Error allocating fft_data \n"); return; }
   for (int center = window / 2; center <= nci - window / 2; center++) {
-    // use linearity to sum the ncis coherently in moving window
     memset(fft_data, 0, sizeof(c32) * 1024 * SPC);
     memset(fft_prev, 0, sizeof(c32) * 1024 * SPC);
     memset(diff_acc, 0, sizeof(c32) * 1024 * SPC);
     for (int windex = center - window / 2; windex < center + window / 2; windex++) {
-      for (int j = 0; j < 1023 * SPC; j++) { // xfer to float array
+      for (int j = 0; j < 1023 * SPC; j++) { // xfer to cplx float array
         fft_data[j] = out[(1023 * SPC * windex) + j];
       }
 
-      fft_c32(1024 * SPC, fft_data, true);
+      fft_c32(1024 * SPC, fft_data, true); // forward FFT
     
-      // pt-wise multiply with conj of replica
-      for (int k = 0; k < 1024 * SPC; k++) {
+      for (int k = 0; k < 1024 * SPC; k++) { // pt-wise * with conj of replica
         fft_data[k] = mult(fft_data[k], get_conj(replica[k]));
       }
 
-      // inverse FFT
-      fft_c32(1024 * SPC, fft_data, false);
+      fft_c32(1024 * SPC, fft_data, false); // IFFT
       
       // multiply with conjugate of previous result and accumulate
       if (have_prev) {
@@ -1232,7 +1227,6 @@ void test_quasi_diff_pilot() {
     float max_coh = 0; int pos_coh = 0;
     for (int m = 0; m < 1024 * SPC; m++) {
       float mag_coh = mag(diff_acc[m]);
-      //fprintf(fp_out, "%d, %f \n", m, mag);
       if (mag_coh > max_coh) { max_coh = mag_coh; pos_coh = m; }
     }
 
@@ -1251,8 +1245,8 @@ void test_quasi_diff_pilot() {
     }
     printf("center=%d max=%6.1f pos=%d mean=%6.1f\n", center, max_coh, pos_coh, mean2);
 
-    //if (fabs(max_coh - 3588) > 20) {
-    if (center == 100) {
+    if (0) {//center - 123) {//fabs(pos_coh - c_phase) > 50) {
+      printf("Warning: large code phase error at center %d pos_coh=%d c_phase=%d\n", center, pos_coh, c_phase);
       FILE* fp_out = NULL; //output file
       errno_t er = fopen_s(&fp_out, "C:/Python/diff_corr.csv", "w");
       for (int m = 0; m < 1024 * SPC; m++) {
@@ -1298,12 +1292,12 @@ void test_quasi_pilot() {
   }
   int* prn_c1  = (int*)malloc(sizeof(int) * 1023 * SPC);
   int* prn_c2  = (int*)malloc(sizeof(int) * 1023 * SPC);
-  c32* replica = (c32*)malloc(sizeof(c32) * 1023 * SPC);;
+  c32* replica = (c32*)malloc(sizeof(c32) * 1024 * SPC);
+  memset(replica, 0, sizeof(c32) * 1024 * SPC);
   getCode(1023, SPC, prn1, prn_c1);
   getCode(1023, SPC, prn2, prn_c2);
   make_replica(prn_c1, replica, dop1 + dop_error, 1023* SPC, 1.023e6 * SPC);
-  // now advance code-phase
-  rotate_fwd(prn_c1, 1023 * SPC, c_phase); // code phase 1/4 way
+  rotate_fwd(prn_c1, 1023 * SPC, c_phase); // now advance code-phase
   int sign2 = 1; // sign applied a posteriori after finding BTT
   stat_s stat;
   stat_init(&stat); // moving average of peak values window size = 3
@@ -1314,80 +1308,58 @@ void test_quasi_pilot() {
     // offset doppler by 250 Hz and add a residual doppler ramp of 0.1 Hz per ms
     mix_two_prns_oversampled_per_prn(prn_c1, prn_c2,dop1 + i * dop_err_rate,dop2 - i * dop_err_rate,PI/2,0,
       &out[1023 * SPC * i],1023* SPC, 1.023e6 * SPC, sigma , sign2); // was 2.31 for -128.5 dBm 3.1 for -131.5
-    //printf("%d sign %d \n", i + 1, sign * sign2);
   }
   free(prn_c1); free(prn_c2);
   
   // use FFTs 
-  float* fft_replica = (float*)malloc(sizeof(float) * 1024 * SPC * 2);
-  arm_cfft_radix2_instance_f32 s;
-  memset(fft_replica, 0, sizeof(float) * 1024 * SPC * 2);
-  arm_cfft_radix2_init_f32(&s, 1024 * SPC, 0, 1);
-  // xfer to float array
-  for (int i = 0; i < 1023 * SPC; i++) {
-    fft_replica[i * 2 + 0] = replica[i].r * 0.25;
-    fft_replica[i * 2 + 1] = replica[i].i * 0.25;
-  }
-  free(replica);
-  arm_cfft_radix2_f32(&s, fft_replica);
-  
+  fft_c32(1024 * SPC, replica, true);
+
   // Compute circular correlation C_k(τ) = FFT^-1{ FFT[x_d,k] · conj(FFT[code]) }.
-  float* fft_data = (float*)malloc(sizeof(float) * 1024 * SPC * 2); 
-  float* fft_prod = (float*)malloc(sizeof(float) * 1024 * SPC * 2);
+  c32* fft_data = (c32*)malloc(sizeof(c32) * 1024 * SPC);
+  c32* fft_prod = (c32*)malloc(sizeof(c32) * 1024 * SPC);
+  c32* fft_sum  = (c32*)malloc(sizeof(c32) * 1024 * SPC);
   if (fft_data == NULL || fft_prod == NULL) { printf("Error allocating fft_data or fft_prod\n"); return; }
   for (int center = window/2; center <= nci - window/2; center++) {
     // use linearity to sum the ncis coherently in moving window
-    memset(fft_data, 0, sizeof(float) * 1024 * SPC * 2);
-    memset(fft_prod, 0, sizeof(float) * 1024 * SPC * 2);
+    memset(fft_data, 0, sizeof(c32) * 1024 * SPC);
+    memset(fft_prod, 0, sizeof(c32) * 1024 * SPC);
+    memset(fft_sum , 0, sizeof(c32) * 1024 * SPC);
     for (int windex = center - window /2; windex < center + window/2; windex++) {
-      //c32 prn_a_out[1023 * SPC] = { {0} };
-      //mix_two_prns_oversampled_per_prn(prn_c1, prn_c2,dop1 + center * dop_err_rate,dop2 - center * dop_err_rate,PI/2,0,
-      //  prn_a_out,1023* SPC, 1.023e6 * SPC, sigma , sign2); // was 2.31 for -128.5 dBm 3.1 for -131.5
       for (int j = 0; j < 1023 * SPC; j++) { // xfer to float array
-        fft_data[j * 2 + 0] = out[(1023 * SPC * windex) + j].r * 0.25;
-        fft_data[j * 2 + 1] = out[(1023 * SPC * windex) + j].i * 0.25;
+        fft_data[j] = out[(1023 * SPC * windex) + j];
       }
-    
-      arm_cfft_radix2_init_f32(&s, 1024 * SPC, 0, 1);
-      arm_cfft_radix2_f32(&s, fft_data);
 
-      // pt-wise multiply with conj of replica
-      for (int k = 0; k < 1024 * SPC; k++) {
-        float Ar = fft_data[k * 2 + 0], Ai = fft_data[k * 2 + 1];
-        float Rr = fft_replica[k * 2 + 0], Ri = fft_replica[k * 2 + 1]; // conj
-        // A * conj(R) and add this product coherently
-        fft_prod[k * 2 + 0] += (Ar * Rr + Ai * Ri);     // (Ar + jAi) * (Rr - jRi)
-        fft_prod[k * 2 + 1] += (Ai * Rr - Ar * Ri);     // 
+      fft_c32(1024 * SPC, fft_data, true); // forward FFT
+
+      for (int k = 0; k < 1024 * SPC; k++) { // pt-wise * with conj of replica
+        fft_sum[k] = add(fft_sum[k], mult(fft_data[k], get_conj(replica[k])));
       }
     } // for windex 
 
-    // inverse FFT
-    arm_cfft_radix2_init_f32(&s, 1024 * SPC, 1, 1);
-    arm_cfft_radix2_f32(&s, fft_prod);
+    fft_c32(1024 * SPC, fft_sum, false); // IFFT 
     
-    if (0) {
+    if (0) {//center == 30) {
       FILE* fp_out = NULL; //output file
       errno_t er = fopen_s(&fp_out, "C:/Python/nci_sum4.csv", "w");
       for (int m = 0; m < 1024 * SPC; m++) {
-        double mag = sqrt(fft_prod[m * 2] * fft_prod[m * 2] + fft_prod[m * 2 + 1] * fft_prod[m * 2 + 1]);
-        fprintf(fp_out, "%d, %f\n", m, mag);
-        //fprintf(fp_out, "%d, %f, %f \n", m, coh_sum[m * 2], coh_sum[m * 2 + 1]);
+        double magn = mag(fft_sum[m]);
+        fprintf(fp_out, "%d, %f\n", m, magn);
       }
       fclose(fp_out);
     }
 
     float max_coh = 0; int pos_coh = 0;
     for (int m = 0; m < 1024 * SPC; m++) {
-      float mag_coh = sqrt(fft_prod[m * 2] * fft_prod[m * 2] + fft_prod[m * 2 + 1] * fft_prod[m * 2 + 1]);
+      float mag_coh = mag(fft_sum[m]);
       //fprintf(fp_out, "%d, %f \n", m, mag);
       if (mag_coh > max_coh) { max_coh = mag_coh; pos_coh = m; }
     }
    
     stat_add(&stat, max_coh);
     float mean2 = stat_mean(&stat);
-    if (max_coh < min_val && max_coh < mean2 - 45 && max_coh < 160) { // for 4 SPC
-    //if (max_coh < min_val && max_coh < mean2 - 15 && max_coh < 81) { // for 2 SPC
-    //if (max_coh < min_val && max_coh < mean2 - 10 && max_coh < 42) { // sigma = 2.0 for 1 SPC (odd missed detect)
+    if (max_coh < min_val && max_coh < mean2 - 1000 && max_coh < 2500) { // for 4 SPC
+    //if (max_coh < min_val && max_coh < mean2 - 200 && max_coh < 1200) { // for 2 SPC
+    //if (max_coh < min_val && max_coh < mean2 - 10 && max_coh < 600) { // sigma = 2.0 for 1 SPC (odd missed detect)
       min_val = max_coh;
       min_idx = center;
     }
@@ -1403,7 +1375,7 @@ void test_quasi_pilot() {
     printf("Bit transition at %d ms \n", locations[i]);
   }
   printf("BTs: %d Random number: %d\n", loc_cnt , rand());
-  free(out); free(fft_data); free(fft_prod); free(fft_replica);
+  free(out); free(fft_data); free(fft_prod); free(fft_sum); free(replica);
 }
 
 void test_quasi_pilot2() {
