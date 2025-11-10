@@ -946,6 +946,7 @@ void read_E5A(char* input) {
   size_t bytes_to_read = ftell(fp_1bitcsv);
   rewind(fp_1bitcsv);
 
+
   FILE* fp_out = NULL; //output file
   errno_t er = fopen_s(&fp_out, "C:/Python/out3.csv", "w");
   if (er != 0 || fp_out == NULL) {
@@ -963,7 +964,7 @@ void read_E5A(char* input) {
   double doppler = -1*(1261 + 1e6 +2500);// 1580
 #define DO_FLOAT // q31 ifndef
   /////////////////////////////////////////////////////
- 
+  
   c32* sampl = (c32*)malloc(SAMP * sizeof(c32));
   c32* repli = (c32*)malloc(SAMP * sizeof(c32));
   memset(sampl, 0, sizeof(c32) * SAMP);
@@ -976,14 +977,23 @@ void read_E5A(char* input) {
   }
 
   //up sample
-  c32* up_samp = (c32*)malloc(FFT_SIZE * sizeof(c32));
+  c32* up_samp  = (c32*)malloc(FFT_SIZE * sizeof(c32));
   c32* up_repli = (c32*)malloc(FFT_SIZE * sizeof(c32));
-  c32* fft_sum = (c32*)malloc(FFT_SIZE * sizeof(c32));
-  memset(up_samp, 0, sizeof(c32) * FFT_SIZE);
+  c32* up_prod  = (c32*)malloc(FFT_SIZE * sizeof(c32));
+  float* nci_sum = (float*)malloc(FFT_SIZE * sizeof(float));
+  memset(up_samp , 0, sizeof(c32) * FFT_SIZE);
   memset(up_repli, 0, sizeof(c32) * FFT_SIZE);
-  memset(fft_sum, 0, sizeof(c32) * FFT_SIZE);
+  memset(up_prod , 0, sizeof(c32) * FFT_SIZE); 
+  memset(nci_sum , 0, sizeof(float) * FFT_SIZE);
 
 #ifdef DO_FLOAT
+  float* actual = (float*)malloc(FFT_SIZE * 2 * sizeof(float));
+  float* replica = (float*)malloc(FFT_SIZE * 2 * sizeof(float));
+  if (actual == NULL || replica == NULL) {
+    fprintf(stderr, "Memory allocation failed for 'actual'.\n");
+    return; // Exit or handle the error appropriately
+  }
+  memset(replica, 0, sizeof(float) * FFT_SIZE * 2); 
 
 #else
   q31_t* prod    = (q31_t*)malloc(FFT_SIZE * 2 * sizeof(q31_t));
@@ -1003,12 +1013,14 @@ void read_E5A(char* input) {
   up_sample_10k_to_16k(repli, up_repli);
   free(repli);
 
+  fft_c32(FFT_SIZE, up_repli, true); // forward FFT 
+
   char* context = nullptr;
   // read in the csv data
   char line[256];
   int LEN = SAMP;
+  ///////////// main loop /////////////////////////////////////////////
   for (int loop = 0; loop < 20; loop++) {
-
     int idx = 0;
     while (!feof(fp_1bitcsv)) {
       if (fgets(line, sizeof(line), fp_1bitcsv) != NULL) {
@@ -1031,13 +1043,19 @@ void read_E5A(char* input) {
     
 #ifdef DO_FLOAT
   
-    fft_c32(1024 * SPC, up_samp, true); // forward FFT
+    // note repli has been FFTed already
 
-    for (int k = 0; k < 1024 * SPC; k++) { // pt-wise * with conj of replica
-      fft_sum[k] = mult(up_samp[k], get_conj(up_repli[k]));
+    fft_c32(FFT_SIZE, up_samp, true); // forward FFT
+
+    for (int k = 0; k < FFT_SIZE; k++) { // pt-wise * with conj of replica
+      up_prod[k] = mult(up_samp[k], get_conj(up_repli[k]));
     }
 
-    fft_c32(1024 * SPC, fft_sum, false); // IFFT
+    fft_c32(FFT_SIZE, up_prod, false); // IFFT
+
+    for (int i = 0; i < FFT_SIZE; i++) {
+      nci_sum[i] += mag(up_prod[i]);
+    }
 
     printf("loop %d \n", loop);
 #else
@@ -1071,33 +1089,32 @@ void read_E5A(char* input) {
     arm_cfft_radix4_init_q31(&conv, FFT_SIZE, 1, 1); // inverse FFT
     arm_cfft_radix4_q31(&conv, prod);
 
+    for (int i = 0; i < FFT_SIZE; i++) {
+      nci_sum[i] += sqrt(prod[2 * i] * prod[2 * i] + prod[2 * i + 1] * prod[2 * i + 1]);
+    }
+
     printf("loop %d \n", loop);
 #endif //DO_FLOAT
   } // end NCI for loop
 
-  float max = 0;
-  int pos = 0;
+  float max = 0; float max2 = 0;
+  int pos = 0; int pos2 = 0;
   for (int i = 0; i < FFT_SIZE; i++) {
-#ifdef DO_FLOAT
-    float mag2 = mag(fft_sum[i]);
-#else 
-    float mag2 = sqrt(prod[2 * i] * prod[2 * i] + prod[2 * i + 1] * prod[2 * i + 1]);
-    if (i <= 8 || i >= FFT_SIZE - 8) { mag2 = 0; } // nix edges
+    float mag = nci_sum[i];
+#ifndef DO_FLOAT
+    if (i <= 8 || i >= FFT_SIZE - 8) { mag = 0; } // nix edges
 #endif
     fprintf(fp_out, "%d, %f \n", i, mag);
-    if (mag2 > max) { max = mag2; pos = i; }
+    if (mag > max) { max = mag; pos = i; }
   }
   printf("max_float = %f pos=%d frac=%f\n", max, pos, (pos / 16384.0));
-
-  fclose(fp_1bitcsv);
-  fclose(fp_out);
-  free(sampl); free(up_samp); free(up_repli); free(fft_sum);
+ 
+  fclose(fp_1bitcsv); fclose(fp_out);
+  free(sampl); free(up_samp); free(up_repli); free(up_prod); free(nci_sum);
 
 #ifndef DO_FLOAT
   free(prod); free(actual); free(replica);
 #endif 
-
-  //////////////////////////////////////////////////////
 }
 
 // try differential coherent integration. Insensitive to bit transitions
