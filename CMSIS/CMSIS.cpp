@@ -946,7 +946,6 @@ void read_E5A(char* input) {
   size_t bytes_to_read = ftell(fp_1bitcsv);
   rewind(fp_1bitcsv);
 
-
   FILE* fp_out = NULL; //output file
   errno_t er = fopen_s(&fp_out, "C:/Python/out3.csv", "w");
   if (er != 0 || fp_out == NULL) {
@@ -964,14 +963,11 @@ void read_E5A(char* input) {
   double doppler = -1*(1261 + 1e6 +2500);// 1580
 #define DO_FLOAT // q31 ifndef
   /////////////////////////////////////////////////////
-  
-
+ 
   c32* sampl = (c32*)malloc(SAMP * sizeof(c32));
   c32* repli = (c32*)malloc(SAMP * sizeof(c32));
-  for (int i = 0; i < SAMP; i++) {
-    sampl[i].r = 0.0f; sampl[i].i = 0.0f;
-    repli[i].r = 0.0f; repli[i].i = 0.0f;
-  }
+  memset(sampl, 0, sizeof(c32) * SAMP);
+  memset(repli, 0, sizeof(c32) * SAMP);
 
   if (sampl == NULL || repli == NULL) {
     fprintf(stderr, "Memory allocation failed for q32 array.\n");
@@ -982,26 +978,21 @@ void read_E5A(char* input) {
   //up sample
   c32* up_samp = (c32*)malloc(FFT_SIZE * sizeof(c32));
   c32* up_repli = (c32*)malloc(FFT_SIZE * sizeof(c32));
-
-  float* prod = (float*)malloc(FFT_SIZE * 2 * sizeof(float));
-  float* nci_sum = (float*)malloc(FFT_SIZE * sizeof(float));
-  memset(prod, 0, sizeof(float) * FFT_SIZE * 2);
-  memset(nci_sum, 0, sizeof(float) * FFT_SIZE);
+  c32* fft_sum = (c32*)malloc(FFT_SIZE * sizeof(c32));
+  memset(up_samp, 0, sizeof(c32) * FFT_SIZE);
+  memset(up_repli, 0, sizeof(c32) * FFT_SIZE);
+  memset(fft_sum, 0, sizeof(c32) * FFT_SIZE);
 
 #ifdef DO_FLOAT
-  float* actual = (float*)malloc(FFT_SIZE * 2 * sizeof(float));
-  float* replica = (float*)malloc(FFT_SIZE * 2 * sizeof(float));
-  if (actual == NULL || replica == NULL) {
-    fprintf(stderr, "Memory allocation failed for 'actual'.\n");
-    return; // Exit or handle the error appropriately
-  }
-  memset(replica, 0, sizeof(float) * FFT_SIZE * 2);
+
 #else
+  q31_t* prod    = (q31_t*)malloc(FFT_SIZE * 2 * sizeof(q31_t));
   q31_t* actual  = (q31_t*)malloc(FFT_SIZE * 2 * sizeof(q31_t));
   q31_t* replica = (q31_t*)malloc(FFT_SIZE * 2 * sizeof(q31_t));
   memset(replica, 0, sizeof(q31_t) * FFT_SIZE * 2);
+  memset(actual, 0, sizeof(q31_t) * FFT_SIZE * 2);
+  memset(prod, 0, sizeof(q31_t) * FFT_SIZE * 2);
 #endif //DO_FLOAT
-
 
   if (gal_proc) {
     synth_e5a_prn(prn, -doppler, SAMP, repli, 0);
@@ -1036,49 +1027,19 @@ void read_E5A(char* input) {
         }
       }
     }
-
-    memset(actual, 0, sizeof(float) * FFT_SIZE * 2);
     up_sample_10k_to_16k(sampl, up_samp);
     
-    
-
 #ifdef DO_FLOAT
-    arm_cfft_radix2_instance_f32 as;
-    arm_cfft_radix2_instance_f32 rs;
+  
+    fft_c32(1024 * SPC, up_samp, true); // forward FFT
 
-    for (int i = 0; i < FFT_SIZE; i++) {
-      actual[2 * i] = up_samp[i].r * 0.25;
-      actual[2 * i + 1] = up_samp[i].i * 0.25;
-      replica[2 * i] = up_repli[i].r * 0.25;
-      replica[2 * i + 1] = up_repli[i].i * 0.25;
+    for (int k = 0; k < 1024 * SPC; k++) { // pt-wise * with conj of replica
+      fft_sum[k] = mult(up_samp[k], get_conj(up_repli[k]));
     }
 
-    // do the float thing
-    arm_cfft_radix2_init_f32(&as, FFT_SIZE, 0, 1); // Initialize the CFFT instance for 8-point FFT
-    arm_cfft_radix2_f32(&as, actual);
-
-    arm_cfft_radix2_init_f32(&rs, FFT_SIZE, 0, 1); // Initialize the CFFT instance for 8-point FFT
-    arm_cfft_radix2_f32(&rs, replica);
-
-    // conjugate the replica
-    for (int i = 0; i < FFT_SIZE; i++) {
-      float Ar = actual[i * 2], Ai = actual[i * 2 + 1];
-      float Rr = replica[i * 2], Ri = replica[i * 2 + 1];
-      // A * conj(R)
-      prod[i * 2] = Ar * Rr + Ai * Ri;     // (Ar + jAi) * (Rr - jRi)
-      prod[i * 2 + 1] = Ai * Rr - Ar * Ri;     // 
-    }
-
-    arm_cfft_radix2_instance_f32 conv;
-    arm_cfft_radix2_init_f32(&conv, FFT_SIZE, 1, 1); // inverse FFT
-    arm_cfft_radix2_f32(&conv, prod);
-
-    for (int i = 0; i < FFT_SIZE; i++) {
-      nci_sum[i] += sqrt(prod[2 * i] * prod[2 * i] + prod[2 * i + 1] * prod[2 * i + 1]);
-    }
+    fft_c32(1024 * SPC, fft_sum, false); // IFFT
 
     printf("loop %d \n", loop);
-
 #else
     // do the q31 thing
     arm_cfft_radix4_instance_q31 aq;
@@ -1096,8 +1057,7 @@ void read_E5A(char* input) {
 
     arm_cfft_radix4_init_q31(&rq, FFT_SIZE, 0, 1); // Initialize the CFFT instance for 8-point FFT
     arm_cfft_radix4_q31(&rq, replica);
-
-    q31_t prod[FFT_SIZE * 2] = { 0 };
+    
     // Mult Actual with conjugate of Replica
     for (int i = 0; i < FFT_SIZE; i++) {
       float Ar = actual[i * 2], Ai = actual[i * 2 + 1];
@@ -1111,32 +1071,31 @@ void read_E5A(char* input) {
     arm_cfft_radix4_init_q31(&conv, FFT_SIZE, 1, 1); // inverse FFT
     arm_cfft_radix4_q31(&conv, prod);
 
-    for (int i = 0; i < FFT_SIZE; i++) {
-      nci_sum[i] += sqrt(prod[2 * i] * prod[2 * i] + prod[2 * i + 1] * prod[2 * i + 1]);
-    }
-
     printf("loop %d \n", loop);
 #endif //DO_FLOAT
   } // end NCI for loop
 
-
   float max = 0;
   int pos = 0;
   for (int i = 0; i < FFT_SIZE; i++) {
-    float mag = nci_sum[i];
-#ifndef DO_FLOAT
-    if (i <= 8 || i >= FFT_SIZE - 8) { mag = 0; } // nix edges
+#ifdef DO_FLOAT
+    float mag2 = mag(fft_sum[i]);
+#else 
+    float mag2 = sqrt(prod[2 * i] * prod[2 * i] + prod[2 * i + 1] * prod[2 * i + 1]);
+    if (i <= 8 || i >= FFT_SIZE - 8) { mag2 = 0; } // nix edges
 #endif
     fprintf(fp_out, "%d, %f \n", i, mag);
-    if (mag > max) { max = mag; pos = i; }
+    if (mag2 > max) { max = mag2; pos = i; }
   }
   printf("max_float = %f pos=%d frac=%f\n", max, pos, (pos / 16384.0));
 
   fclose(fp_1bitcsv);
   fclose(fp_out);
-  free(sampl); free(up_samp); free(up_repli);
-  free(actual); free(replica); free(prod); free(nci_sum);
+  free(sampl); free(up_samp); free(up_repli); free(fft_sum);
 
+#ifndef DO_FLOAT
+  free(prod); free(actual); free(replica);
+#endif 
 
   //////////////////////////////////////////////////////
 }
@@ -1585,7 +1544,7 @@ int main(int argc,char* argv[])
     return 0;
   }
 
-  if (0) {
+  if (1) {
     read_E5A((char*)"C:/work/Baseband/TestData/E5/t14/G_2024_10_21_22_29_43.047.csv");
     //read_E5A((char*)"C:/work/Baseband/TestData/E5/t14/G_2024_10_21_22_32_30.500_resampled_16368Hz.csv");
     //read_E5A((char*)"C:/work/Baseband/TestData/E5/t14/G_2024_10_21_22_29_43.047_resampled_16368Hz.csv");
@@ -1604,7 +1563,7 @@ int main(int argc,char* argv[])
     return 0;
   }
 
-  if (1) {
+  if (0) {
     test_quasi_pilot2();
     return 0;
   }
