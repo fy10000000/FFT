@@ -22,8 +22,12 @@
 #define E1B_HEX_LEN  1023
 #define E5A_HEX_LEN  2558
 
-#define E1B_MAX_PRN  50
-#define E5A_MAX_PRN  50
+#define E5_QP_HEX_LEN  83
+#define E5_QP_CODE_LEN 330
+
+#define E1B_MAX_PRN    50
+#define E5A_MAX_PRN    50
+#define E5_QP_MAX_PRN  40
 
 #ifndef PI
 #define PI               3.14159265358979f
@@ -31,18 +35,20 @@
 
 int8_t E1B_Code[E1B_MAX_PRN + 1][E1B_CODE_LEN]; // one based indexing
 
-//int8_t E5AICodes[E5A_MAX_PRN][E5A_CODE_LEN];// zero based indexing
-
 
 int load_e1b_primary_codes(char* path, int8_t out[E1B_MAX_PRN + 1][E1B_CODE_LEN]);
 
-int load_e5a_primary_codes(char* path, uint8_t out[E5A_CODE_LEN], int prn);
+int load_e5a_primary_codes(char* path, int8_t out[E5A_CODE_LEN], int prn);
+
+int load_e5_qp_codes(char* path, int8_t out[E5_QP_CODE_LEN], int prn);
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
 void getCode(int num, int samplesPerChip, const int prn, int* out);
+
+void getE5_QPCode(int num, int samplesPerChip, const int prn,int* out);
 
 // this loads Gal prns under the covers
 void synth_e1b_prn(
@@ -67,6 +73,15 @@ void synth_L5I_prn(
   c32* out,
   int rotate_offset
 );
+
+void synth_e5_qp_prn(
+  int prn, // one based indexing
+  float doppler,
+  size_t N,
+  c32* out,
+  int rotate_offset);
+
+void up_sample_N_to_M(c32* in, int N_in, c32* out, int M_out);
 
 void up_sample_10k_to_16k(c32* in, c32* out);
 

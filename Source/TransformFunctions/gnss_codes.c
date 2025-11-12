@@ -283,6 +283,20 @@ static int hexstream_to_e5a_chips(const char* hex_stream, int8_t chips[E5A_CODE_
   return (chip_idx == E5A_CODE_LEN) ? 0 : -1;
 }
 
+static int hexstream_to_e5a_qp_chips(const char* hex_stream, int8_t chips[E5_QP_CODE_LEN]) {
+  int chip_idx = 0;
+  for (const char* p = hex_stream; *p && chip_idx < E5_QP_CODE_LEN; ++p) {
+    int v = hex_nibble((unsigned char)*p);
+    if (v < 0) continue; // skip non-hex
+    // MSB-first within nibble: bits 3,2,1,0
+    for (int b = 3; b >= 0 && chip_idx < E5_QP_CODE_LEN; --b) {
+      int bit = (v >> b) & 1;
+      chips[chip_idx++] = logic_to_chip_icd(bit);
+    }
+  }
+  return (chip_idx == E5_QP_CODE_LEN) ? 0 : -1;
+}
+
 /* Trim leading/trailing whitespace in-place; returns pointer to first nonspace. */
 static char* trim_inplace(char* s) {
   if (!s) { return s; }
@@ -315,13 +329,66 @@ static const char* parse_prnnd_hex_start(const char* line, int* out_prn) {
   return q;
 }
 
+int load_e5_qp_codes(char* path, int8_t out[E5_QP_CODE_LEN], int prn) {
+
+  FILE* f = fopen(path, "r");
+  if (!f) { return -1; }
+  char line[E5_QP_HEX_LEN + 64];
+  int loaded = 0;
+  int next_prn_seq = 1;
+  while (fgets(line, (int)sizeof(line), f)) {
+    char* raw = trim_inplace(line);
+    if (*raw == '\0') continue;           // empty
+    if (*raw == '#')  continue;           // comment
+    // If the line is suspiciously short in hex, skip early
+    // (still allow separators; we’ll count hex later)
+    int hex_chars = 0;
+    for (char* c = raw; *c; ++c) {
+      if (isxdigit((unsigned char)*c)) { ++hex_chars; }
+    }
+    if (hex_chars == 0) {
+      continue;
+    }
+    int prn_line = 0;
+    const char* hex_start = parse_prnnd_hex_start(raw, &prn_line);
+    if (prn_line != prn) {
+      continue;
+    }
+    if (!hex_start) {
+      // No explicit PRN; treat as hex-only line
+      if (next_prn_seq > E5_QP_MAX_PRN) continue; // extra lines ignored
+      prn_line = next_prn_seq++;
+      hex_start = raw;
+    }
+    // Copy only hex digits into a temporary buffer to ensure exactly 83 nibbles are considered.
+    char hexbuf[E5_QP_HEX_LEN + 1];
+    int h = 0;
+    for (const char* p = hex_start; *p && h < E5_QP_HEX_LEN; ++p) {
+      if (isxdigit((unsigned char)*p)) hexbuf[h++] = *p;
+    }
+    hexbuf[h] = '\0';
+    if (h != E5_QP_HEX_LEN) {
+      // Try to keep reading more hex from the remainder of the current line (already done) – not enough.
+      // Some files may wrap the hex across multiple lines; this loader assumes one line per PRN.
+      // You can extend here to accumulate across lines if needed.
+      // Skip malformed line
+      continue;
+    }
+    if (hexstream_to_e5a_qp_chips(hexbuf, out) == 0) {
+      loaded++;
+    }
+  }
+  fclose(f);
+  return loaded;
+}
+
 /* Load E1-B codes from a file.
    Formats supported:
      - CSV/TXT: "<PRN><sep><1023-hex>" per line (sep can be ',', ';', space, or tab)
      - HEX-only: "<1023-hex>" per line, PRNs assigned by line number (1..50)
    Returns number of PRNs successfully loaded (0..50), or <0 on file open/read error. */
 int load_e1b_primary_codes(char* path, int8_t out[E1B_MAX_PRN + 1][E1B_CODE_LEN]) {
-  FILE* f = fopen(path, "rb");
+  FILE* f = fopen(path, "r");
   if (!f) { return -1; }
 
   // zero out to mark "not loaded"
@@ -385,13 +452,38 @@ int load_e1b_primary_codes(char* path, int8_t out[E1B_MAX_PRN + 1][E1B_CODE_LEN]
   return loaded;
 }
 
+extern void getE5_QPCode(int num, int samplesPerChip, const int prn, int* out) {
+  int8_t e5a_qp[E5_QP_CODE_LEN];
+  load_e5_qp_codes((char*)"C:/work/Baseband/HEX_E5aQP.txt", e5a_qp, prn);
+
+  int* e5a_qp_int = (int*)malloc(num * sizeof(int));
+  int i, j, k;
+
+  for (i = 0; i < num; ++i) {
+    e5a_qp_int[i] = e5a_qp[i % E5_QP_CODE_LEN];
+  }
+  
+  if (samplesPerChip > 1) {
+    for (i = 0, k = 0; i < num; ++i) {
+      for (j = 0; j < samplesPerChip; ++j) {
+        out[k++] = e5a_qp_int[i];
+      }
+    }
+  }
+  else {
+    memcpy(out, e5a_qp, num * sizeof(int));
+  }
+
+  free(e5a_qp_int);
+}
+
 /* Load E5-A codes from a file.
    Formats supported:
      - CSV/TXT: "<PRN><sep><1023-hex>" per line (sep can be ',', ';', space, or tab)
      - HEX-only: "<1023-hex>" per line, PRNs assigned by line number (1..50)
    Returns number of PRNs successfully loaded (0..50), or <0 on file open/read error. */
 int load_e5a_primary_codes(char* path, int8_t out[E5A_CODE_LEN], int target_prn) {
-  FILE* f = fopen(path, "rb");
+  FILE* f = fopen(path, "r");
   if (!f) { return -1; }  
 
   char line[E5A_HEX_LEN + 512];
@@ -495,6 +587,76 @@ void rotate_right_i8_cycles(int8_t* a, size_t len, long long N) {
       i = next;
     }
     a[i] = tmp;
+  }
+}
+
+extern void synth_e5_qp_prn(int prn, // one based indexing
+  float doppler,
+  size_t N,
+  c32* out,
+  int rotate_offset) {
+  float phi_rad = 0.0;
+  float code_phase = 0.0;
+  const float fs_hz = 5.115e6f; // 10.23e6;// Mspc
+  const float code_rate_cps = 5.115e6f; // p 10 Galileo_OS_SIS_ICD_v2.2.pdf
+  // code length is on page 15 of Galileo_OS_SIS_ICD_v2.2.pdf
+  // The 330 - chip code is repeated 31 times within a 2 ms period without any overlay or secondary code.
+  // Each code has therefore a period of 2 / 31 ms 330 * 31 = 10230 chips
+
+  int8_t code_loc[E5_QP_CODE_LEN] = { 0 };
+  int ret = load_e5_qp_codes((char*)"C:/work/Baseband/HEX_E5aQP.txt", code_loc, prn);
+  if (ret < 0) { printf("Error loading Galileo codes; check path in synth_e5_QP_prn()\n"); return; }
+
+  if (rotate_offset) {
+    //rotate_right_i8_cycles(code_loc, E5_QP_CODE_LEN, rotate_offset); //still a bug in this
+    int size = E5_QP_CODE_LEN;
+    int8_t* temp = (int8_t*)malloc(sizeof(int8_t) * size);
+    if (temp == NULL) { printf("rotate_fwd's malloc failed");  return; }
+    for (int i = 0; i < size; i++) {
+      if (i - rotate_offset < 0) { temp[i] = code_loc[size + (i - rotate_offset)]; }
+      else { temp[i] = code_loc[i - rotate_offset]; }
+    }
+    memcpy(code_loc, temp, sizeof(int8_t) * size);
+    free(temp);
+  }
+
+  //FILE* fp_out = NULL; //output file
+  //errno_t er = fopen_s(&fp_out, "C:/Python/prn36.csv", "w");
+  //for (int i = 0; i < E5_QP_CODE_LEN; i++) {
+  //  fprintf(fp_out, "%d, %d\n",i, -code_loc[i]);
+  //}
+  //fclose(fp_out);
+
+  const int L = E5_QP_CODE_LEN;
+  const int8_t* ca = code_loc;
+  float dchips = (code_rate_cps) / fs_hz;
+  float dphia = 2.0f * (float)PI * (doppler) / fs_hz; // phase increment per sample
+  float chips = code_phase;
+  float phia = phi_rad;
+  c32 in[E5_QP_CODE_LEN];
+  int8_t no_quant = 1; // 0 for quantization
+  for (size_t n = 0; n < L; ++n) {
+    float frac = chips - floorf(chips);
+    int code = code_chip_at(ca, chips, L);
+    float sca = 1.0;// cboc_e1b_weight(frac);
+    float ampa = (float)code * sca; // data assumed +1
+
+    float sa, ca;
+    sincosf_fast(phia, &sa, &ca);
+    c32 xa = { ampa * ca, ampa * sa };
+
+    out[n].r = no_quant ? xa.r : quantize_pm1(xa.r + noise(1.0));
+    out[n].i = no_quant ? xa.i : quantize_pm1(xa.i + noise(1.0));
+
+    // advance
+    chips += dchips;
+    if (chips >= L) { chips -= L; }
+    else if (chips < 0) { chips += L; }
+
+    phia += dphia;
+    if (phia > 1e9f || phia < -1e9f) {
+      phia = fmodf(phia, 2.0f * PI);
+    }
   }
 }
 
@@ -677,6 +839,24 @@ extern void synth_L5I_prn(
   }
 }
 
+extern void up_sample_N_to_M(c32* in, int N_in, c32* out, int M_out) {
+  // wrapper around the function doing this
+  const int    NTAPS = 12;      // try 8, 12, or 16
+  const double CUTOFF = 0.45;
+
+  iq_resamp_zp_t* rs = iq_resamp_zp_init(N_in, M_out, NTAPS, CUTOFF);
+  if (!rs) { fprintf(stderr, "init failed\n"); return; }
+
+  size_t Nin = N_in; 
+
+
+  size_t Nout_cap = (size_t)llround(Nin * (M_out / N_in));
+
+  size_t Nout = iq_resamp_process_zero_phase(rs, in, Nin, out, Nout_cap);
+
+  iq_resamp_zp_free(rs);
+}
+
 void up_sample_10k_to_16k(c32* in , c32* out) {
   // wrapper around the function doing this
   const double Fin = 10230e3;
@@ -688,11 +868,8 @@ void up_sample_10k_to_16k(c32* in , c32* out) {
   if (!rs) { fprintf(stderr, "init failed\n"); return ; }
 
   size_t Nin = 10230; // 1 ms at 10.23 Msps
-  //c32* in = (c32*)calloc(Nin, sizeof(c32));
-  // fill 'in' ...
 
   size_t Nout_cap = (size_t)llround(Nin * (Fout / Fin)) + 8;
-  //c32* out = (c32*)malloc(Nout_cap * sizeof(c32));
 
   size_t Nout = iq_resamp_process_zero_phase(rs, in, Nin, out, Nout_cap);
   printf("Produced %zu samples (expected ~16384)\n", Nout);

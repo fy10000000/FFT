@@ -960,8 +960,8 @@ void read_E5A(char* input) {
 #define FFT_SIZE 16384 
 #define SAMP 10230 // for 1 ms at 10.23 MHz
   // only 9 and 36 with q31; 10, 6 also works with float
-  int prn = 6;// 6;// 6;// 36;// 9;// 36
-  double doppler = -1*(1261 + 1e6 +2500);// 1580 E6: 1261 ; G10:-582, G32:1232
+  int prn = 36;// 6;// 6;// 36;// 9;// 36
+  double doppler = -1*(1580 + 1e6 +2500);// E36:1580 E6: 1261 ; G10:-582, G32:1232
 #define DO_FLOAT // q31 ifndef
   /////////////////////////////////////////////////////
   
@@ -1353,6 +1353,117 @@ void test_quasi_pilot() {
   free(out); free(fft_data); free(fft_prod); free(fft_sum); free(replica);
 }
 
+void test_quasi_pilot_330() {
+  srand((unsigned int)time(NULL)); // randomise seed
+  // Test the quasi pilot generation
+  int min_idx = 0;
+  int loc_cnt = 0;
+  float min_val = 1e5;
+#define FFT_QP_SIZE 512
+  float chipping_rate = 5.115e6; // chips per sec
+  int locations[50] = { -1 };// { 20, 40, 60, 80, 100, 120, 140, 160, 180, 200, 220, 240, 260, 280 };
+  int window = 3; // 2 * window ms either side of center (window>=6 does not work)
+  int nci = 300;
+#define SPC 4 // samples per chip
+  int len = 330 * SPC * nci; // 4 samples per chip and 100 ms
+  int c_phase = 660; // which chip to set the code phase to
+  int prn1 = 4, prn2 = 8;
+  float dop1 = 2000, dop2 = -3000;
+  float dop_error = 250;// 10; // full 2*250 Hz error in wipeoff
+  float dop_err_rate = 0.0;// 0.6;// 0.6;//Hz per ms
+  float sigma = 0;// 3.5;// 3.5; // noise level
+  c32* out = (c32*)malloc(len * sizeof(c32));
+  if (out == NULL) { fprintf(stderr, "Memory allocation failed for 100 ms I&Q array.\n"); return; }
+  int* prn_c1  = (int*)malloc(sizeof(int) * E5_QP_CODE_LEN * SPC);
+  int* prn_c2  = (int*)malloc(sizeof(int) * E5_QP_CODE_LEN * SPC);
+  c32* replica = (c32*)malloc(sizeof(c32) * E5_QP_CODE_LEN * SPC);
+  memset(prn_c1 , 0, sizeof(int) * E5_QP_CODE_LEN * SPC);
+  memset(prn_c2 , 0, sizeof(int) * E5_QP_CODE_LEN * SPC);
+  memset(replica, 0, sizeof(c32) * E5_QP_CODE_LEN * SPC);
+  getE5_QPCode(E5_QP_CODE_LEN, SPC, prn1, prn_c1);
+  getE5_QPCode(E5_QP_CODE_LEN, SPC, prn2, prn_c2);
+
+  make_replica(prn_c1, replica, dop1 + dop_error, E5_QP_CODE_LEN * SPC, chipping_rate * SPC);
+  rotate_fwd(prn_c1, E5_QP_CODE_LEN * SPC, c_phase); // now advance code-phase
+  int sign2 = 1; // sign applied a posteriori after finding BTT
+  stat_s stat;
+  stat_init(&stat); // moving average of peak values window size = 3
+  for (int i = 0; i < nci; i++) {
+    for (int j = 0; j < 50; j++) {
+      if (locations[j] == i) { sign2 *= -1; break; } // change sign at the bit transitions
+    }
+    // offset doppler by 250 Hz and add a residual doppler ramp of 0.1 Hz per ms
+    mix_two_prns_oversampled_per_prn(prn_c1, prn_c2, dop1 + i * dop_err_rate, dop2 - i * dop_err_rate, 
+      PI / 2, 0,&out[E5_QP_CODE_LEN * SPC * i], E5_QP_CODE_LEN * SPC, chipping_rate * SPC, sigma, sign2); // was 2.31 for -128.5 dBm 3.1 for -131.5
+  }
+  free(prn_c1); free(prn_c2);
+
+  // Compute circular correlation C_k(τ) = FFT^-1{ FFT[x_d,k] · conj(FFT[code]) }.
+  c32* fft_repl = (c32*)malloc(sizeof(c32) * FFT_QP_SIZE * SPC);
+  c32* fft_data = (c32*)malloc(sizeof(c32) * FFT_QP_SIZE * SPC);
+  c32* fft_sum  = (c32*)malloc(sizeof(c32) * FFT_QP_SIZE * SPC);
+  memset(fft_repl, 0, sizeof(c32) * FFT_QP_SIZE * SPC);
+  if (fft_data == NULL || fft_repl == NULL) { printf("Error allocating fft_data or fft_prod\n"); return; }
+  up_sample_N_to_M(replica, E5_QP_CODE_LEN * SPC, fft_repl, FFT_QP_SIZE * SPC);
+  free(replica);
+  fft_c32(FFT_QP_SIZE * SPC, fft_repl, true);
+  for (int center = window / 2; center <= nci - window / 2; center++) {
+    memset(fft_data, 0, sizeof(c32) * FFT_QP_SIZE * SPC);
+    memset(fft_sum , 0, sizeof(c32) * FFT_QP_SIZE * SPC);
+    for (int windex = center - window / 2; windex < center + window / 2; windex++) {
+      up_sample_N_to_M(&out[E5_QP_CODE_LEN * SPC * windex], 330 * SPC, fft_data, FFT_QP_SIZE * SPC);
+      //for (int j = 0; j < E5_QP_CODE_LEN * SPC; j++) { // xfer to float array
+      //  fft_data[j] = out[(E5_QP_CODE_LEN * SPC * windex) + j];
+      //}
+
+      fft_c32(FFT_QP_SIZE * SPC, fft_data, true); // forward FFT
+
+      for (int k = 0; k < FFT_QP_SIZE * SPC; k++) { // pt-wise * with conj of replica
+        fft_sum[k] = add(fft_sum[k], mult(fft_data[k], get_conj(fft_repl[k])));
+      }
+    } // for windex 
+
+    fft_c32(FFT_QP_SIZE * SPC, fft_sum, false); // IFFT 
+
+    if (center == 30) {
+      FILE* fp_out = NULL; //output file
+      errno_t er = fopen_s(&fp_out, "C:/Python/nci_sum4.csv", "w");
+      for (int m = 0; m < FFT_QP_SIZE * SPC; m++) {
+        double magn = mag(fft_sum[m]);
+        fprintf(fp_out, "%d, %f\n", m, magn);
+      }
+      fclose(fp_out);
+    }
+
+    float max_coh = 0; int pos_coh = 0;
+    for (int m = 0; m < FFT_QP_SIZE * SPC; m++) {
+      float mag_coh = mag(fft_sum[m]);
+      if (mag_coh > max_coh) { max_coh = mag_coh; pos_coh = m; }
+    }
+
+    stat_add(&stat, max_coh);
+    float mean2 = stat_mean(&stat);
+    if (max_coh < min_val && max_coh < mean2 - 1000 && max_coh < 2500) { // for 4 SPC
+      //if (max_coh < min_val && max_coh < mean2 - 200 && max_coh < 1200) { // for 2 SPC
+      //if (max_coh < min_val && max_coh < mean2 - 10 && max_coh < 600) { // sigma = 2.0 for 1 SPC (odd missed detect)
+      min_val = max_coh;
+      min_idx = center;
+    }
+    if ((center == min_idx + 1) && (max_coh > min_val)) {
+      locations[loc_cnt++] = min_idx; // empirically the wider the window the earlier the bit transition appears
+      min_val = 1e5;
+      min_idx = 0;
+    }
+    printf("center=%d max=%6.1f pos=%d mean=%6.1f\n", center, max_coh, pos_coh, mean2);
+  } // for center
+
+  for (int i = 0; i < loc_cnt; i++) {
+    printf("Bit transition at %d ms \n", locations[i]);
+  }
+  printf("BTs: %d Random number: %d\n", loc_cnt, rand());
+  free(out); free(fft_data); free(fft_sum); free(fft_repl);
+}
+
 void test_quasi_pilot2() {
   srand((unsigned int)time(NULL)); // randomise seed
   // Test the quasi pilot generation
@@ -1540,7 +1651,7 @@ int main(int argc,char* argv[])
 //#define DO_Q15_RADIX2
 //#define DO_Q15_RADIX4
 //#define DO_Q31_RADIX2 
-//#define DO_Q31_RADIX4 
+//#define DO_Q31_RADIX4
 
   if (0) {
     // set to 1 above if need to recalculate some of the twiddleCoefs
@@ -1561,7 +1672,7 @@ int main(int argc,char* argv[])
     return 0;
   }
 
-  if (1) {
+  if (0) {
     read_E5A((char*)"C:/work/Baseband/TestData/E5/t14/G_2024_10_21_22_29_43.047.csv");
     //read_E5A((char*)"C:/work/Baseband/TestData/E5/t14/G_2024_10_21_22_32_30.500_resampled_16368Hz.csv");
     //read_E5A((char*)"C:/work/Baseband/TestData/E5/t14/G_2024_10_21_22_29_43.047_resampled_16368Hz.csv");
@@ -1580,8 +1691,9 @@ int main(int argc,char* argv[])
     return 0;
   }
 
-  if (0) {
-    test_quasi_pilot2();
+  if (1) {
+    test_quasi_pilot_330();
+    //test_quasi_pilot2();
     return 0;
   }
 
