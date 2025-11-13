@@ -1468,7 +1468,6 @@ void test_quasi_pilot_330() {
   c32* fft_repl = (c32*)malloc(sizeof(c32) * FFT_QP_SIZE * SPC);
   c32* fft_data = (c32*)malloc(sizeof(c32) * FFT_QP_SIZE * SPC);
   c32* fft_sum  = (c32*)malloc(sizeof(c32) * FFT_QP_SIZE * SPC);
-  c32* fft_dum = (c32*)malloc(sizeof(c32) * FFT_QP_SIZE * SPC);
   memset(fft_repl, 0, sizeof(c32) * FFT_QP_SIZE * SPC);
   if (fft_data == NULL || fft_repl == NULL) { printf("Error allocating fft_data or fft_prod\n"); return; }
   up_sample_N_to_M(replica, E5_QP_CODE_LEN * SPC, fft_repl, FFT_QP_SIZE * SPC);
@@ -1476,7 +1475,6 @@ void test_quasi_pilot_330() {
   fft_c32(FFT_QP_SIZE * SPC, fft_repl, true);
   for (int center = window / 2; center <= nci - window / 2; center++) {
     memset(fft_sum , 0, sizeof(c32) * FFT_QP_SIZE * SPC);
-    memset(fft_dum, 0, sizeof(c32) * FFT_QP_SIZE * SPC);
     for (int windex = center - window / 2; windex < center + window / 2; windex++) {
     //for (int windex = center; windex < center + 1; windex++) {
       memset(fft_data, 0, sizeof(c32) * FFT_QP_SIZE * SPC);
@@ -1485,17 +1483,11 @@ void test_quasi_pilot_330() {
       fft_c32(FFT_QP_SIZE * SPC, fft_data, true); // forward FFT
 
       for (int k = 0; k < FFT_QP_SIZE * SPC; k++) { // pt-wise * with conj of replica
-        fft_dum[k] = (mult(fft_data[k], get_conj(fft_repl[k])));
+        fft_sum[k] = add(fft_sum[k], mult(fft_data[k], get_conj(fft_repl[k])));
       }
-
-      fft_c32(FFT_QP_SIZE * SPC, fft_dum, false); // IFFT 
-
-      for (int k = 0; k < FFT_QP_SIZE * SPC; k++) { 
-        fft_sum[k] = add(fft_sum[k], fft_dum[k]);
-      }
-
     } // for windex 
 
+    fft_c32(FFT_QP_SIZE * SPC, fft_sum, false); // IFFT 
 
     if (center == 40) {
       FILE* fp_out = NULL; //output file
@@ -1531,7 +1523,7 @@ void test_quasi_pilot_330() {
     printf("Bit transition at %d ms \n", locations[i]);
   }
   printf("BTs: %d Random number: %d\n", loc_cnt, rand());
-  free(out); free(fft_data); free(fft_sum); free(fft_repl); free(fft_dum);
+  free(out); free(fft_data); free(fft_sum); free(fft_repl);
 }
 
 void test_quasi_pilot2() {
