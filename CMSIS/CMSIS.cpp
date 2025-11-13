@@ -1359,14 +1359,14 @@ void test_quasi_pilot_330() {
   int min_idx = 0;
   int loc_cnt = 0;
   float min_val = 1e5;
-#define FFT_QP_SIZE 512
+#define FFT_QP_SIZE 1024
   float chipping_rate = 5.115e6; // chips per sec
   int locations[50] = { -1 };// { 20, 40, 60, 80, 100, 120, 140, 160, 180, 200, 220, 240, 260, 280 };
   int window = 3; // 2 * window ms either side of center (window>=6 does not work)
   int nci = 300;
-#define SPC 4 // samples per chip
-  int len = 330 * SPC * nci; // 4 samples per chip and 100 ms
-  int c_phase = 660; // which chip to set the code phase to
+#define SPC 1 // samples per chip
+  int len = E5_QP_CODE_LEN * SPC * nci; // 4 samples per chip and 100 ms
+  int c_phase = 80; // which chip to set the code phase to
   int prn1 = 4, prn2 = 8;
   float dop1 = 2000, dop2 = -3000;
   float dop_error = 250;// 10; // full 2*250 Hz error in wipeoff
@@ -1404,14 +1404,16 @@ void test_quasi_pilot_330() {
   c32* fft_sum  = (c32*)malloc(sizeof(c32) * FFT_QP_SIZE * SPC);
   memset(fft_repl, 0, sizeof(c32) * FFT_QP_SIZE * SPC);
   if (fft_data == NULL || fft_repl == NULL) { printf("Error allocating fft_data or fft_prod\n"); return; }
-  up_sample_N_to_M(replica, E5_QP_CODE_LEN * SPC, fft_repl, FFT_QP_SIZE * SPC);
+  //up_sample_N_to_M(replica, E5_QP_CODE_LEN * SPC, fft_repl, FFT_QP_SIZE * SPC);
+  memcpy(fft_repl, replica, sizeof(c32) * E5_QP_CODE_LEN * SPC);
   free(replica);
   fft_c32(FFT_QP_SIZE * SPC, fft_repl, true);
   for (int center = window / 2; center <= nci - window / 2; center++) {
     memset(fft_data, 0, sizeof(c32) * FFT_QP_SIZE * SPC);
     memset(fft_sum , 0, sizeof(c32) * FFT_QP_SIZE * SPC);
     for (int windex = center - window / 2; windex < center + window / 2; windex++) {
-      up_sample_N_to_M(&out[E5_QP_CODE_LEN * SPC * windex], 330 * SPC, fft_data, FFT_QP_SIZE * SPC);
+      //up_sample_N_to_M(&out[E5_QP_CODE_LEN * SPC * windex], 330 * SPC, fft_data, FFT_QP_SIZE * SPC);
+      memcpy(fft_data , &out[E5_QP_CODE_LEN * SPC * windex], sizeof(c32) * E5_QP_CODE_LEN * SPC);
       //for (int j = 0; j < E5_QP_CODE_LEN * SPC; j++) { // xfer to float array
       //  fft_data[j] = out[(E5_QP_CODE_LEN * SPC * windex) + j];
       //}

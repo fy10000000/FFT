@@ -471,7 +471,7 @@ extern void getE5_QPCode(int num, int samplesPerChip, const int prn, int* out) {
     }
   }
   else {
-    memcpy(out, e5a_qp, num * sizeof(int));
+    memcpy(out, e5a_qp_int, num * sizeof(int));
   }
 
   free(e5a_qp_int);
