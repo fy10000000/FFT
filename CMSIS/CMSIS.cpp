@@ -1404,7 +1404,7 @@ void find_prn_shift2( c32* prnA,  c32* prnA_Shift, const int size)
   for (int k = 0; k < FFT_SZ; ++k) {
    
     float val = mag(cprod[k]);
-    fprintf(stderr, "Shift, %d, %f\n", k, val);
+    //fprintf(stderr, "Shift, %d, %f\n", k, val);
     if (val > best_val) {
       best_val = val;
       best_k = k;
@@ -1431,7 +1431,7 @@ void test_quasi_pilot_330() {
   int nci = 30;
 #define SPC 2 // samples per chip
   int len = E5_QP_CODE_LEN * SPC * nci; // 4 samples per chip and 100 ms
-  int c_phase = 222; // which chip to set the code phase to
+  int c_phase = 555; // which chip to set the code phase to
   int prn1 = 4, prn2 = 8;
   float dop1 = 2000, dop2 = -3000;
   float dop_error = 250;// 10; // full 2*250 Hz error in wipeoff
@@ -1442,7 +1442,6 @@ void test_quasi_pilot_330() {
   int* prn_c1  = (int*)malloc(sizeof(int) * E5_QP_CODE_LEN * SPC);
   int* prn_c2  = (int*)malloc(sizeof(int) * E5_QP_CODE_LEN * SPC);
   c32* replica = (c32*)malloc(sizeof(c32) * E5_QP_CODE_LEN * SPC);
-  //c32* test_1 = (c32*)malloc(sizeof(c32) * E5_QP_CODE_LEN * SPC);
   memset(prn_c1 , 0, sizeof(int) * E5_QP_CODE_LEN * SPC);
   memset(prn_c2 , 0, sizeof(int) * E5_QP_CODE_LEN * SPC);
   memset(replica, 0, sizeof(c32) * E5_QP_CODE_LEN * SPC);
@@ -1451,10 +1450,6 @@ void test_quasi_pilot_330() {
 
   make_replica(prn_c1, replica, dop1 + dop_error, E5_QP_CODE_LEN * SPC, chipping_rate * SPC);
   rotate_fwd(prn_c1, E5_QP_CODE_LEN * SPC, c_phase); // now advance code-phase  
-
-  //make_replica(prn_c1, test_1, dop1 , E5_QP_CODE_LEN * SPC, chipping_rate * SPC);
-  //find_prn_shift2(test_1, replica, E5_QP_CODE_LEN * SPC); 
-  //free(test_1);////////////////////////////////////////////////////////////////////////
 
   int sign2 = 1; // sign applied a posteriori after finding BTT
   stat_s stat;
@@ -1469,25 +1464,23 @@ void test_quasi_pilot_330() {
   }
   free(prn_c1); free(prn_c2);
 
+  //find_prn_shift2(&out[E5_QP_CODE_LEN * SPC * 3 ], replica, E5_QP_CODE_LEN * SPC);
+
   // Compute circular correlation C_k(τ) = FFT^-1{ FFT[x_d,k] · conj(FFT[code]) }.
   c32* fft_repl = (c32*)malloc(sizeof(c32) * FFT_QP_SIZE * SPC);
   c32* fft_data = (c32*)malloc(sizeof(c32) * FFT_QP_SIZE * SPC);
   c32* fft_sum  = (c32*)malloc(sizeof(c32) * FFT_QP_SIZE * SPC);
   memset(fft_repl, 0, sizeof(c32) * FFT_QP_SIZE * SPC);
   if (fft_data == NULL || fft_repl == NULL) { printf("Error allocating fft_data or fft_prod\n"); return; }
-  //up_sample_N_to_M(replica, E5_QP_CODE_LEN * SPC, fft_repl, FFT_QP_SIZE * SPC);
-  memcpy(fft_repl, replica, sizeof(c32) * E5_QP_CODE_LEN * SPC);
+  up_sample_N_to_M(replica, E5_QP_CODE_LEN * SPC, fft_repl, FFT_QP_SIZE * SPC);
   free(replica);
   fft_c32(FFT_QP_SIZE * SPC, fft_repl, true);
   for (int center = window / 2; center <= nci - window / 2; center++) {
     memset(fft_data, 0, sizeof(c32) * FFT_QP_SIZE * SPC);
     memset(fft_sum , 0, sizeof(c32) * FFT_QP_SIZE * SPC);
-    for (int windex = center - window / 2; windex < center + window / 2; windex++) {
-      //up_sample_N_to_M(&out[E5_QP_CODE_LEN * SPC * windex], 330 * SPC, fft_data, FFT_QP_SIZE * SPC);
-      memcpy(fft_data , &out[E5_QP_CODE_LEN * SPC * windex], sizeof(c32) * E5_QP_CODE_LEN * SPC);
-      //for (int j = 0; j < E5_QP_CODE_LEN * SPC; j++) { // xfer to float array
-      //  fft_data[j] = out[(E5_QP_CODE_LEN * SPC * windex) + j];
-      //}
+    //for (int windex = center - window / 2; windex < center + window / 2; windex++) {
+    for (int windex = 0; windex < 1; windex++) {
+      up_sample_N_to_M(&out[E5_QP_CODE_LEN * SPC * windex], E5_QP_CODE_LEN * SPC, fft_data, FFT_QP_SIZE * SPC);
 
       fft_c32(FFT_QP_SIZE * SPC, fft_data, true); // forward FFT
 
@@ -1498,7 +1491,7 @@ void test_quasi_pilot_330() {
 
     fft_c32(FFT_QP_SIZE * SPC, fft_sum, false); // IFFT 
 
-    if (center == 40) {
+    if (true) {//center == 40) {
       FILE* fp_out = NULL; //output file
       errno_t er = fopen_s(&fp_out, "C:/Python/nci_sum4.csv", "w");
       for (int m = 0; m < FFT_QP_SIZE * SPC; m++) {
@@ -1517,8 +1510,6 @@ void test_quasi_pilot_330() {
     stat_add(&stat, max_coh);
     float mean2 = stat_mean(&stat);
     if (max_coh < min_val && max_coh < mean2 - 1000 && max_coh < 2500) { // for 4 SPC
-      //if (max_coh < min_val && max_coh < mean2 - 200 && max_coh < 1200) { // for 2 SPC
-      //if (max_coh < min_val && max_coh < mean2 - 10 && max_coh < 600) { // sigma = 2.0 for 1 SPC (odd missed detect)
       min_val = max_coh;
       min_idx = center;
     }
