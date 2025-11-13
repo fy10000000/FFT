@@ -1476,7 +1476,6 @@ void test_quasi_pilot_330() {
   for (int center = window / 2; center <= nci - window / 2; center++) {
     memset(fft_sum , 0, sizeof(c32) * FFT_QP_SIZE * SPC);
     for (int windex = center - window / 2; windex < center + window / 2; windex++) {
-    //for (int windex = center; windex < center + 1; windex++) {
       memset(fft_data, 0, sizeof(c32) * FFT_QP_SIZE * SPC);
       up_sample_N_to_M(&out[E5_QP_CODE_LEN * SPC * windex], E5_QP_CODE_LEN * SPC, fft_data, FFT_QP_SIZE * SPC);
 
