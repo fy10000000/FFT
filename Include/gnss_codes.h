@@ -10,7 +10,7 @@
 #include "string.h"
 #include "ctype.h"
 #include <stdint.h> // Include this for int8_t
-
+#include <stdbool.h>
 #include "cplx_types.h"
 
  // L5 code length per epoch 

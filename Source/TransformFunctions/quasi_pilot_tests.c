@@ -165,8 +165,9 @@ extern void make_replica(const int32_t* prn_a, c32* out_iandq,float doppler, int
     
     // s[n] = a*e^{j theta_a[n]} + b*e^{j theta_b[n]}
     double ia = a * pca, qa = a * psa;
-    out_iandq[samp].r = (float)(ia ); 
-    out_iandq[samp].i = (float)(qa ); 
+    bool quant = false;
+    out_iandq[samp].r = quant ? (float) (quantize_pm13(ia ) + noise(1)) : (float)(ia );
+    out_iandq[samp].i = quant ? (float) (quantize_pm13(qa ) + noise(1)) : (float)(qa );
 
     // advance both phasors
     double npca = pca * ca_inc - psa * sa_inc;

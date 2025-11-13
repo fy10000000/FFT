@@ -1353,20 +1353,85 @@ void test_quasi_pilot() {
   free(out); free(fft_data); free(fft_prod); free(fft_sum); free(replica);
 }
 
+void find_prn_shift(const c32* prnA, const c32* prnA_Shift,const int size)
+{
+  int best_k = -1;
+  int best_val = -1e6;
+  for (int k = 0; k < size; ++k) {
+    c32 sum = { 0, 0 };
+    // Correlation at shift k: sum over n of prnA[n] * prnA_Shift[(n+k) % N] 
+    int idx = k;
+    for (int n = 0; n < size; ++n) {
+      // prnA and prnA_Shift elements must be in {-1, +1}. Product stays in {-1, +1}. 
+      sum = add(sum, (mult(prnA[n], get_conj(prnA_Shift[idx]))));
+      // Manual modulo for speed: wrap at size 
+      ++idx;
+      if (idx == size) { idx = 0; }
+    }
+
+    if (mag(sum) > best_val) {
+      best_val = mag(sum);
+      best_k = k;
+    }
+  }
+  printf("Best corr value %d at shift %d\n", best_val, best_k);
+}
+
+void find_prn_shift2( c32* prnA,  c32* prnA_Shift, const int size)
+{
+  int best_k = -1;
+  int best_val = -1e6;
+#define FFT_SZ 512 * 2
+#define E5A_SIZE 330 * 2
+
+  c32 cprnA[FFT_SZ] = { 0 };
+  c32 cprnA_Shift[FFT_SZ] = { 0 };
+  c32 cprod[FFT_SZ] = { 0 };
+  //memcpy(cprnA, prnA, sizeof(c32) * size); // tried the padded FFT (at least twice the length) worked up to 165 of 330
+  //memcpy(cprnA_Shift, prnA_Shift, sizeof(c32) * size);
+
+  up_sample_N_to_M(prnA, E5A_SIZE, cprnA, FFT_SZ);
+  up_sample_N_to_M(prnA_Shift, E5A_SIZE, cprnA_Shift, FFT_SZ);
+
+  fft_c32(FFT_SZ, cprnA, true);
+  fft_c32(FFT_SZ, cprnA_Shift, true);
+
+  for (int i = 0; i < FFT_SZ; i++) {
+    cprod[i] = mult(cprnA[i], get_conj(cprnA_Shift[i]));
+  }
+  fft_c32(FFT_SZ, cprod, false);
+
+  for (int k = 0; k < FFT_SZ; ++k) {
+   
+    float val = mag(cprod[k]);
+    fprintf(stderr, "Shift, %d, %f\n", k, val);
+    if (val > best_val) {
+      best_val = val;
+      best_k = k;
+    }
+  }
+  float denom = FFT_SZ;
+  float numer = E5A_SIZE;
+  printf("Best2 corr2 value %d at shift %d round %d \n", best_val, best_k,(int) round(best_k *numer/ denom));
+}
+
+
+
 void test_quasi_pilot_330() {
   srand((unsigned int)time(NULL)); // randomise seed
   // Test the quasi pilot generation
   int min_idx = 0;
   int loc_cnt = 0;
   float min_val = 1e5;
-#define FFT_QP_SIZE 1024
+  // try 3 x 330 and use FFT 2048
+#define FFT_QP_SIZE 512
   float chipping_rate = 5.115e6; // chips per sec
   int locations[50] = { -1 };// { 20, 40, 60, 80, 100, 120, 140, 160, 180, 200, 220, 240, 260, 280 };
-  int window = 3; // 2 * window ms either side of center (window>=6 does not work)
-  int nci = 300;
-#define SPC 1 // samples per chip
+  int window = 2; // 2 * window ms either side of center (window>=6 does not work)
+  int nci = 30;
+#define SPC 2 // samples per chip
   int len = E5_QP_CODE_LEN * SPC * nci; // 4 samples per chip and 100 ms
-  int c_phase = 80; // which chip to set the code phase to
+  int c_phase = 222; // which chip to set the code phase to
   int prn1 = 4, prn2 = 8;
   float dop1 = 2000, dop2 = -3000;
   float dop_error = 250;// 10; // full 2*250 Hz error in wipeoff
@@ -1377,6 +1442,7 @@ void test_quasi_pilot_330() {
   int* prn_c1  = (int*)malloc(sizeof(int) * E5_QP_CODE_LEN * SPC);
   int* prn_c2  = (int*)malloc(sizeof(int) * E5_QP_CODE_LEN * SPC);
   c32* replica = (c32*)malloc(sizeof(c32) * E5_QP_CODE_LEN * SPC);
+  //c32* test_1 = (c32*)malloc(sizeof(c32) * E5_QP_CODE_LEN * SPC);
   memset(prn_c1 , 0, sizeof(int) * E5_QP_CODE_LEN * SPC);
   memset(prn_c2 , 0, sizeof(int) * E5_QP_CODE_LEN * SPC);
   memset(replica, 0, sizeof(c32) * E5_QP_CODE_LEN * SPC);
@@ -1384,7 +1450,12 @@ void test_quasi_pilot_330() {
   getE5_QPCode(E5_QP_CODE_LEN, SPC, prn2, prn_c2);
 
   make_replica(prn_c1, replica, dop1 + dop_error, E5_QP_CODE_LEN * SPC, chipping_rate * SPC);
-  rotate_fwd(prn_c1, E5_QP_CODE_LEN * SPC, c_phase); // now advance code-phase
+  rotate_fwd(prn_c1, E5_QP_CODE_LEN * SPC, c_phase); // now advance code-phase  
+
+  //make_replica(prn_c1, test_1, dop1 , E5_QP_CODE_LEN * SPC, chipping_rate * SPC);
+  //find_prn_shift2(test_1, replica, E5_QP_CODE_LEN * SPC); 
+  //free(test_1);////////////////////////////////////////////////////////////////////////
+
   int sign2 = 1; // sign applied a posteriori after finding BTT
   stat_s stat;
   stat_init(&stat); // moving average of peak values window size = 3
@@ -1427,7 +1498,7 @@ void test_quasi_pilot_330() {
 
     fft_c32(FFT_QP_SIZE * SPC, fft_sum, false); // IFFT 
 
-    if (center == 30) {
+    if (center == 40) {
       FILE* fp_out = NULL; //output file
       errno_t er = fopen_s(&fp_out, "C:/Python/nci_sum4.csv", "w");
       for (int m = 0; m < FFT_QP_SIZE * SPC; m++) {
