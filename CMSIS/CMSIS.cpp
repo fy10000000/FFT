@@ -1420,15 +1420,13 @@ void find_prn_shift2( c32* prnA,  c32* prnA_Shift, const int size)
 void test_quasi_pilot_330() {
   srand((unsigned int)time(NULL)); // randomise seed
   // Test the quasi pilot generation
-  int min_idx = 0;
-  int loc_cnt = 0;
+  int min_idx = 0; int loc_cnt = 0;
   float min_val = 1e5;
-  // try 3 x 330 and use FFT 2048
 #define FFT_QP_SIZE 512
   float chipping_rate = 5.115e6; // chips per sec
   int locations[50] = { -1 };// { 20, 40, 60, 80, 100, 120, 140, 160, 180, 200, 220, 240, 260, 280 };
-  int window = 2; // 2 * window ms either side of center (window>=6 does not work)
-  int nci = 30;
+  int window = 4; // 2 * window ms either side of center (window>=6 does not work)
+  int nci = 300;
 #define SPC 2 // samples per chip
   int len = E5_QP_CODE_LEN * SPC * nci; // 4 samples per chip and 100 ms
   int c_phase = 555; // which chip to set the code phase to
@@ -1436,7 +1434,7 @@ void test_quasi_pilot_330() {
   float dop1 = 2000, dop2 = -3000;
   float dop_error = 250;// 10; // full 2*250 Hz error in wipeoff
   float dop_err_rate = 0.0;// 0.6;// 0.6;//Hz per ms
-  float sigma = 0;// 3.5;// 3.5; // noise level
+  float sigma = 2;// 3.5;// 3.5; // noise level
   c32* out = (c32*)malloc(len * sizeof(c32));
   if (out == NULL) { fprintf(stderr, "Memory allocation failed for 100 ms I&Q array.\n"); return; }
   int* prn_c1  = (int*)malloc(sizeof(int) * E5_QP_CODE_LEN * SPC);
@@ -1470,28 +1468,36 @@ void test_quasi_pilot_330() {
   c32* fft_repl = (c32*)malloc(sizeof(c32) * FFT_QP_SIZE * SPC);
   c32* fft_data = (c32*)malloc(sizeof(c32) * FFT_QP_SIZE * SPC);
   c32* fft_sum  = (c32*)malloc(sizeof(c32) * FFT_QP_SIZE * SPC);
+  c32* fft_dum = (c32*)malloc(sizeof(c32) * FFT_QP_SIZE * SPC);
   memset(fft_repl, 0, sizeof(c32) * FFT_QP_SIZE * SPC);
   if (fft_data == NULL || fft_repl == NULL) { printf("Error allocating fft_data or fft_prod\n"); return; }
   up_sample_N_to_M(replica, E5_QP_CODE_LEN * SPC, fft_repl, FFT_QP_SIZE * SPC);
   free(replica);
   fft_c32(FFT_QP_SIZE * SPC, fft_repl, true);
   for (int center = window / 2; center <= nci - window / 2; center++) {
-    memset(fft_data, 0, sizeof(c32) * FFT_QP_SIZE * SPC);
     memset(fft_sum , 0, sizeof(c32) * FFT_QP_SIZE * SPC);
-    //for (int windex = center - window / 2; windex < center + window / 2; windex++) {
-    for (int windex = 0; windex < 1; windex++) {
+    memset(fft_dum, 0, sizeof(c32) * FFT_QP_SIZE * SPC);
+    for (int windex = center - window / 2; windex < center + window / 2; windex++) {
+    //for (int windex = center; windex < center + 1; windex++) {
+      memset(fft_data, 0, sizeof(c32) * FFT_QP_SIZE * SPC);
       up_sample_N_to_M(&out[E5_QP_CODE_LEN * SPC * windex], E5_QP_CODE_LEN * SPC, fft_data, FFT_QP_SIZE * SPC);
 
       fft_c32(FFT_QP_SIZE * SPC, fft_data, true); // forward FFT
 
       for (int k = 0; k < FFT_QP_SIZE * SPC; k++) { // pt-wise * with conj of replica
-        fft_sum[k] = add(fft_sum[k], mult(fft_data[k], get_conj(fft_repl[k])));
+        fft_dum[k] = (mult(fft_data[k], get_conj(fft_repl[k])));
       }
+
+      fft_c32(FFT_QP_SIZE * SPC, fft_dum, false); // IFFT 
+
+      for (int k = 0; k < FFT_QP_SIZE * SPC; k++) { 
+        fft_sum[k] = add(fft_sum[k], fft_dum[k]);
+      }
+
     } // for windex 
 
-    fft_c32(FFT_QP_SIZE * SPC, fft_sum, false); // IFFT 
 
-    if (true) {//center == 40) {
+    if (center == 40) {
       FILE* fp_out = NULL; //output file
       errno_t er = fopen_s(&fp_out, "C:/Python/nci_sum4.csv", "w");
       for (int m = 0; m < FFT_QP_SIZE * SPC; m++) {
@@ -1518,14 +1524,14 @@ void test_quasi_pilot_330() {
       min_val = 1e5;
       min_idx = 0;
     }
-    printf("center=%d max=%6.1f pos=%d mean=%6.1f\n", center, max_coh, pos_coh, mean2);
+    printf("center=%03d max=%6.1f pos=%d mean=%6.1f corrPos=%d\n", center, max_coh, pos_coh, mean2, (int)round(pos_coh*660.0f/1024.0f));// E5_QP_CODE_LEN / FFT_QP_SIZE));
   } // for center
 
   for (int i = 0; i < loc_cnt; i++) {
     printf("Bit transition at %d ms \n", locations[i]);
   }
   printf("BTs: %d Random number: %d\n", loc_cnt, rand());
-  free(out); free(fft_data); free(fft_sum); free(fft_repl);
+  free(out); free(fft_data); free(fft_sum); free(fft_repl); free(fft_dum);
 }
 
 void test_quasi_pilot2() {
