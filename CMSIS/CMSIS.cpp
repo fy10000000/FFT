@@ -10,6 +10,7 @@
  */
 
 #include <iostream>
+#include <chrono> // for profiling
 #include "transform_functions.h"
 #include "gnss_codes.h"
 #include "up_sample.h"
@@ -1173,10 +1174,10 @@ void test_quasi_diff_pilot() {
   bool have_prev = false;
   if (fft_data == NULL ) { printf("Error allocating fft_data \n"); return; }
   for (int center = window / 2; center <= nci - window / 2; center++) {
-    memset(fft_data, 0, sizeof(c32) * 1024 * SPC);
     memset(fft_prev, 0, sizeof(c32) * 1024 * SPC);
     memset(diff_acc, 0, sizeof(c32) * 1024 * SPC);
     for (int windex = center - window / 2; windex < center + window / 2; windex++) {
+      memset(fft_data, 0, sizeof(c32) * 1024 * SPC);
       for (int j = 0; j < 1023 * SPC; j++) { // xfer to cplx float array
         fft_data[j] = out[(1023 * SPC * windex) + j];
       }
@@ -1353,30 +1354,6 @@ void test_quasi_pilot() {
   free(out); free(fft_data); free(fft_prod); free(fft_sum); free(replica);
 }
 
-void find_prn_shift(const c32* prnA, const c32* prnA_Shift,const int size)
-{
-  int best_k = -1;
-  int best_val = -1e6;
-  for (int k = 0; k < size; ++k) {
-    c32 sum = { 0, 0 };
-    // Correlation at shift k: sum over n of prnA[n] * prnA_Shift[(n+k) % N] 
-    int idx = k;
-    for (int n = 0; n < size; ++n) {
-      // prnA and prnA_Shift elements must be in {-1, +1}. Product stays in {-1, +1}. 
-      sum = add(sum, (mult(prnA[n], get_conj(prnA_Shift[idx]))));
-      // Manual modulo for speed: wrap at size 
-      ++idx;
-      if (idx == size) { idx = 0; }
-    }
-
-    if (mag(sum) > best_val) {
-      best_val = mag(sum);
-      best_k = k;
-    }
-  }
-  printf("Best corr value %d at shift %d\n", best_val, best_k);
-}
-
 void find_prn_shift2( c32* prnA,  c32* prnA_Shift, const int size)
 {
   int best_k = -1;
@@ -1415,9 +1392,7 @@ void find_prn_shift2( c32* prnA,  c32* prnA_Shift, const int size)
   printf("Best2 corr2 value %d at shift %d round %d \n", best_val, best_k,(int) round(best_k *numer/ denom));
 }
 
-
-
-void test_quasi_pilot_330() {
+void test_quasi_pilot_330Up() {
   srand((unsigned int)time(NULL)); // randomise seed
   // Test the quasi pilot generation
   int min_idx = 0; int loc_cnt = 0;
@@ -1425,30 +1400,35 @@ void test_quasi_pilot_330() {
 #define FFT_QP_SIZE 512
   float chipping_rate = 5.115e6; // chips per sec
   int locations[50] = { -1 };// { 20, 40, 60, 80, 100, 120, 140, 160, 180, 200, 220, 240, 260, 280 };
-  int window = 4; // 2 * window ms either side of center (window>=6 does not work)
+  int window = 20; // 2 * window ms either side of center (window>=6 does not work)
   int nci = 300;
-#define SPC 2 // samples per chip
+#define SPC 1 // samples per chip
+  float up_ratio = float(E5_QP_CODE_LEN) / float(FFT_QP_SIZE);
   int len = E5_QP_CODE_LEN * SPC * nci; // 4 samples per chip and 100 ms
-  int c_phase = 555; // which chip to set the code phase to
+  int c_phase = 329;// 166;// 329; // which chip to set the code phase to
   int prn1 = 4, prn2 = 8;
   float dop1 = 2000, dop2 = -3000;
-  float dop_error = 250;// 10; // full 2*250 Hz error in wipeoff
-  float dop_err_rate = 0.0;// 0.6;// 0.6;//Hz per ms
-  float sigma = 2;// 3.5;// 3.5; // noise level
+  float dop_error = 1500;// 10; // full 2*250 Hz error in wipeoff
+  float dop_err_rate = 0.6;// 0.6;// 0.6;//Hz per ms
+  float sigma = 3.5;// 3.5;// 3.5; // noise level
   c32* out = (c32*)malloc(len * sizeof(c32));
   if (out == NULL) { fprintf(stderr, "Memory allocation failed for 100 ms I&Q array.\n"); return; }
-  int* prn_c1  = (int*)malloc(sizeof(int) * E5_QP_CODE_LEN * SPC);
-  int* prn_c2  = (int*)malloc(sizeof(int) * E5_QP_CODE_LEN * SPC);
+  int* prn_c1 = (int*)malloc(sizeof(int) * E5_QP_CODE_LEN * SPC);
+  int* prn_c2 = (int*)malloc(sizeof(int) * E5_QP_CODE_LEN * SPC);
+  //int* prn_c3 = (int*)malloc(sizeof(int) * E5_QP_CODE_LEN * SPC);
   c32* replica = (c32*)malloc(sizeof(c32) * E5_QP_CODE_LEN * SPC);
-  memset(prn_c1 , 0, sizeof(int) * E5_QP_CODE_LEN * SPC);
-  memset(prn_c2 , 0, sizeof(int) * E5_QP_CODE_LEN * SPC);
+  memset(prn_c1,  0, sizeof(int) * E5_QP_CODE_LEN * SPC);
+  memset(prn_c2,  0, sizeof(int) * E5_QP_CODE_LEN * SPC);
   memset(replica, 0, sizeof(c32) * E5_QP_CODE_LEN * SPC);
   getE5_QPCode(E5_QP_CODE_LEN, SPC, prn1, prn_c1);
   getE5_QPCode(E5_QP_CODE_LEN, SPC, prn2, prn_c2);
 
+  //memcpy(prn_c3, prn_c1, sizeof(int) * E5_QP_CODE_LEN * SPC); // unshifted version for later
+  //rotate_fwd(prn_c3, E5_QP_CODE_LEN * SPC, 165);
+
   make_replica(prn_c1, replica, dop1 + dop_error, E5_QP_CODE_LEN * SPC, chipping_rate * SPC);
   rotate_fwd(prn_c1, E5_QP_CODE_LEN * SPC, c_phase); // now advance code-phase  
-
+  //free(prn_c3);
   int sign2 = 1; // sign applied a posteriori after finding BTT
   stat_s stat;
   stat_init(&stat); // moving average of peak values window size = 3
@@ -1457,38 +1437,39 @@ void test_quasi_pilot_330() {
       if (locations[j] == i) { sign2 *= -1; break; } // change sign at the bit transitions
     }
     // offset doppler by 250 Hz and add a residual doppler ramp of 0.1 Hz per ms
-    mix_two_prns_oversampled_per_prn(prn_c1, prn_c2, dop1 + i * dop_err_rate, dop2 - i * dop_err_rate, 
-      PI / 2, 0,&out[E5_QP_CODE_LEN * SPC * i], E5_QP_CODE_LEN * SPC, chipping_rate * SPC, sigma, sign2); // was 2.31 for -128.5 dBm 3.1 for -131.5
+    mix_two_prns_oversampled_per_prn(prn_c1, prn_c2, dop1 + i * dop_err_rate, dop2 - i * dop_err_rate,
+      PI / 2, 0, &out[E5_QP_CODE_LEN * SPC * i], E5_QP_CODE_LEN * SPC, chipping_rate * SPC, sigma, sign2); // was 2.31 for -128.5 dBm 3.1 for -131.5
   }
   free(prn_c1); free(prn_c2);
 
-  //find_prn_shift2(&out[E5_QP_CODE_LEN * SPC * 3 ], replica, E5_QP_CODE_LEN * SPC);
-
-  // Compute circular correlation C_k(τ) = FFT^-1{ FFT[x_d,k] · conj(FFT[code]) }.
+  // Compute circular correlation C_k(τ) = FFT^-1{ FFT[signal] · conj(FFT[replica]) }.
   c32* fft_repl = (c32*)malloc(sizeof(c32) * FFT_QP_SIZE * SPC);
   c32* fft_data = (c32*)malloc(sizeof(c32) * FFT_QP_SIZE * SPC);
   c32* fft_sum  = (c32*)malloc(sizeof(c32) * FFT_QP_SIZE * SPC);
   memset(fft_repl, 0, sizeof(c32) * FFT_QP_SIZE * SPC);
   if (fft_data == NULL || fft_repl == NULL) { printf("Error allocating fft_data or fft_prod\n"); return; }
+
+  //memcpy(fft_repl, replica, sizeof(c32) * E5_QP_CODE_LEN * SPC);
   up_sample_N_to_M(replica, E5_QP_CODE_LEN * SPC, fft_repl, FFT_QP_SIZE * SPC);
   free(replica);
   fft_c32(FFT_QP_SIZE * SPC, fft_repl, true);
+  auto start = std::chrono::high_resolution_clock::now();////////////////////////////////////////
   for (int center = window / 2; center <= nci - window / 2; center++) {
-    memset(fft_sum , 0, sizeof(c32) * FFT_QP_SIZE * SPC);
+    memset(fft_sum, 0, sizeof(c32) * FFT_QP_SIZE * SPC);
     for (int windex = center - window / 2; windex < center + window / 2; windex++) {
       memset(fft_data, 0, sizeof(c32) * FFT_QP_SIZE * SPC);
       up_sample_N_to_M(&out[E5_QP_CODE_LEN * SPC * windex], E5_QP_CODE_LEN * SPC, fft_data, FFT_QP_SIZE * SPC);
-
+      //memcpy(fft_data, &out[E5_QP_CODE_LEN * SPC * windex], sizeof(c32) * E5_QP_CODE_LEN * SPC);
       fft_c32(FFT_QP_SIZE * SPC, fft_data, true); // forward FFT
 
-      for (int k = 0; k < FFT_QP_SIZE * SPC; k++) { // pt-wise * with conj of replica
+      for (int k = 0; k < FFT_QP_SIZE * SPC; k++) { // accumulate pt-wise * with conj of replica
         fft_sum[k] = add(fft_sum[k], mult(fft_data[k], get_conj(fft_repl[k])));
       }
     } // for windex 
 
     fft_c32(FFT_QP_SIZE * SPC, fft_sum, false); // IFFT 
 
-    if (center == 40) {
+    if (center == 90) {
       FILE* fp_out = NULL; //output file
       errno_t er = fopen_s(&fp_out, "C:/Python/nci_sum4.csv", "w");
       for (int m = 0; m < FFT_QP_SIZE * SPC; m++) {
@@ -1499,6 +1480,7 @@ void test_quasi_pilot_330() {
     }
 
     float max_coh = 0; int pos_coh = 0;
+    // E5_QP_CODE_LEN FFT_QP_SIZE
     for (int m = 0; m < FFT_QP_SIZE * SPC; m++) {
       float mag_coh = mag(fft_sum[m]);
       if (mag_coh > max_coh) { max_coh = mag_coh; pos_coh = m; }
@@ -1515,9 +1497,128 @@ void test_quasi_pilot_330() {
       min_val = 1e5;
       min_idx = 0;
     }
-    printf("center=%03d max=%6.1f pos=%d mean=%6.1f corrPos=%d\n", center, max_coh, pos_coh, mean2, (int)round(pos_coh*660.0f/1024.0f));// E5_QP_CODE_LEN / FFT_QP_SIZE));
+    printf("center=%03d max=%6.1f pos=%d mean=%6.1f corrPos=%d\n", center, max_coh, pos_coh, mean2, (int)round(pos_coh * up_ratio));// E5_QP_CODE_LEN / FFT_QP_SIZE));
   } // for center
+  auto end = std::chrono::high_resolution_clock::now();////////////////////////////////////////
+  std::chrono::duration<double> duration = end - start;
+  printf("Processing time for quasi pilot 330 ms: %f seconds\n", duration.count());
+  for (int i = 0; i < loc_cnt; i++) {
+    printf("Bit transition at %d ms \n", locations[i]);
+  }
+  printf("BTs: %d Random number: %d\n", loc_cnt, rand());
+  free(out); free(fft_data); free(fft_sum); free(fft_repl);
+}
 
+
+void test_quasi_pilot_330() {
+  srand((unsigned int)time(NULL)); // randomise seed
+  // Test the quasi pilot generation
+  int min_idx = 0; int loc_cnt = 0;
+  float min_val = 1e5;
+#define FFT_QP_SIZE 512
+  float chipping_rate = 5.115e6; // chips per sec
+  int locations[50] = { -1 };// { 20, 40, 60, 80, 100, 120, 140, 160, 180, 200, 220, 240, 260, 280 };
+  int window = 10; // 2 * window ms either side of center (window>=6 does not work)
+  int nci = 300;
+#define SPC 1 // samples per chip
+  int len = E5_QP_CODE_LEN * SPC * nci; // 4 samples per chip and 100 ms
+  int c_phase = 320;// 329; // which chip to set the code phase to
+  int rep_phase = (c_phase <= 165) ? 0 : 165;// use either 0 or 165 for shifts beyond 165
+  int prn1 = 4, prn2 = 8;
+  float dop1 = 2000, dop2 = -3000;
+  float dop_error = 1500;// 10; // full 2*250 Hz error in wipeoff
+  float dop_err_rate = 0.6;// 0.6;// 0.6;//Hz per ms
+  float sigma = 4.5;// 3.5;// 3.5; // noise level
+  c32* out = (c32*)malloc(len * sizeof(c32));
+  if (out == NULL) { fprintf(stderr, "Memory allocation failed for 100 ms I&Q array.\n"); return; }
+  int* prn_c1  = (int*)malloc(sizeof(int) * E5_QP_CODE_LEN * SPC);
+  int* prn_c2  = (int*)malloc(sizeof(int) * E5_QP_CODE_LEN * SPC);
+  int* prn_c3  = (int*)malloc(sizeof(int) * E5_QP_CODE_LEN * SPC);
+  c32* replica = (c32*)malloc(sizeof(c32) * E5_QP_CODE_LEN * SPC);
+  memset(prn_c1 , 0, sizeof(int) * E5_QP_CODE_LEN * SPC);
+  memset(prn_c2 , 0, sizeof(int) * E5_QP_CODE_LEN * SPC);
+  memset(replica, 0, sizeof(c32) * E5_QP_CODE_LEN * SPC);
+  getE5_QPCode(E5_QP_CODE_LEN, SPC, prn1, prn_c1);
+  getE5_QPCode(E5_QP_CODE_LEN, SPC, prn2, prn_c2);
+
+  memcpy(prn_c3, prn_c1, sizeof(int) * E5_QP_CODE_LEN * SPC); // unshifted version for later
+  rotate_fwd(prn_c3, E5_QP_CODE_LEN * SPC, rep_phase);
+
+  make_replica(prn_c3, replica, dop1 + dop_error, E5_QP_CODE_LEN * SPC, chipping_rate * SPC);
+  rotate_fwd(prn_c1, E5_QP_CODE_LEN * SPC, c_phase); // now advance code-phase  
+  free(prn_c3);
+  int sign2 = 1; // sign applied a posteriori after finding BTT
+  stat_s stat;
+  stat_init(&stat); // moving average of peak values window size = 3
+  for (int i = 0; i < nci; i++) {
+    for (int j = 0; j < 50; j++) {
+      if (locations[j] == i) { sign2 *= -1; break; } // change sign at the bit transitions
+    }
+    // offset doppler by 250 Hz and add a residual doppler ramp of 0.1 Hz per ms
+    mix_two_prns_oversampled_per_prn(prn_c1, prn_c2, dop1 + i * dop_err_rate, dop2 - i * dop_err_rate, 
+      PI / 2, 0,&out[E5_QP_CODE_LEN * SPC * i], E5_QP_CODE_LEN * SPC, chipping_rate * SPC, sigma, sign2); // was 2.31 for -128.5 dBm 3.1 for -131.5
+  }
+  free(prn_c1); free(prn_c2);
+
+  // Compute circular correlation C_k(τ) = FFT^-1{ FFT[signal] · conj(FFT[replica]) }.
+  c32* fft_repl = (c32*)malloc(sizeof(c32) * FFT_QP_SIZE * SPC);
+  c32* fft_data = (c32*)malloc(sizeof(c32) * FFT_QP_SIZE * SPC);
+  c32* fft_sum  = (c32*)malloc(sizeof(c32) * FFT_QP_SIZE * SPC);
+  memset(fft_repl, 0, sizeof(c32) * FFT_QP_SIZE * SPC);
+  if (fft_data == NULL || fft_repl == NULL) { printf("Error allocating fft_data or fft_prod\n"); return; }
+
+  memcpy(fft_repl, replica, sizeof(c32) * E5_QP_CODE_LEN * SPC);
+  free(replica);
+  fft_c32(FFT_QP_SIZE * SPC, fft_repl, true);
+  auto start = std::chrono::high_resolution_clock::now();////////////////////////////////////////
+  for (int center = window / 2; center <= nci - window / 2; center++) {
+    memset(fft_sum , 0, sizeof(c32) * FFT_QP_SIZE * SPC);
+    for (int windex = center - window / 2; windex < center + window / 2; windex++) {
+      memset(fft_data, 0, sizeof(c32) * FFT_QP_SIZE * SPC);
+      memcpy(fft_data, &out[E5_QP_CODE_LEN * SPC * windex], sizeof(c32) * E5_QP_CODE_LEN * SPC);
+      fft_c32(FFT_QP_SIZE * SPC, fft_data, true); // forward FFT
+
+      for (int k = 0; k < FFT_QP_SIZE * SPC; k++) { // accumulate pt-wise * with conj of replica
+        fft_sum[k] = add(fft_sum[k], mult(fft_data[k], get_conj(fft_repl[k])));
+      }
+    } // for windex 
+
+    fft_c32(FFT_QP_SIZE * SPC, fft_sum, false); // IFFT 
+
+    if (center == 90) {
+      FILE* fp_out = NULL; //output file
+      errno_t er = fopen_s(&fp_out, "C:/Python/nci_sum4.csv", "w");
+      for (int m = 0; m < FFT_QP_SIZE * SPC; m++) {
+        double magn = mag(fft_sum[m]);
+        fprintf(fp_out, "%d, %f\n", m, magn);
+      }
+      fclose(fp_out);
+    }
+
+    float max_coh = 0; int pos_coh = 0;
+    // E5_QP_CODE_LEN FFT_QP_SIZE
+    for (int m = 0; m < E5_QP_CODE_LEN * SPC; m++) {
+      float mag_coh = mag(fft_sum[m]);
+      if (mag_coh > max_coh) { max_coh = mag_coh; pos_coh = m; }
+    }
+
+    stat_add(&stat, max_coh);
+    float mean2 = stat_mean(&stat);
+    if (max_coh < min_val && max_coh < mean2 - 1000 && max_coh < 2500) { // for 4 SPC
+      min_val = max_coh;
+      min_idx = center;
+    }
+    if ((center == min_idx + 1) && (max_coh > min_val)) {
+      locations[loc_cnt++] = min_idx; // empirically the wider the window the earlier the bit transition appears
+      min_val = 1e5;
+      min_idx = 0;
+    }
+    int cd_phs = (rep_phase == 165) ? pos_coh + 165 : pos_coh; // adjust for replica shift
+    printf("center=%03d max=%6.1f pos=%d mean=%6.1f \n", center, max_coh, cd_phs, mean2);// E5_QP_CODE_LEN / FFT_QP_SIZE));
+  } // for center
+  auto end = std::chrono::high_resolution_clock::now();////////////////////////////////////////
+  std::chrono::duration<double> duration = end - start;
+  printf("Processing time for quasi pilot 330 ms: %f seconds\n", duration.count());
   for (int i = 0; i < loc_cnt; i++) {
     printf("Bit transition at %d ms \n", locations[i]);
   }
@@ -1753,7 +1854,8 @@ int main(int argc,char* argv[])
   }
 
   if (1) {
-    test_quasi_pilot_330();
+    test_quasi_pilot_330Up();
+    //test_quasi_pilot_330();
     //test_quasi_pilot2();
     return 0;
   }
