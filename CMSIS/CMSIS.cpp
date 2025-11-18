@@ -1415,7 +1415,6 @@ void test_quasi_pilot_330Up() {
   if (out == NULL) { fprintf(stderr, "Memory allocation failed for 100 ms I&Q array.\n"); return; }
   int* prn_c1 = (int*)malloc(sizeof(int) * E5_QP_CODE_LEN * SPC);
   int* prn_c2 = (int*)malloc(sizeof(int) * E5_QP_CODE_LEN * SPC);
-  //int* prn_c3 = (int*)malloc(sizeof(int) * E5_QP_CODE_LEN * SPC);
   c32* replica = (c32*)malloc(sizeof(c32) * E5_QP_CODE_LEN * SPC);
   memset(prn_c1,  0, sizeof(int) * E5_QP_CODE_LEN * SPC);
   memset(prn_c2,  0, sizeof(int) * E5_QP_CODE_LEN * SPC);
@@ -1423,12 +1422,8 @@ void test_quasi_pilot_330Up() {
   getE5_QPCode(E5_QP_CODE_LEN, SPC, prn1, prn_c1);
   getE5_QPCode(E5_QP_CODE_LEN, SPC, prn2, prn_c2);
 
-  //memcpy(prn_c3, prn_c1, sizeof(int) * E5_QP_CODE_LEN * SPC); // unshifted version for later
-  //rotate_fwd(prn_c3, E5_QP_CODE_LEN * SPC, 165);
-
   make_replica(prn_c1, replica, dop1 + dop_error, E5_QP_CODE_LEN * SPC, chipping_rate * SPC);
   rotate_fwd(prn_c1, E5_QP_CODE_LEN * SPC, c_phase); // now advance code-phase  
-  //free(prn_c3);
   int sign2 = 1; // sign applied a posteriori after finding BTT
   stat_s stat;
   stat_init(&stat); // moving average of peak values window size = 3
@@ -1449,7 +1444,6 @@ void test_quasi_pilot_330Up() {
   memset(fft_repl, 0, sizeof(c32) * FFT_QP_SIZE * SPC);
   if (fft_data == NULL || fft_repl == NULL) { printf("Error allocating fft_data or fft_prod\n"); return; }
 
-  //memcpy(fft_repl, replica, sizeof(c32) * E5_QP_CODE_LEN * SPC);
   up_sample_N_to_M(replica, E5_QP_CODE_LEN * SPC, fft_repl, FFT_QP_SIZE * SPC);
   free(replica);
   fft_c32(FFT_QP_SIZE * SPC, fft_repl, true);
@@ -1459,7 +1453,6 @@ void test_quasi_pilot_330Up() {
     for (int windex = center - window / 2; windex < center + window / 2; windex++) {
       memset(fft_data, 0, sizeof(c32) * FFT_QP_SIZE * SPC);
       up_sample_N_to_M(&out[E5_QP_CODE_LEN * SPC * windex], E5_QP_CODE_LEN * SPC, fft_data, FFT_QP_SIZE * SPC);
-      //memcpy(fft_data, &out[E5_QP_CODE_LEN * SPC * windex], sizeof(c32) * E5_QP_CODE_LEN * SPC);
       fft_c32(FFT_QP_SIZE * SPC, fft_data, true); // forward FFT
 
       for (int k = 0; k < FFT_QP_SIZE * SPC; k++) { // accumulate pt-wise * with conj of replica
@@ -1522,14 +1515,13 @@ void test_quasi_pilot_330() {
   int nci = 300;
 #define SPC 1 // samples per chip
   int len = E5_QP_CODE_LEN * SPC * nci; // 4 samples per chip and 100 ms
-  int c_phase = 320;// 329; // which chip to set the code phase to
-  int rep_phase = (c_phase <= 165) ? 0 : 165;// use either 0 or 165 for shifts beyond 165
+  int c_phase = 329;// 1;// 329; // which chip to set the code phase to
   int prn1 = 4, prn2 = 8;
   float dop1 = 2000, dop2 = -3000;
   float dop_error = 1500;// 10; // full 2*250 Hz error in wipeoff
   float dop_err_rate = 0.6;// 0.6;// 0.6;//Hz per ms
   float sigma = 4.5;// 3.5;// 3.5; // noise level
-  c32* out = (c32*)malloc(len * sizeof(c32));
+  c32* out     = (c32*)malloc(len * sizeof(c32));
   if (out == NULL) { fprintf(stderr, "Memory allocation failed for 100 ms I&Q array.\n"); return; }
   int* prn_c1  = (int*)malloc(sizeof(int) * E5_QP_CODE_LEN * SPC);
   int* prn_c2  = (int*)malloc(sizeof(int) * E5_QP_CODE_LEN * SPC);
@@ -1542,7 +1534,7 @@ void test_quasi_pilot_330() {
   getE5_QPCode(E5_QP_CODE_LEN, SPC, prn2, prn_c2);
 
   memcpy(prn_c3, prn_c1, sizeof(int) * E5_QP_CODE_LEN * SPC); // unshifted version for later
-  rotate_fwd(prn_c3, E5_QP_CODE_LEN * SPC, rep_phase);
+  rotate_fwd(prn_c3, E5_QP_CODE_LEN * SPC, 0);
 
   make_replica(prn_c3, replica, dop1 + dop_error, E5_QP_CODE_LEN * SPC, chipping_rate * SPC);
   rotate_fwd(prn_c1, E5_QP_CODE_LEN * SPC, c_phase); // now advance code-phase  
@@ -1575,7 +1567,8 @@ void test_quasi_pilot_330() {
     memset(fft_sum , 0, sizeof(c32) * FFT_QP_SIZE * SPC);
     for (int windex = center - window / 2; windex < center + window / 2; windex++) {
       memset(fft_data, 0, sizeof(c32) * FFT_QP_SIZE * SPC);
-      memcpy(fft_data, &out[E5_QP_CODE_LEN * SPC * windex], sizeof(c32) * E5_QP_CODE_LEN * SPC);
+      memcpy(fft_data, &out[E5_QP_CODE_LEN * SPC * windex], sizeof(c32) * SPC * (E5_QP_CODE_LEN));
+      memcpy(&fft_data[E5_QP_CODE_LEN * SPC], &out[E5_QP_CODE_LEN * SPC * windex], sizeof(c32) * SPC * (FFT_QP_SIZE - E5_QP_CODE_LEN)); 
       fft_c32(FFT_QP_SIZE * SPC, fft_data, true); // forward FFT
 
       for (int k = 0; k < FFT_QP_SIZE * SPC; k++) { // accumulate pt-wise * with conj of replica
@@ -1613,8 +1606,7 @@ void test_quasi_pilot_330() {
       min_val = 1e5;
       min_idx = 0;
     }
-    int cd_phs = (rep_phase == 165) ? pos_coh + 165 : pos_coh; // adjust for replica shift
-    printf("center=%03d max=%6.1f pos=%d mean=%6.1f \n", center, max_coh, cd_phs, mean2);// E5_QP_CODE_LEN / FFT_QP_SIZE));
+    printf("center=%03d max=%6.1f pos=%d mean=%6.1f \n", center, max_coh, pos_coh, mean2);// E5_QP_CODE_LEN / FFT_QP_SIZE));
   } // for center
   auto end = std::chrono::high_resolution_clock::now();////////////////////////////////////////
   std::chrono::duration<double> duration = end - start;
@@ -1854,8 +1846,8 @@ int main(int argc,char* argv[])
   }
 
   if (1) {
-    test_quasi_pilot_330Up();
-    //test_quasi_pilot_330();
+    //test_quasi_pilot_330Up();
+    test_quasi_pilot_330();
     //test_quasi_pilot2();
     return 0;
   }
