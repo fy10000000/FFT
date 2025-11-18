@@ -113,8 +113,8 @@ extern void mix_two_prns_oversampled_per_prn(const int32_t* prn_a,
     double ia = a * pca, qa = a * psa;
     double ib = b * pcb, qb = b * psb;
     int quant = 1;
-    out_iandq[samp].r = quant ? quantize_pm13(ia + ib + noise(sigma))* sign : (ia + ib) * sign;
-    out_iandq[samp].i = quant ? quantize_pm13(qa + qb + noise(sigma))* sign : (ia + ib) * sign;
+    out_iandq[samp].r = quant ? quantize_pm13(ia + ib + noise(sigma))* sign : ((ia + ib) + noise(sigma))* sign;
+    out_iandq[samp].i = quant ? quantize_pm13(qa + qb + noise(sigma))* sign : ((qa + qb) + noise(sigma))* sign;
 
     // advance both phasors
     double npca = pca * ca_inc - psa * sa_inc;
