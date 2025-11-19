@@ -1515,18 +1515,23 @@ void test_quasi_pilot_330Up() {
 
 
 void test_quasi_pilot_330(results_s* results) {
-  srand((unsigned int)time(NULL)); // randomise seed
+  //srand((unsigned int)time(NULL)); // randomise seed
+  auto now = std::chrono::system_clock::now();
+  // Convert the time point to duration since epoch
+  auto duration_since_epoch = now.time_since_epoch();
+  srand((unsigned int)std::chrono::duration_cast<std::chrono::milliseconds>(duration_since_epoch).count());
   // Test the quasi pilot generation
   int min_idx = 0; int loc_cnt = 0;
   float min_val = 1e5;
-#define FFT_QP_SIZE 512 
+  // uncomment "//shift" for type 2) method
+#define FFT_QP_SIZE 512 * 2
   float chipping_rate = 5.115e6; // chips per sec
   int locations[50] = { -1 };// { 20, 40, 60, 80, 100, 120, 140, 160, 180, 200, 220, 240, 260, 280 };
-  int window = 26; //  window/2 ms either side of center 
+  int window = 18; //  window/2 ms either side of center 
   int nci = 500;
 #define SPC 1 // samples per chip
   int   len = E5_QP_CODE_LEN * SPC * nci; // 4 samples per chip and 100 ms
-  int   c_phase = 329;// 1;// 329; // which chip to set the code phase to
+  int   c_phase = 29;// 1;// 329; // which chip to set the code phase to
   int   prn1 = 14, prn2 = 18;
   float dop1 = 2000, dop2 = 2000;
   float dop_error = 1500;// 10; // full 2*250 Hz error in wipeoff
@@ -1549,7 +1554,7 @@ void test_quasi_pilot_330(results_s* results) {
   getE5_QPCode(E5_QP_CODE_LEN, SPC, prn2, prn_c2);
 
   memcpy(prn_c3, prn_c1, sizeof(int) * E5_QP_CODE_LEN * SPC); // unshifted version for later
-  rotate_fwd(prn_c3, E5_QP_CODE_LEN * SPC, (c_phase > 165) ? 165 : 0);
+  //shift rotate_fwd(prn_c3, E5_QP_CODE_LEN * SPC, (c_phase > 165) ? 165 : 0);
 
   make_replica(prn_c3, replica, dop1 + dop_error, E5_QP_CODE_LEN * SPC, chipping_rate * SPC);
   rotate_fwd(prn_c1, E5_QP_CODE_LEN * SPC, c_phase); // now advance code-phase  
@@ -1625,7 +1630,7 @@ void test_quasi_pilot_330(results_s* results) {
     }
 
     num_tries++;
-    pos_coh = (c_phase > 165) ? pos_coh + 165 : pos_coh;
+    //shift pos_coh = (c_phase > 165) ? pos_coh + 165 : pos_coh;
     if (pos_coh != c_phase) {
       num_errors++;
     }
