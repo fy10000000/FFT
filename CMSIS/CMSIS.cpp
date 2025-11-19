@@ -1519,19 +1519,22 @@ void test_quasi_pilot_330(results_s* results) {
   // Test the quasi pilot generation
   int min_idx = 0; int loc_cnt = 0;
   float min_val = 1e5;
-#define FFT_QP_SIZE 512
+#define FFT_QP_SIZE 512 
   float chipping_rate = 5.115e6; // chips per sec
   int locations[50] = { -1 };// { 20, 40, 60, 80, 100, 120, 140, 160, 180, 200, 220, 240, 260, 280 };
-  int window = 6*31; // 2 * window ms either side of center (window>=6 does not work)
+  int window = 26; //  window/2 ms either side of center 
   int nci = 500;
 #define SPC 1 // samples per chip
   int   len = E5_QP_CODE_LEN * SPC * nci; // 4 samples per chip and 100 ms
   int   c_phase = 329;// 1;// 329; // which chip to set the code phase to
-  int   prn1 = 4, prn2 = 8;
-  float dop1 = 2000, dop2 = -3000;
+  int   prn1 = 14, prn2 = 18;
+  float dop1 = 2000, dop2 = 2000;
   float dop_error = 1500;// 10; // full 2*250 Hz error in wipeoff
   float dop_err_rate = 0.6;// 0.6;// 0.6;//Hz per ms
-  float sigma = 15.98;// 3.5;// 3.5; // noise level 15->6*31
+  float N0 = -174.0 + 2.5;// dBm/Hz thermal noise ktb density + noise figure
+  float cn0 = -128.75 - N0; // dBm/Hz pgae 14 Galileo_OS_SIS_ICD_v2.2
+  float sigma = sqrt((1.0 * chipping_rate * SPC) / (2.0f* pow(10.0,cn0/10.0)));
+  //float sigma = 12.7;// 15.98;// 3.5;// 3.5; // noise level 15->6*31
   int   num_errors = 0; int num_tries = 0;
   c32*  out    = (c32*)malloc(len * sizeof(c32));
   if (out == NULL) { fprintf(stderr, "Memory allocation failed for 100 ms I&Q array.\n"); return; }
@@ -1546,7 +1549,7 @@ void test_quasi_pilot_330(results_s* results) {
   getE5_QPCode(E5_QP_CODE_LEN, SPC, prn2, prn_c2);
 
   memcpy(prn_c3, prn_c1, sizeof(int) * E5_QP_CODE_LEN * SPC); // unshifted version for later
-  rotate_fwd(prn_c3, E5_QP_CODE_LEN * SPC, 0);
+  rotate_fwd(prn_c3, E5_QP_CODE_LEN * SPC, (c_phase > 165) ? 165 : 0);
 
   make_replica(prn_c3, replica, dop1 + dop_error, E5_QP_CODE_LEN * SPC, chipping_rate * SPC);
   rotate_fwd(prn_c1, E5_QP_CODE_LEN * SPC, c_phase); // now advance code-phase  
@@ -1576,8 +1579,9 @@ void test_quasi_pilot_330(results_s* results) {
   free(replica);
   fft_c32(FFT_QP_SIZE * SPC, fft_repl, true);
   auto start = std::chrono::high_resolution_clock::now();////////////////////////////////////////
-  for (int center = window / 2; center <= nci - window / 2; center++) {
-    memset(fft_sum , 0, sizeof(c32) * FFT_QP_SIZE * SPC);
+  //for (int center = window / 2; center <= nci - window / 2; center++) {
+  for (int center = window / 2; center <= nci - window; center++) {
+    memset(fft_sum, 0, sizeof(c32) * FFT_QP_SIZE * SPC);
     for (int windex = center - window / 2; windex < center + window / 2; windex++) {
       memset(fft_data, 0, sizeof(c32) * FFT_QP_SIZE * SPC);
       memcpy(fft_data, &out[E5_QP_CODE_LEN * SPC * windex], sizeof(c32) * SPC * (E5_QP_CODE_LEN));
@@ -1609,7 +1613,7 @@ void test_quasi_pilot_330(results_s* results) {
       float mag_coh = mag(fft_sum[m]);
       if (mag_coh > max_coh) { max_coh = mag_coh; pos_coh = m; }
 
-      if (mag_coh > v1 || (mag_coh == v1)) {
+      if (mag_coh >= v1) {
         // Promote current best to second, insert new best
         if (idx1 != -1) { v2 = v1; idx2 = idx1;}
         v1 = mag_coh; idx1 = m;
@@ -1621,6 +1625,7 @@ void test_quasi_pilot_330(results_s* results) {
     }
 
     num_tries++;
+    pos_coh = (c_phase > 165) ? pos_coh + 165 : pos_coh;
     if (pos_coh != c_phase) {
       num_errors++;
     }
@@ -1636,18 +1641,18 @@ void test_quasi_pilot_330(results_s* results) {
       min_val = 1e5;
       min_idx = 0;
     }
-    printf("center=%03d max=%6.1f pos=%d mean=%6.1f ratio=%3.1f sep=%d\n", center, max_coh, pos_coh, mean2, (v1 / v2), (int)abs(idx1-idx2));// E5_QP_CODE_LEN / FFT_QP_SIZE));
+    //printf("center=%03d max=%6.1f pos=%d mean=%6.1f ratio=%3.1f sep=%d\n", center, max_coh, pos_coh, mean2, (v1 / v2), (int)abs(idx1 - idx2));// E5_QP_CODE_LEN / FFT_QP_SIZE));
   } // for center
   auto end = std::chrono::high_resolution_clock::now();////////////////////////////////////////
   std::chrono::duration<double> duration = end - start;
   printf("Processing time for quasi pilot 330 ms: %f seconds\n", duration.count());
-  printf("num errors pilot_330 %d out of %d\n", num_errors, num_tries);
+  printf("cn0=%4.2f sigma=%6.3f num errors pilot_330: %d out of %d\n",cn0,sigma, num_errors, num_tries);
   results->num_errors += num_errors;
   results->num_trials += num_tries;
   for (int i = 0; i < loc_cnt; i++) {
     printf("Bit transition at %d ms \n", locations[i]);
   }
-  printf("BTs: %d Random number: %d\n", loc_cnt, rand());
+  //printf("BTs: %d Random number: %d\n", loc_cnt, rand());
   free(out); free(fft_data); free(fft_sum); free(fft_repl);
 }
 
@@ -1881,7 +1886,7 @@ int main(int argc,char* argv[])
   if (1) {
     //test_quasi_pilot_330Up();
     results_s results = {0};
-    for (int i = 0; i < 1; i++) {
+    for (int i = 0; i < 50; i++) {
       test_quasi_pilot_330(&results);
     }
     printf("Total tries: %d, Total errors: %d, Avg errors per try: %f\n", results.num_trials, results.num_errors,
