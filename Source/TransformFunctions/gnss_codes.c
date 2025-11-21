@@ -1066,3 +1066,21 @@ double noise(double sigma) {
   //printf("%f ", ans);
   return ans;
 }
+
+double InterpolateCodePhase(uint32_t index, double earlyPower, double promptPower, double latePower)
+{
+  double interpolatedIndex;
+
+  if (latePower > earlyPower)
+  {
+    interpolatedIndex = 0.5 * (latePower - earlyPower) / (promptPower - earlyPower);
+    interpolatedIndex = index + (interpolatedIndex / 3.0) * (2.0 * interpolatedIndex + 2.0);
+  }
+  else
+  {
+    interpolatedIndex = 0.5 * (latePower - earlyPower) / (promptPower - latePower);
+    interpolatedIndex = index + (interpolatedIndex / 3.0) * (-2.0 * interpolatedIndex + 2.0);
+  }
+
+  return interpolatedIndex;
+}

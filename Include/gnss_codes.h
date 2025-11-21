@@ -102,6 +102,8 @@ int8_t quantize_pm1(double x);
 
 double noise(double sigma);
 
+double InterpolateCodePhase(uint32_t index, double earlyPower, double promptPower, double latePower);
+
 #ifdef __cplusplus
 }
 #endif

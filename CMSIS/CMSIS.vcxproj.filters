@@ -750,6 +750,9 @@
     <ClCompile Include="..\Source\TransformFunctions\up_sample.c">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="..\Source\TransformFunctions\msb_funcs.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="..\Include\arm_common_tables.h">
@@ -918,6 +921,9 @@
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="..\Include\cplx_types.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="..\Include\msb_funcs.h">
       <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>

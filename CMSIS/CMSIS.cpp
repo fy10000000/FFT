@@ -14,6 +14,7 @@
 #include "transform_functions.h"
 #include "gnss_codes.h"
 #include "up_sample.h"
+#include "msb_funcs.h"
 
 #include <complex> // not to be confused with complex.h
 
@@ -970,7 +971,6 @@ void read_E5A(char* input) {
   double doppler = -1*(1580 + 1e6 +2500);// E36:1580 E6: 1261 ; G10:-582, G32:1232
 #define DO_FLOAT // q31 ifndef
   /////////////////////////////////////////////////////
-  
   c32* sampl = (c32*)malloc(SAMP * sizeof(c32));
   c32* repli = (c32*)malloc(SAMP * sizeof(c32));
   memset(sampl, 0, sizeof(c32) * SAMP);
@@ -986,24 +986,24 @@ void read_E5A(char* input) {
   c32* up_samp  = (c32*)malloc(FFT_SIZE * sizeof(c32));
   c32* up_repli = (c32*)malloc(FFT_SIZE * sizeof(c32));
   c32* up_prod  = (c32*)malloc(FFT_SIZE * sizeof(c32));
+  c32* sum_prod = (c32*)malloc(FFT_SIZE * sizeof(c32));
   float* nci_sum = (float*)malloc(FFT_SIZE * sizeof(float));
   memset(up_samp , 0, sizeof(c32) * FFT_SIZE);
   memset(up_repli, 0, sizeof(c32) * FFT_SIZE);
   memset(up_prod , 0, sizeof(c32) * FFT_SIZE); 
   memset(nci_sum , 0, sizeof(float) * FFT_SIZE);
+  memset(sum_prod, 0, sizeof(c32) * FFT_SIZE);
 
 #ifdef DO_FLOAT
-  float* actual = (float*)malloc(FFT_SIZE * 2 * sizeof(float));
   float* replica = (float*)malloc(FFT_SIZE * 2 * sizeof(float));
-  if (actual == NULL || replica == NULL) {
-    fprintf(stderr, "Memory allocation failed for 'actual'.\n");
+  if (replica == NULL) {
+    fprintf(stderr, "Memory allocation failed for 'replica'.\n");
     return; // Exit or handle the error appropriately
   }
   memset(replica, 0, sizeof(float) * FFT_SIZE * 2); 
 
 #else
   q31_t* prod    = (q31_t*)malloc(FFT_SIZE * 2 * sizeof(q31_t));
-  q31_t* actual  = (q31_t*)malloc(FFT_SIZE * 2 * sizeof(q31_t));
   q31_t* replica = (q31_t*)malloc(FFT_SIZE * 2 * sizeof(q31_t));
   memset(replica, 0, sizeof(q31_t) * FFT_SIZE * 2);
   memset(actual, 0, sizeof(q31_t) * FFT_SIZE * 2);
@@ -1026,7 +1026,7 @@ void read_E5A(char* input) {
   char line[256];
   int LEN = SAMP;
   ///////////// main loop /////////////////////////////////////////////
-  for (int loop = 0; loop < 20; loop++) {
+  for (int loop = 0; loop < 5; loop++) {
     int idx = 0;
     while (!feof(fp_1bitcsv)) {
       if (fgets(line, sizeof(line), fp_1bitcsv) != NULL) {
@@ -1057,11 +1057,10 @@ void read_E5A(char* input) {
       up_prod[k] = mult(up_samp[k], get_conj(up_repli[k]));
     }
 
-    fft_c32(FFT_SIZE, up_prod, false); // IFFT
+    //fft_c32(FFT_SIZE, up_prod, false); // IFFT
+    //for (int i = 0; i < FFT_SIZE; i++) { nci_sum[i] += mag(up_prod[i]); }
 
-    for (int i = 0; i < FFT_SIZE; i++) {
-      nci_sum[i] += mag(up_prod[i]);
-    }
+    for (int k = 0; k < FFT_SIZE; k++) { sum_prod[k] = add(sum_prod[k], up_prod[k]); }
 
     printf("loop %d \n", loop);
 #else
@@ -1103,6 +1102,9 @@ void read_E5A(char* input) {
 #endif //DO_FLOAT
   } // end NCI for loop
 
+  fft_c32(FFT_SIZE, sum_prod, false); // IFFT
+  for (int i = 0; i < FFT_SIZE; i++) { nci_sum[i] = mag(sum_prod[i]); }
+
   float max = 0; float max2 = 0;
   int pos = 0; int pos2 = 0;
   for (int i = 0; i < FFT_SIZE; i++) {
@@ -1116,10 +1118,10 @@ void read_E5A(char* input) {
   printf("max_float = %f pos=%d frac=%f\n", max, pos, (pos / 16384.0));
  
   fclose(fp_1bitcsv); fclose(fp_out);
-  free(sampl); free(up_samp); free(up_repli); free(up_prod); free(nci_sum);
+  free(sampl); free(up_samp); free(up_repli); free(up_prod); free(nci_sum); free(sum_prod);
 
 #ifndef DO_FLOAT
-  free(prod); free(actual); free(replica);
+  free(prod); free(replica);
 #endif 
 }
 
@@ -1405,23 +1407,24 @@ void test_quasi_pilot_330Up() {
 #define FFT_QP_SIZE 512
   float chipping_rate = 5.115e6; // chips per sec
   int locations[50] = { -1 };// { 20, 40, 60, 80, 100, 120, 140, 160, 180, 200, 220, 240, 260, 280 };
-  int window = 20; // 2 * window ms either side of center (window>=6 does not work)
+  int window = 26; // 2 * window ms either side of center (window>=6 does not work)
   int nci = 300;
 #define SPC 1 // samples per chip
   float up_ratio = float(E5_QP_CODE_LEN) / float(FFT_QP_SIZE);
   int len = E5_QP_CODE_LEN * SPC * nci; // 4 samples per chip and 100 ms
-  int c_phase = 329;// 166;// 329; // which chip to set the code phase to
+  int c_phase = 29;// 166;// 329; // which chip to set the code phase to
   int prn1 = 4, prn2 = 8;
-  float dop1 = 2000, dop2 = -3000;
+  float dop1 = 2000, dop2 = 2000;
   float dop_error = 1500;// 10; // full 2*250 Hz error in wipeoff
   float dop_err_rate = 0.6;// 0.6;// 0.6;//Hz per ms
-  float sigma = 3.5;// 3.5;// 3.5; // noise level
+  float sigma = 11.652;// 3.5;// 3.5;// 3.5; // noise level
   int num_errors = 0;
   c32* out = (c32*)malloc(len * sizeof(c32));
   if (out == NULL) { fprintf(stderr, "Memory allocation failed for 100 ms I&Q array.\n"); return; }
   int* prn_c1 = (int*)malloc(sizeof(int) * E5_QP_CODE_LEN * SPC);
   int* prn_c2 = (int*)malloc(sizeof(int) * E5_QP_CODE_LEN * SPC);
   c32* replica = (c32*)malloc(sizeof(c32) * E5_QP_CODE_LEN * SPC);
+  float* sum_mag = (float*)malloc(sizeof(float) * FFT_QP_SIZE * SPC);
   memset(prn_c1,  0, sizeof(int) * E5_QP_CODE_LEN * SPC);
   memset(prn_c2,  0, sizeof(int) * E5_QP_CODE_LEN * SPC);
   memset(replica, 0, sizeof(c32) * E5_QP_CODE_LEN * SPC);
@@ -1456,6 +1459,7 @@ void test_quasi_pilot_330Up() {
   auto start = std::chrono::high_resolution_clock::now();////////////////////////////////////////
   for (int center = window / 2; center <= nci - window / 2; center++) {
     memset(fft_sum, 0, sizeof(c32) * FFT_QP_SIZE * SPC);
+    memset(sum_mag, 0, sizeof(float) * FFT_QP_SIZE * SPC);
     for (int windex = center - window / 2; windex < center + window / 2; windex++) {
       memset(fft_data, 0, sizeof(c32) * FFT_QP_SIZE * SPC);
       up_sample_N_to_M(&out[E5_QP_CODE_LEN * SPC * windex], E5_QP_CODE_LEN * SPC, fft_data, FFT_QP_SIZE * SPC);
@@ -1464,15 +1468,19 @@ void test_quasi_pilot_330Up() {
       for (int k = 0; k < FFT_QP_SIZE * SPC; k++) { // accumulate pt-wise * with conj of replica
         fft_sum[k] = add(fft_sum[k], mult(fft_data[k], get_conj(fft_repl[k])));
       }
+
+      fft_c32(FFT_QP_SIZE * SPC, fft_sum, false); // IFFT 
+      for (int k = 0; k < FFT_QP_SIZE * SPC; k++) { sum_mag[k] += mag(fft_sum[k]); }
     } // for windex 
 
-    fft_c32(FFT_QP_SIZE * SPC, fft_sum, false); // IFFT 
+    //fft_c32(FFT_QP_SIZE * SPC, fft_sum, false); // IFFT 
+    for (int k = 0; k < FFT_QP_SIZE * SPC; k++) { sum_mag[k] += mag(fft_sum[k]); }
 
-    if (center == 90) {
+    if (false) { //center == 90) {
       FILE* fp_out = NULL; //output file
       errno_t er = fopen_s(&fp_out, "C:/Python/nci_sum4.csv", "w");
       for (int m = 0; m < FFT_QP_SIZE * SPC; m++) {
-        double magn = mag(fft_sum[m]);
+        double magn = sum_mag[m];// mag(fft_sum[m]);
         fprintf(fp_out, "%d, %f\n", m, magn);
       }
       fclose(fp_out);
@@ -1481,11 +1489,11 @@ void test_quasi_pilot_330Up() {
     float max_coh = 0; int pos_coh = 0;
     // E5_QP_CODE_LEN FFT_QP_SIZE
     for (int m = 0; m < FFT_QP_SIZE * SPC; m++) {
-      float mag_coh = mag(fft_sum[m]);
+      float mag_coh = sum_mag[m];// mag(fft_sum[m]);
       if (mag_coh > max_coh) { max_coh = mag_coh; pos_coh = m; }
     }
 
-    if (pos_coh != c_phase) {
+    if ((int)round(pos_coh * up_ratio) != c_phase) {
       num_errors++;
     }
 
@@ -1510,7 +1518,7 @@ void test_quasi_pilot_330Up() {
     printf("Bit transition at %d ms \n", locations[i]);
   }
   printf("BTs: %d Random number: %d\n", loc_cnt, rand());
-  free(out); free(fft_data); free(fft_sum); free(fft_repl);
+  free(out); free(fft_data); free(fft_sum); free(fft_repl); free(sum_mag);
 }
 
 
@@ -1527,11 +1535,11 @@ void test_quasi_pilot_330(results_s* results) {
 #define FFT_QP_SIZE 512 * 2
   float chipping_rate = 5.115e6; // chips per sec
   int locations[50] = { -1 };// { 20, 40, 60, 80, 100, 120, 140, 160, 180, 200, 220, 240, 260, 280 };
-  int window = 18; //  window/2 ms either side of center 
+  int window = 26; //  window/2 ms either side of center 
   int nci = 500;
 #define SPC 1 // samples per chip
   int   len = E5_QP_CODE_LEN * SPC * nci; // 4 samples per chip and 100 ms
-  int   c_phase = 29;// 1;// 329; // which chip to set the code phase to
+  int   c_phase = 329;// 1;// 329; // which chip to set the code phase to
   int   prn1 = 14, prn2 = 18;
   float dop1 = 2000, dop2 = 2000;
   float dop_error = 1500;// 10; // full 2*250 Hz error in wipeoff
@@ -1547,6 +1555,7 @@ void test_quasi_pilot_330(results_s* results) {
   int* prn_c2  = (int*)malloc(sizeof(int) * E5_QP_CODE_LEN * SPC);
   int* prn_c3  = (int*)malloc(sizeof(int) * E5_QP_CODE_LEN * SPC);
   c32* replica = (c32*)malloc(sizeof(c32) * E5_QP_CODE_LEN * SPC);
+  float* mag_sum = (float*)malloc(sizeof(float) * FFT_QP_SIZE * SPC);
   memset(prn_c1 , 0, sizeof(int) * E5_QP_CODE_LEN * SPC);
   memset(prn_c2 , 0, sizeof(int) * E5_QP_CODE_LEN * SPC);
   memset(replica, 0, sizeof(c32) * E5_QP_CODE_LEN * SPC);
@@ -1554,7 +1563,7 @@ void test_quasi_pilot_330(results_s* results) {
   getE5_QPCode(E5_QP_CODE_LEN, SPC, prn2, prn_c2);
 
   memcpy(prn_c3, prn_c1, sizeof(int) * E5_QP_CODE_LEN * SPC); // unshifted version for later
-  //shift rotate_fwd(prn_c3, E5_QP_CODE_LEN * SPC, (c_phase > 165) ? 165 : 0);
+  //rotate_fwd(prn_c3, E5_QP_CODE_LEN * SPC, (c_phase > 165) ? 165 : 0);
 
   make_replica(prn_c3, replica, dop1 + dop_error, E5_QP_CODE_LEN * SPC, chipping_rate * SPC);
   rotate_fwd(prn_c1, E5_QP_CODE_LEN * SPC, c_phase); // now advance code-phase  
@@ -1579,6 +1588,7 @@ void test_quasi_pilot_330(results_s* results) {
   memset(fft_repl, 0, sizeof(c32) * FFT_QP_SIZE * SPC);
   if (fft_data == NULL || fft_repl == NULL) { printf("Error allocating fft_data or fft_prod\n"); return; }
 
+  //up_sample_N_to_M(replica, E5_QP_CODE_LEN * SPC, fft_repl, FFT_QP_SIZE * SPC);
   memcpy(fft_repl, replica, sizeof(c32) * E5_QP_CODE_LEN * SPC);
   // this is not good memcpy(&fft_repl[E5_QP_CODE_LEN * SPC], replica, sizeof(c32) * (FFT_QP_SIZE - E5_QP_CODE_LEN) * SPC);
   free(replica);
@@ -1587,25 +1597,32 @@ void test_quasi_pilot_330(results_s* results) {
   //for (int center = window / 2; center <= nci - window / 2; center++) {
   for (int center = window / 2; center <= nci - window; center++) {
     memset(fft_sum, 0, sizeof(c32) * FFT_QP_SIZE * SPC);
-    for (int windex = center - window / 2; windex < center + window / 2; windex++) {
+    memset(mag_sum, 0, sizeof(float) * FFT_QP_SIZE * SPC);
+    for (int windex = center - window / 2; windex < center + window / 2; windex +=1) {
       memset(fft_data, 0, sizeof(c32) * FFT_QP_SIZE * SPC);
       memcpy(fft_data, &out[E5_QP_CODE_LEN * SPC * windex], sizeof(c32) * SPC * (E5_QP_CODE_LEN));
       memcpy(&fft_data[E5_QP_CODE_LEN * SPC], &out[E5_QP_CODE_LEN * SPC * windex], sizeof(c32) * SPC * (FFT_QP_SIZE - E5_QP_CODE_LEN)); 
+      //up_sample_N_to_M(&out[E5_QP_CODE_LEN * SPC * windex], E5_QP_CODE_LEN * SPC, fft_data, FFT_QP_SIZE * SPC);
       fft_c32(FFT_QP_SIZE * SPC, fft_data, true); // forward FFT
 
       for (int k = 0; k < FFT_QP_SIZE * SPC; k++) { // accumulate pt-wise * with conj of replica
         fft_sum[k] = add(fft_sum[k], mult(fft_data[k], get_conj(fft_repl[k])));
+        //fft_sum[k] = mult(fft_data[k], get_conj(fft_repl[k]));
       }
+
+      //fft_c32(FFT_QP_SIZE * SPC, fft_sum, false); // IFFT
+      //for (int k = 0; k < FFT_QP_SIZE * SPC; k++) { mag_sum[k] += mag(fft_sum[k]); }
     } // for windex 
 
-    fft_c32(FFT_QP_SIZE * SPC, fft_sum, false); // IFFT 
+    // used to have the IFFT here
+    fft_c32(FFT_QP_SIZE * SPC, fft_sum, false); // IFFT
+    for (int k = 0; k < FFT_QP_SIZE * SPC; k++) { mag_sum[k] += mag(fft_sum[k]); }
 
-    if (false) { //center == 200) {
+    if (false) {//center == 17) {
       FILE* fp_out = NULL; //output file
       errno_t er = fopen_s(&fp_out, "C:/Python/nci_sum4.csv", "w");
       for (int m = 0; m < FFT_QP_SIZE * SPC; m++) {
-        double magn = mag(fft_sum[m]);
-        fprintf(fp_out, "%d, %f\n", m, magn);
+        fprintf(fp_out, "%d, %f\n", m, mag_sum[m]);
       }
       fclose(fp_out);
     }
@@ -1615,7 +1632,7 @@ void test_quasi_pilot_330(results_s* results) {
     float v1 = -1e6, v2 = -1e6;
     // E5_QP_CODE_LEN FFT_QP_SIZE
     for (int m = 0; m < E5_QP_CODE_LEN * SPC; m++) {
-      float mag_coh = mag(fft_sum[m]);
+      float mag_coh = mag_sum[m];// mag(fft_sum[m]);
       if (mag_coh > max_coh) { max_coh = mag_coh; pos_coh = m; }
 
       if (mag_coh >= v1) {
@@ -1630,7 +1647,7 @@ void test_quasi_pilot_330(results_s* results) {
     }
 
     num_tries++;
-    //shift pos_coh = (c_phase > 165) ? pos_coh + 165 : pos_coh;
+    //pos_coh = (c_phase > 165) ? pos_coh + 165 : pos_coh;
     if (pos_coh != c_phase) {
       num_errors++;
     }
@@ -1658,7 +1675,7 @@ void test_quasi_pilot_330(results_s* results) {
     printf("Bit transition at %d ms \n", locations[i]);
   }
   //printf("BTs: %d Random number: %d\n", loc_cnt, rand());
-  free(out); free(fft_data); free(fft_sum); free(fft_repl);
+  free(out); free(fft_data); free(fft_sum); free(fft_repl); free(mag_sum);
 }
 
 void test_quasi_pilot2() {
@@ -1869,7 +1886,7 @@ int main(int argc,char* argv[])
     return 0;
   }
 
-  if (0) {
+  if (1) {
     read_E5A((char*)"C:/work/Baseband/TestData/E5/t14/G_2024_10_21_22_29_43.047.csv");
     //read_E5A((char*)"C:/work/Baseband/TestData/E5/t14/G_2024_10_21_22_32_30.500_resampled_16368Hz.csv");
     //read_E5A((char*)"C:/work/Baseband/TestData/E5/t14/G_2024_10_21_22_29_43.047_resampled_16368Hz.csv");
@@ -1888,7 +1905,7 @@ int main(int argc,char* argv[])
     return 0;
   }
 
-  if (1) {
+  if (0) {
     //test_quasi_pilot_330Up();
     results_s results = {0};
     for (int i = 0; i < 50; i++) {
