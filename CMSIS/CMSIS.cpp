@@ -868,7 +868,7 @@ void read_E5A(char* input) {
   prn2acq[0].prn = 36; prn2acq[0].doppler = 1580; prn2acq[0].constel = 2; // GPS
   prn2acq[1].prn = 6;  prn2acq[1].doppler = 1261; prn2acq[1].constel = 2; // GAL
   prn2acq[2].prn = 10; prn2acq[2].doppler = -582; prn2acq[2].constel = 1;
-  prn2acq[3].prn = 32; prn2acq[2].doppler = 1232; prn2acq[2].constel = 1;
+  prn2acq[3].prn = 32; prn2acq[3].doppler = 1232; prn2acq[3].constel = 1;
 
   /////////////////////////////////////////////////////
   c32* sampl = (c32*)malloc(SAMP * sizeof(c32));
@@ -878,13 +878,16 @@ void read_E5A(char* input) {
   c32* up_prod = (c32*)malloc(FFT_SIZE * sizeof(c32));
   c32* sum_prod = (c32*)malloc(FFT_SIZE * sizeof(c32));
   float* nci_sum = (float*)malloc(FFT_SIZE * sizeof(float));
+
+  bb_meas_t meas;
+  memset(&meas, 0, sizeof(bb_meas_sat_t)); 
   
   ///////////////////// main prn loop ////////////////////////////////
   for (int prn_loop = 0; prn_loop < 4; prn_loop++) {
     int prn = prn2acq[prn_loop].prn;
     double doppler = -1 * (prn2acq[prn_loop].doppler + 1e6 + 2500);
     int gal_proc = (prn2acq[prn_loop].constel == 2) ? 1 : 0;
-    printf("Processing PRN %d Doppler %f constel %d \n", prn, doppler, prn2acq[prn_loop].constel);
+    //printf("Processing PRN %d Doppler %f constel %d \n", prn, doppler, prn2acq[prn_loop].constel);
 
     memset(sampl, 0, sizeof(c32) * SAMP);
     memset(repli, 0, sizeof(c32) * SAMP);
@@ -936,7 +939,7 @@ void read_E5A(char* input) {
       fft_c32(FFT_SIZE, up_prod, false); // IFFT
       for (int i = 0; i < FFT_SIZE; i++) { nci_sum[i] += mag(up_prod[i]); }
 
-      printf("loop %d \n", loop);
+      //printf("loop %d \n", loop);
     } // end NCI for loop
 
     errno_t er = fopen_s(&fp_out, "C:/Python/out3.csv", "w");
@@ -946,10 +949,24 @@ void read_E5A(char* input) {
     fclose(fp_out);
     double cn0 = compute_snr_real(nci_sum, FFT_SIZE, peaks.val1, peaks.idx1);
     double interp = InterpolateCodePhase(peaks.idx1, nci_sum[peaks.idx1 - 1], peaks.val1, nci_sum[peaks.idx1 + 1]);
-    printf("ratio %f loc %d interp %f CN0 %f\n", (peaks.val1 / peaks.val2), (int)peaks.idx1, interp, cn0);
+    //printf("ratio %f loc %d interp %f CN0 %f\n", (peaks.val1 / peaks.val2), (int)peaks.idx1, interp, cn0);
+
+    if ((peaks.val1 / peaks.val2) > 1.29) {
+      meas.sats[meas.num_sat].prn = prn2acq[prn_loop].prn;
+      meas.sats[meas.num_sat].code_phase = float(interp) / 16384.0f;
+      meas.sats[meas.num_sat].doppler = -prn2acq[prn_loop].doppler;
+      meas.sats[meas.num_sat].cno = (float)cn0;
+      meas.sats[meas.num_sat].constellation = gal_proc ? SYS_GAL : SYS_GPS;
+
+      float ratio = (peaks.val1 / peaks.val2);
+      printf("Acquired %s %d Doppler %f Hz CodePhase %f [ms] C/N0 %f dB-Hz ratio=%f\n", (gal_proc == 2) ? "GAL" : "GPS",
+        prn2acq[prn_loop].prn, -prn2acq[prn_loop].doppler, meas.sats[meas.num_sat].code_phase, meas.sats[meas.num_sat].cno, ratio * ratio);
+      meas.num_sat++;
+    }
 
     rewind(fp_1bitcsv);
   } // end for prn_loop
+  write_msb(&meas, (char*)"C:/Python/E5A-L5.bin");
  
   fclose(fp_1bitcsv); 
   free(sampl); free(repli); free(up_samp); free(up_repli); free(up_prod); free(nci_sum); free(sum_prod);

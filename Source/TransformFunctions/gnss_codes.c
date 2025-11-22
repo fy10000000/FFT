@@ -898,7 +898,7 @@ void up_sample_10k_to_16k(c32* in , c32* out) {
   size_t Nout_cap = (size_t)llround(Nin * (Fout / Fin)) + 8;
 
   size_t Nout = iq_resamp_process_zero_phase(rs, in, Nin, out, Nout_cap);
-  printf("Produced %zu samples (expected ~16384)\n", Nout);
+  //printf("Produced %zu samples (expected ~16384)\n", Nout);
 
   iq_resamp_zp_free(rs);
 }
