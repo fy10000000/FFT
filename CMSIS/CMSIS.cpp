@@ -613,8 +613,7 @@ void read_ors(char* input) {
   FILE* fp_msb = NULL;
   fopen_s(&fp_msb, input, "rb");
   if (fp_msb == NULL) {
-    fprintf(stderr, "Failed to open msb file %s\n", input);
-    return;
+    fprintf(stderr, "Failed to open msb file %s\n", input); return;
   }
   fseek(fp_msb, 0L, SEEK_END);
   size_t bytes_to_read = ftell(fp_msb);
@@ -623,14 +622,7 @@ void read_ors(char* input) {
   uint8_t* buffer = (uint8_t*)malloc(bytes_to_read);
   size_t bytesRead;
   bytesRead = fread(buffer, 1, bytes_to_read, fp_msb);
-  if (bytesRead != bytes_to_read) {
-    // Process the read data
-    printf("Error parsiing data\n");
-    for (size_t i = 0; i < 50; i++) {
-      printf("%02X ", buffer[i]);
-    }
-    printf("\n");
-  }
+  if (bytesRead != bytes_to_read) { printf("Error parsiing data\n"); }
   fclose(fp_msb);
 
   // 2 for res 1
@@ -648,34 +640,56 @@ void read_ors(char* input) {
   int msec = (int)round((sec - floor(sec)) * 1000);
   uint32_t nanos = U3(&buffer[18]); // 21
   printf("%4d-%02d-%02d-%02d-%02d-%02d msec=%d nanos=%d \n", yr, mon, day, hr, min, sec, msec, nanos);
-
   uint16_t size = ((uint16_t)bytes_to_read) - hdrlen;
-
   printf("size (total bytes - hdrs) %d \n", size);
 
   FILE* fp_out = NULL; //output file
   errno_t er = fopen_s(&fp_out, "C:/Python/out2.csv", "w");
   if (er != 0 || fp_out == NULL) {
-    fprintf(stderr, "Failed to open output file\n");
-    return;
+    fprintf(stderr, "Failed to open output file\n"); return;
   }
 
   //// Dial in the prn and doppler here ////////////////
 #define SPC  4
-#define SIZE 1024*SPC *1 // 16K for Galileo and 4K for GPS
-  int proc_gps = 1; // 1 for GPS, 0 for Galileo
-  int prn = 3;// 4;// 5;// 15;// 24;// 4;// 23;// 5;// 31;// 6;// 9;// 34;// 36;// 24;// 34;// 4;// 15;// 36;// 9;// 23;// 9;// 6;// 26;// 9;// 29;// 11;// 6;// 7;// 31;// 3;// 26;// 4;// 9;// 7;// 11;// 6;// 31;// 9;// 3;// 26;// 4;// 10;// 23;// 13;// 27;// 18;// 15;// 10;//15
-  double doppler = -2570;// 805;// 2277.32;// 1557.36;// 3553.67;// -2011.07;// -854.19;// 2277.32;// 1927.59;// -1231.94;// -100.53;// -1013.74;// -2730.37;// 3553.67;// -1013.74;// -2011.07;// 1557.36;// -2730.37;// -100.53;// -854.19;// -1927.59;// -100.53;// -1231.94;// -1279.33;// 2651.04;// -82.61;// 646.60;// -1487.68;// 3213.83;// -3087.45;// -3052.57;// -1279.33;// 272.41;// 2651.04;// 3341.25;// 1312.40;// -903.17;// -2885.45;// 2967.03;// -2603.85;// -565.13;// 770.87;// 2023;// -530.0;// -3314.0;// 154.0;// -2034.0;// -2490;// 2030; // -2490
+#define SIZE 1024*SPC *4 // 16K for Galileo and 4K for GPS
 
+  typedef struct {
+    int prn;
+    double doppler;
+    int constel;
+  } acq_struct;
+
+  acq_struct prn2acq[15] = {0};
+  prn2acq[0].prn = 4 ; prn2acq[0].doppler = 791;   prn2acq[0].constel = 1; // GPS
+  prn2acq[1].prn = 9 ; prn2acq[1].doppler = -112;  prn2acq[1].constel = 2; // GAL
+  prn2acq[2].prn = 6 ; prn2acq[2].doppler = -1243; prn2acq[2].constel = 2;
+  prn2acq[3].prn = 26; prn2acq[3].doppler = -544;  prn2acq[3].constel = 1;
+  prn2acq[4].prn = 3 ; prn2acq[4].doppler = -2584; prn2acq[4].constel = 1; 
+  prn2acq[5].prn = 31; prn2acq[5].doppler = 1915;  prn2acq[5].constel = 2;
+  prn2acq[6].prn = 5 ; prn2acq[6].doppler = 2268;  prn2acq[6].constel = 2;
+  prn2acq[7].prn = 16; prn2acq[7].doppler = 2822;  prn2acq[7].constel = 1;
+  prn2acq[8].prn = 9 ; prn2acq[8].doppler = 2986;  prn2acq[8].constel = 1;
+  prn2acq[9].prn = 31; prn2acq[9].doppler = -2867; prn2acq[9].constel = 1;
+  prn2acq[10].prn = 23; prn2acq[10].doppler = -867;  prn2acq[10].constel = 2;
+  prn2acq[11].prn = 4 ; prn2acq[11].doppler = -2020; prn2acq[11].constel = 2;
+  prn2acq[12].prn = 34; prn2acq[12].doppler = -1027; prn2acq[12].constel = 2;
+  prn2acq[13].prn = 6 ; prn2acq[13].doppler = -882;  prn2acq[13].constel = 1;
+  prn2acq[14].prn = 24; prn2acq[14].doppler = 3545;  prn2acq[14].constel = 2;
+  
   /////////////////////////////////////////////////////
 
   c32* iandq = (c32*)malloc(SIZE * sizeof(c32));
+  c32* signl = (c32*)malloc(SIZE * sizeof(c32));
   c32* repli = (c32*)malloc(SIZE * sizeof(c32));
+  c32* prod  = (c32*)malloc(SIZE * sizeof(c32));
   if (iandq == NULL || repli == NULL) {
     fprintf(stderr, "Memory allocation failed for q32 array.\n");
-    free(iandq); free(repli);
-    return;
+    free(iandq); free(repli); free(prod); return;
   }
+
+  int num_meas = 0;
+  bb_meas_t meas;
+  memset(&meas, 0, sizeof(bb_meas_t));  
 
   DecodeOrsIQCplx(&buffer[hdrlen], SIZE / 2, iandq);
   free(buffer);
@@ -695,158 +709,57 @@ void read_ors(char* input) {
     fclose(fp1bt_out);
   }
 
-  float* actual = (float*)malloc(SIZE * 2 * sizeof(float));
-  float* replica = (float*)malloc(SIZE * 2 * sizeof(float));
-  float* prod = (float*)malloc(SIZE * 2 * sizeof(float));
-  if (actual == NULL || replica == NULL || prod == NULL) {
-    fprintf(stderr, "Memory allocation failed for 'actual'.\n");
-    return; // Exit or handle the error appropriately
+  for (int loop = 0; loop < 15; loop++) {
+
+    int size = prn2acq[loop].constel == 1 ? 4096 : 16384;
+    int proc_gps = (prn2acq[loop].constel == 1) ? 1 : 0;
+    if (proc_gps) {
+      synth_gps_prn(prn2acq[loop].prn, -prn2acq[loop].doppler, size, repli, SPC);
+    }
+    else { // Galileo
+      synth_e1b_prn(prn2acq[loop].prn, -prn2acq[loop].doppler, size, repli);
+    }
+    memcpy(signl, iandq, size * sizeof(c32));
+    memset(prod, 0, size * sizeof(c32));
+
+    fft_c32(size, repli, true); // F(repli)
+    fft_c32(size, signl, true); // F(iandq) and prod=F(iandq) * conj(F(repli)) below
+    for (int i = 0; i < size; i++) { prod[i] = mult(signl[i], get_conj(repli[i])); }
+    fft_c32(size, prod, false); // in-place inv F(prod) 
+
+    top2_pks peaks;
+    find_top2_peaks(prod, size, 3, &peaks, fp_out);
+    fclose(fp_out);
+    // compute noise stats for SNR
+    double BW = 0.3e3; // 10 MHz
+    double cn0 = compute_snr(prod, size, peaks.val1, peaks.idx1) + 35;// +10 * log(BW);
+
+    printf("%s %d v1=%f idx1=%d ; v2=%f idx2=%d ratio=%f len=%d\n", (proc_gps == 1) ? "GPS" : "GAL", prn2acq[loop].prn, 
+      peaks.val1, peaks.idx1, peaks.val2, peaks.idx2, (peaks.val1 / peaks.val2), size);
+    double early = mag(prod[peaks.idx1 - 1]), prompt = peaks.val1, late = mag(prod[peaks.idx1 + 1]);
+    double interp = InterpolateCodePhase(peaks.idx1, early, prompt, late);
+    //printf("interpolated %f cn0 %f\n", interp, cn0);
+
+    if ((peaks.val1 / peaks.val2) > 1.3) {
+      meas.sats[meas.num_sat].prn = prn2acq[loop].prn;
+      meas.sats[meas.num_sat].code_phase = float(interp) / 4096.0f;
+      meas.sats[meas.num_sat].doppler = -prn2acq[loop].doppler;
+      meas.sats[meas.num_sat].cno = (float)cn0;
+      meas.sats[meas.num_sat].constellation = proc_gps ? SYS_GPS : SYS_GAL;
+      
+      float ratio = (peaks.val1 / peaks.val2);
+      /*
+      printf("Acquired %s %d Doppler %f Hz CodePhase %f [ms] C/N0 %f dB-Hz ratio=%f\n", (proc_gps == 1) ? "GPS" : "GAL",
+        prn2acq[loop].prn, 
+        -prn2acq[loop].doppler, 
+        meas.sats[meas.num_sat].code_phase,
+        meas.sats[meas.num_sat].cno, ratio*ratio);*/
+      meas.num_sat++;
+    }
   }
-  memset(actual, 0, sizeof(float) * SIZE * 2);
-  memset(replica, 0, sizeof(float) * SIZE * 2);
-  memset(prod, 0, sizeof(float) * SIZE * 2);
-
-  if (proc_gps) {
-    synth_gps_prn(prn, -doppler, SIZE, repli, SPC);
-  }
-  else { // Galileo
-    synth_e1b_prn(prn, -doppler, SIZE, repli);
-  }
-
-  if (1) {
-    arm_cfft_radix2_instance_f32 as;
-    arm_cfft_radix2_instance_f32 rs;
-
-    for (int i = 0; i < SIZE; i++) {
-      actual[2 * i]      = iandq[i].r * 0.25;
-      actual[2 * i + 1]  = iandq[i].i * 0.25;
-      replica[2 * i]     = repli[i].r * 0.25;
-      replica[2 * i + 1] = repli[i].i * 0.25;
-    }
-    if (iandq != NULL) { free(iandq); }
-    if (repli != NULL) { free(repli); }
-    
-    // do the float thing
-    arm_cfft_radix2_init_f32(&as, SIZE, 0, 1); // Initialize the CFFT instance for 8-point FFT
-    arm_cfft_radix2_f32(&as, actual);
-
-    arm_cfft_radix2_init_f32(&rs, SIZE, 0, 1); // Initialize the CFFT instance for 8-point FFT
-    arm_cfft_radix2_f32(&rs, replica);
-
-    
-    // conjugate the replica
-    for (int i = 0; i < SIZE; i++) {
-      float Ar = actual[i * 2],  Ai = actual[i * 2 + 1];
-      float Rr = replica[i * 2], Ri = replica[i * 2 + 1];
-      // A * conj(R)
-      prod[i * 2]     = Ar * Rr + Ai * Ri;     // (Ar + jAi) * (Rr - jRi)
-      prod[i * 2 + 1] = Ai * Rr - Ar * Ri;     // 
-    }
-
-    arm_cfft_radix2_instance_f32 conv;
-    arm_cfft_radix2_init_f32(&conv, SIZE, 1, 1); // inverse FFT
-    arm_cfft_radix2_f32(&conv, prod);
-    float max = 0;
-    int pos = 0;
-    
-    for (int i = 0; i < SIZE; i++) {
-      float mag = sqrt(prod[2 * i] * prod[2 * i] + prod[2 * i + 1] * prod[2 * i + 1]);
-      fprintf(fp_out, "%d, %f \n", i, mag);
-      if (mag > max) { max = mag; pos = i; }
-    }
-    printf("max_float = %f pos=%d\n", max, pos);
-  }
-
-  if (0) { // q31 
-    arm_cfft_radix4_instance_q31 aq;
-    arm_cfft_radix4_instance_q31 rq;
-    q31_t  actual[SIZE * 2] = { 0 };
-    q31_t replica[SIZE * 2] = { 0 };
-    for (int i = 0; i < SIZE; i++) {
-      actual[2 * i]      = f2q31(iandq[i].r * 0.00001);
-      actual[2 * i + 1]  = f2q31(iandq[i].i * 0.00001);
-      replica[2 * i]     = f2q31(repli[i].r * 0.00001);
-      replica[2 * i + 1] = f2q31(repli[i].i * 0.00001);
-    }
-    if (iandq != NULL) { free(iandq); }
-    if (repli != NULL) { free(repli); }
-
-    arm_cfft_radix4_init_q31(&aq, SIZE, 0, 1); // Initialize the CFFT instance for 8-point FFT
-    arm_cfft_radix4_q31(&aq, actual);
-
-    arm_cfft_radix4_init_q31(&rq, SIZE, 0, 1); // Initialize the CFFT instance for 8-point FFT
-    arm_cfft_radix4_q31(&rq, replica);
-
-    q31_t prod[SIZE * 2] = { 0 };
-    // Mult Actual with conjugate of Replica
-    for (int i = 0; i < SIZE; i++) {
-      float Ar = actual[i * 2], Ai = actual[i * 2 + 1];
-      float Rr = replica[i * 2], Ri = replica[i * 2 + 1];
-      // A * conj(R)
-      prod[i * 2] = q31_add(q31_mul(Ar, Rr), q31_mul(Ai, Ri));     // (Ar + jAi) * (Rr - jRi)
-      prod[i * 2 + 1] = q31_sub(q31_mul(Ai, Rr), q31_mul(Ar, Ri));     // 
-    }
-
-    arm_cfft_radix4_instance_q31 conv;
-    arm_cfft_radix4_init_q31(&conv, SIZE, 1, 1); // inverse FFT
-    arm_cfft_radix4_q31(&conv, prod);
-    float max = 0;
-    int pos = 0;
-    for (int i = 0; i < SIZE; i++) {
-      float mag = sqrt((float)prod[2 * i] * (float)prod[2 * i] + (float)prod[2 * i + 1] * (float)prod[2 * i + 1]);
-      if (i <= 4 || i >= SIZE - 4) { mag = 0; }
-      fprintf(fp_out, "%d, %f \n", i, mag);
-      if (mag > max) { max = mag; pos = i; }
-    }
-    printf("max_q31 = %f pos=%d\n", max, pos);
-  }
-
-  if (0) { // q15 
-
-    arm_cfft_radix4_instance_q15 aq;
-    arm_cfft_radix4_instance_q15 rq;
-    q15_t  actual[SIZE * 2] = { 0 };
-    q15_t replica[SIZE * 2] = { 0 };
-    for (int i = 0; i < SIZE; i++) {
-      actual[2 * i] = f2q15(iandq[i].r * 0.2);
-      actual[2 * i + 1] = f2q15(iandq[i].i * 0.2);
-      replica[2 * i] = f2q15(repli[i].r * 0.2);
-      replica[2 * i + 1] = f2q15(repli[i].i * 0.2);
-    }
-    if (iandq != NULL) { free(iandq); }
-    if (repli != NULL) { free(repli); }
-
-    arm_cfft_radix4_init_q15(&aq, SIZE, 0, 1); // Initialize the CFFT instance for 8-point FFT
-    arm_cfft_radix4_q15(&aq, actual);
-
-    arm_cfft_radix4_init_q15(&rq, SIZE, 0, 1); // Initialize the CFFT instance for 8-point FFT
-    arm_cfft_radix4_q15(&rq, replica);
-
-    q15_t prod[SIZE * 2] = { 0 };
-    // Mult Actual with conjugate of Replica
-    for (int i = 0; i < SIZE; i++) {
-      float Ar = actual[i * 2], Ai = actual[i * 2 + 1];
-      float Rr = replica[i * 2], Ri = replica[i * 2 + 1];
-      // A * conj(R)
-      prod[i * 2] = q15_add(q15_mul(Ar, Rr), q15_mul(Ai, Ri));     // (Ar + jAi) * (Rr - jRi)
-      prod[i * 2 + 1] = q15_sub(q15_mul(Ai, Rr), q15_mul(Ar, Ri));     // 
-    }
-
-    arm_cfft_radix4_instance_q15 conv;
-    arm_cfft_radix4_init_q15(&conv, SIZE, 1, 1); // inverse FFT
-    arm_cfft_radix4_q15(&conv, prod);
-    float max = 0;
-    int pos = 0;
-    for (int i = 0; i < SIZE; i++) {
-      float mag = sqrt((float)prod[2 * i] * (float)prod[2 * i] + (float)prod[2 * i + 1] * (float)prod[2 * i + 1]);
-      fprintf(fp_out, "%d, %f \n", i, mag);
-      if (mag > max) { max = mag; pos = i; }
-    }
-    printf("max_q15 = %f pos=%d\n", max, pos);
-  }
-
-  fclose(fp_out);
-  free(actual); free(replica); free(prod);
+  write_msb(&meas, (char*)"C:/Python/out2.bin");
+   
+  free(iandq); free(repli); free(prod);
   //////////////////////////////////////////////////////
 }
 
@@ -1886,7 +1799,7 @@ int main(int argc,char* argv[])
     return 0;
   }
 
-  if (1) {
+  if (0) {
     read_E5A((char*)"C:/work/Baseband/TestData/E5/t14/G_2024_10_21_22_29_43.047.csv");
     //read_E5A((char*)"C:/work/Baseband/TestData/E5/t14/G_2024_10_21_22_32_30.500_resampled_16368Hz.csv");
     //read_E5A((char*)"C:/work/Baseband/TestData/E5/t14/G_2024_10_21_22_29_43.047_resampled_16368Hz.csv");
@@ -1897,7 +1810,7 @@ int main(int argc,char* argv[])
     read_L1((char*)"C:/Python/out-1bit_1spc_1bit.csv");// "C:/work/Baseband/TestData/E5/t14/G_2024_10_21_22_29_43.047.csv");
   }
 
-  if (0) {
+  if (1) {
     read_ors((char*)"C:/work/Baseband/TestData/100ms/bw25/G_2025_09_03_23_04_45.ors");
     //read_ors((char*)"C:/work/Baseband/TestData/100ms/bw25/G_2025_09_03_23_22_41.ors");
     //read_ors((char*)"C:/work/Baseband/TestData/100ms/bw25/G_2025_09_03_23_04_45.ors");

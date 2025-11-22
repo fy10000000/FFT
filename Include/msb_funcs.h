@@ -43,7 +43,7 @@ typedef struct {
 #ifdef __cplusplus
 extern "C" {
 #endif
-
+  extern int write_msb(const bb_meas_t* measurements, char* file_path);
   extern int write_bb_msb(const bb_meas_t* measurements, uint8_t* bin_buff, int buff_size);
 
   extern void read_bb_msb(uint8_t* bin_buff, int bin_size, bb_meas_t* measurements);

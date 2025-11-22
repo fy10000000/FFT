@@ -76,6 +76,18 @@ void bit_writer(buff_str* bs, uint64_t val, int num_bits)
   bs->bit_pos = bit_index;
 }
 
+extern int write_msb(const bb_meas_t* measurements, char* file_path) {
+  uint8_t buff[2048];
+  memset(buff, 0, sizeof(buff));
+  int num_written = write_bb_msb(measurements, buff, sizeof(buff));
+  FILE* fp_out2 = NULL; //output file
+  errno_t er2 = fopen_s(&fp_out2, file_path, "wb");
+  if (er2 != 0 || fp_out2 == NULL) { fprintf(stderr, "Failed to open output file\n"); return; }
+  fwrite(buff, 1, num_written, fp_out2);
+  fclose(fp_out2); 
+  return num_written; 
+}
+
 // returns number of bytes written
 extern int write_bb_msb(const bb_meas_t* measurements, uint8_t* bin_buff, int buff_size) {
   buff_str buff;

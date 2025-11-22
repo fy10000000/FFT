@@ -33,6 +33,14 @@
 #define PI               3.14159265358979f
 #endif
 
+
+typedef struct {
+  size_t idx1;   /* index of highest peak */
+  float  val1;   /* value of highest peak */
+  size_t idx2;   /* index of second-highest peak */
+  float  val2;   /* value of second-highest peak */
+} top2_pks;
+
 int8_t E1B_Code[E1B_MAX_PRN + 1][E1B_CODE_LEN]; // one based indexing
 
 
@@ -103,6 +111,10 @@ int8_t quantize_pm1(double x);
 double noise(double sigma);
 
 double InterpolateCodePhase(uint32_t index, double earlyPower, double promptPower, double latePower);
+
+double compute_snr(c32* convol, int cov_size, double peak, int peak_loc);
+
+int find_top2_peaks(const c32* data, int data_size, int pk_sep, top2_pks* peaks, FILE* fp_out);
 
 #ifdef __cplusplus
 }
