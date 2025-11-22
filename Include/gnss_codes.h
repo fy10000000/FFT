@@ -112,9 +112,13 @@ double noise(double sigma);
 
 double InterpolateCodePhase(uint32_t index, double earlyPower, double promptPower, double latePower);
 
-double compute_snr(c32* convol, int cov_size, double peak, int peak_loc);
+double compute_snr_cplx(c32* convol, int cov_size, double peak, int peak_loc);
 
-int find_top2_peaks(const c32* data, int data_size, int pk_sep, top2_pks* peaks, FILE* fp_out);
+double compute_snr_real(float* convol, int cov_size, double peak, int peak_loc);
+
+int find_top2_peaks_cplx(const c32* data, int data_size, int pk_sep, top2_pks* peaks, FILE* fp_out);
+
+int find_top2_peaks_real(const float* data, int data_size, int pk_sep, top2_pks* peaks, FILE* fp_out);
 
 #ifdef __cplusplus
 }

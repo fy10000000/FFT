@@ -1107,7 +1107,7 @@ double InterpolateCodePhase(uint32_t index, double earlyPower, double promptPowe
   return interpolatedIndex;
 }
 
-double compute_snr(c32* convol, int cov_size, double peak, int peak_loc) {
+double compute_snr_cplx(c32* convol, int cov_size, double peak, int peak_loc) {
   double sum = 0, sum_sq = 0;
   for (int i = 0; i < cov_size; i++) {
     float magn = mag(convol[i]);
@@ -1124,13 +1124,54 @@ double compute_snr(c32* convol, int cov_size, double peak, int peak_loc) {
   return snr;
 }
 
-int find_top2_peaks(const c32* data, int data_size, int pk_sep, top2_pks* peaks, FILE* fp_out) {
+double compute_snr_real(float* convol, int cov_size, double peak, int peak_loc) {
+  double sum = 0, sum_sq = 0;
+  for (int i = 0; i < cov_size; i++) {
+    float magn = convol[i];
+    if (abs(i - peak_loc) > 2) {
+      sum += magn;
+      sum_sq += magn * magn;
+    }
+  }
+  double mean = sum / (cov_size - 5);
+  double var = (sum_sq / (cov_size - 5)) - (mean * mean);
+  //double snr_lin = 10.0 * log10((peak * peak) / (var * (float)(cov_size - 5)));
+  double snr_lin = peak / mean;// (peak - mean) / var
+  double snr = 10.0 * log10(snr_lin);
+  return snr;
+}
+
+int find_top2_peaks_cplx(const c32* data, int data_size, int pk_sep, top2_pks* peaks, FILE* fp_out) {
   if (data_size <= 0 || !data || !peaks) { return -1; }
   float v1 = -1e10f, v2 = -1e10f;
   int idx1 = -1, idx2 = -1;
 
   for (int m = 0; m < data_size; m++) {
     float magn = mag(data[m]);
+    if (fp_out != NULL) { fprintf(fp_out, "%d, %f \n", m, magn); }
+    if (magn >= v1) {
+      if (idx1 != -1 && (abs(m - idx1) > pk_sep)) { v2 = v1; idx2 = idx1; } // Promote current best to second, insert new best
+      v1 = magn; idx1 = m;
+    }
+    else if (magn > v2) {
+      if ((magn != v1) && (abs(m - idx1) > pk_sep)) { v2 = magn;  idx2 = m; } // Update second best if it doesn't collide with best
+    }
+  }
+
+  peaks->val1 = v1;
+  peaks->idx1 = idx1;
+  peaks->val2 = v2;
+  peaks->idx2 = idx2;
+  return 0; // Success
+}
+
+int find_top2_peaks_real(const float* data, int data_size, int pk_sep, top2_pks* peaks, FILE* fp_out) {
+  if (data_size <= 0 || !data || !peaks) { return -1; }
+  float v1 = -1e10f, v2 = -1e10f;
+  int idx1 = -1, idx2 = -1;
+
+  for (int m = 0; m < data_size; m++) {
+    float magn = data[m];
     if (fp_out != NULL) { fprintf(fp_out, "%d, %f \n", m, magn); }
     if (magn >= v1) {
       if (idx1 != -1 && (abs(m - idx1) > pk_sep)) { v2 = v1; idx2 = idx1; } // Promote current best to second, insert new best

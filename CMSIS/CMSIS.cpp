@@ -728,11 +728,11 @@ void read_ors(char* input) {
     fft_c32(size, prod, false); // in-place inv F(prod) 
 
     top2_pks peaks;
-    find_top2_peaks(prod, size, 3, &peaks, fp_out);
+    find_top2_peaks_cplx(prod, size, 3, &peaks, fp_out);
     fclose(fp_out);
     // compute noise stats for SNR
     double BW = 0.3e3; // 10 MHz
-    double cn0 = compute_snr(prod, size, peaks.val1, peaks.idx1) + 35;// +10 * log(BW);
+    double cn0 = compute_snr_cplx(prod, size, peaks.val1, peaks.idx1) + 35;// +10 * log(BW);
 
     //printf("%s %d v1=%f idx1=%d ; v2=%f idx2=%d ratio=%f len=%d\n", (proc_gps == 1) ? "GPS" : "GAL", prn2acq[loop].prn, 
     //  peaks.val1, peaks.idx1, peaks.val2, peaks.idx2, (peaks.val1 / peaks.val2), size);
