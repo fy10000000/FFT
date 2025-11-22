@@ -734,8 +734,8 @@ void read_ors(char* input) {
     double BW = 0.3e3; // 10 MHz
     double cn0 = compute_snr(prod, size, peaks.val1, peaks.idx1) + 35;// +10 * log(BW);
 
-    printf("%s %d v1=%f idx1=%d ; v2=%f idx2=%d ratio=%f len=%d\n", (proc_gps == 1) ? "GPS" : "GAL", prn2acq[loop].prn, 
-      peaks.val1, peaks.idx1, peaks.val2, peaks.idx2, (peaks.val1 / peaks.val2), size);
+    //printf("%s %d v1=%f idx1=%d ; v2=%f idx2=%d ratio=%f len=%d\n", (proc_gps == 1) ? "GPS" : "GAL", prn2acq[loop].prn, 
+    //  peaks.val1, peaks.idx1, peaks.val2, peaks.idx2, (peaks.val1 / peaks.val2), size);
     double early = mag(prod[peaks.idx1 - 1]), prompt = peaks.val1, late = mag(prod[peaks.idx1 + 1]);
     double interp = InterpolateCodePhase(peaks.idx1, early, prompt, late);
     //printf("interpolated %f cn0 %f\n", interp, cn0);
@@ -748,12 +748,8 @@ void read_ors(char* input) {
       meas.sats[meas.num_sat].constellation = proc_gps ? SYS_GPS : SYS_GAL;
       
       float ratio = (peaks.val1 / peaks.val2);
-      /*
       printf("Acquired %s %d Doppler %f Hz CodePhase %f [ms] C/N0 %f dB-Hz ratio=%f\n", (proc_gps == 1) ? "GPS" : "GAL",
-        prn2acq[loop].prn, 
-        -prn2acq[loop].doppler, 
-        meas.sats[meas.num_sat].code_phase,
-        meas.sats[meas.num_sat].cno, ratio*ratio);*/
+        prn2acq[loop].prn, -prn2acq[loop].doppler,meas.sats[meas.num_sat].code_phase, meas.sats[meas.num_sat].cno, ratio* ratio);
       meas.num_sat++;
     }
   }
