@@ -653,12 +653,6 @@ void read_ors(char* input) {
 #define SPC  4
 #define SIZE 1024*SPC *4 // 16K for Galileo and 4K for GPS
 
-  typedef struct {
-    int prn;
-    double doppler;
-    int constel;
-  } acq_struct;
-
   acq_struct prn2acq[15] = {0};
   prn2acq[0].prn = 4 ; prn2acq[0].doppler = 791;   prn2acq[0].constel = 1; // GPS
   prn2acq[1].prn = 9 ; prn2acq[1].doppler = -112;  prn2acq[1].constel = 2; // GAL
@@ -861,115 +855,104 @@ void read_E5A(char* input) {
   fseek(fp_1bitcsv, 0L, SEEK_END);
   size_t bytes_to_read = ftell(fp_1bitcsv);
   rewind(fp_1bitcsv);
-
-
   FILE* fp_out = NULL; //output file
-  errno_t er = fopen_s(&fp_out, "C:/Python/out3.csv", "w");
-  if (er != 0 || fp_out == NULL) {
-    fprintf(stderr, "Failed to open output file\n");
-    return;
-  }
-
-  //// Dial in the prn and doppler here ////////////////
-  int gal_proc = 1; // 1 for Galileo, 0 for GPS
+ 
 #define SPC 1
 #define FFT_SIZE 16384 
 #define SAMP 10230 // for 1 ms at 10.23 MHz
   // only 9 and 36 with q31; 10, 6 also works with float
-  int prn = 36;// 6;// 6;// 36;// 9;// 36
-  double doppler = -1*(1580 + 1e6 +2500);// E36:1580 E6: 1261 ; G10:-582, G32:1232
-#define DO_FLOAT // q31 ifndef
+  //int prn = 36;// 6;// 6;// 36;// 9;// 36
+  //double doppler = -1*(1580 + 1e6 +2500);// E36:1580 E6: 1261 ; G10:-582, G32:1232
+
+  acq_struct prn2acq[15] = { 0 };
+  prn2acq[0].prn = 36; prn2acq[0].doppler = 1580; prn2acq[0].constel = 2; // GPS
+  prn2acq[1].prn = 6;  prn2acq[1].doppler = 1261; prn2acq[1].constel = 2; // GAL
+  prn2acq[2].prn = 10; prn2acq[2].doppler = -582; prn2acq[2].constel = 1;
+  prn2acq[3].prn = 32; prn2acq[2].doppler = 1232; prn2acq[2].constel = 1;
+
   /////////////////////////////////////////////////////
   c32* sampl = (c32*)malloc(SAMP * sizeof(c32));
   c32* repli = (c32*)malloc(SAMP * sizeof(c32));
-  memset(sampl, 0, sizeof(c32) * SAMP);
-  memset(repli, 0, sizeof(c32) * SAMP);
-
-  if (sampl == NULL || repli == NULL) {
-    fprintf(stderr, "Memory allocation failed for q32 array.\n");
-    free(sampl); free(repli);
-    return;
-  }
-
-  //up sample
-  c32* up_samp  = (c32*)malloc(FFT_SIZE * sizeof(c32));
+  c32* up_samp = (c32*)malloc(FFT_SIZE * sizeof(c32));
   c32* up_repli = (c32*)malloc(FFT_SIZE * sizeof(c32));
-  c32* up_prod  = (c32*)malloc(FFT_SIZE * sizeof(c32));
+  c32* up_prod = (c32*)malloc(FFT_SIZE * sizeof(c32));
   c32* sum_prod = (c32*)malloc(FFT_SIZE * sizeof(c32));
   float* nci_sum = (float*)malloc(FFT_SIZE * sizeof(float));
-  memset(up_samp , 0, sizeof(c32) * FFT_SIZE);
-  memset(up_repli, 0, sizeof(c32) * FFT_SIZE);
-  memset(up_prod , 0, sizeof(c32) * FFT_SIZE); 
-  memset(nci_sum , 0, sizeof(float) * FFT_SIZE);
-  memset(sum_prod, 0, sizeof(c32) * FFT_SIZE);
+  
+  ///////////////////// main prn loop ////////////////////////////////
+  for (int prn_loop = 0; prn_loop < 4; prn_loop++) {
+    int prn = prn2acq[prn_loop].prn;
+    double doppler = -1 * (prn2acq[prn_loop].doppler + 1e6 + 2500);
+    int gal_proc = (prn2acq[prn_loop].constel == 2) ? 1 : 0;
+    printf("Processing PRN %d Doppler %f constel %d \n", prn, doppler, prn2acq[prn_loop].constel);
 
-  float* replica = (float*)malloc(FFT_SIZE * 2 * sizeof(float));
-  if (replica == NULL) {
-    fprintf(stderr, "Memory allocation failed for 'replica'.\n");
-    return; // Exit or handle the error appropriately
-  }
-  memset(replica, 0, sizeof(float) * FFT_SIZE * 2); 
-
-
-  if (gal_proc) {
+    memset(sampl, 0, sizeof(c32) * SAMP);
+    memset(repli, 0, sizeof(c32) * SAMP);
+    memset(up_samp, 0, sizeof(c32) * FFT_SIZE);
+    memset(up_repli, 0, sizeof(c32) * FFT_SIZE);
+    memset(up_prod, 0, sizeof(c32) * FFT_SIZE);
+    memset(nci_sum, 0, sizeof(float) * FFT_SIZE);
+    memset(sum_prod, 0, sizeof(c32) * FFT_SIZE);
+    
+    if (gal_proc) {
     synth_e5a_prn(prn, -doppler, SAMP, repli, 0);
-  }
-  else { // GPS
-    synth_L5I_prn(prn, -doppler, SAMP, repli, 0);
-  }
-  up_sample_10k_to_16k(repli, up_repli);
-  free(repli);
+    }
+    else { // GPS
+      synth_L5I_prn(prn, -doppler, SAMP, repli, 0);
+    }
+    up_sample_10k_to_16k(repli, up_repli);
 
-  fft_c32(FFT_SIZE, up_repli, true); // forward FFT 
+    fft_c32(FFT_SIZE, up_repli, true); // forward FFT 
 
-  char* context = nullptr;
-  // read in the csv data
-  char line[256];
-  int LEN = SAMP;
-  ///////////// main loop /////////////////////////////////////////////
-  for (int loop = 0; loop < 20; loop++) {
-    int idx = 0;
-    while (!feof(fp_1bitcsv)) {
-      if (fgets(line, sizeof(line), fp_1bitcsv) != NULL) {
-        char* token = strtok_s(line, ",", &context);
-        token = strtok_s(NULL, ",", &context);
-        if (token != NULL) {
-          sampl[idx].r = (float)atof(token);
+    char* context = nullptr;
+    // read in the csv data
+    char line[256];
+    int LEN = SAMP;
+    ///////////// NCI loop /////////////////////////////////////////////
+    for (int loop = 0; loop < 20; loop++) {
+      int idx = 0;
+      while (!feof(fp_1bitcsv)) {
+        if (fgets(line, sizeof(line), fp_1bitcsv) != NULL) {
+          char* token = strtok_s(line, ",", &context);
           token = strtok_s(NULL, ",", &context);
           if (token != NULL) {
-            sampl[idx].i = (float)atof(token);
+            sampl[idx].r = (float)atof(token);
+            token = strtok_s(NULL, ",", &context);
+            if (token != NULL) {
+              sampl[idx].i = (float)atof(token);
+            }
+          }
+          idx++;
+          if ((idx != 0) && (idx % LEN == 0)) {
+            break;
           }
         }
-        idx++;
-        if ((idx != 0) && (idx % LEN == 0)) {
-          break;
-        }
       }
-    }
-    up_sample_10k_to_16k(sampl, up_samp);
+      up_sample_10k_to_16k(sampl, up_samp);
     
-    // note repli has been FFTed already
-    fft_c32(FFT_SIZE, up_samp, true); // forward FFT
-    for (int k = 0; k < FFT_SIZE; k++) { up_prod[k] = mult(up_samp[k], get_conj(up_repli[k])); }
-    fft_c32(FFT_SIZE, up_prod, false); // IFFT
-    for (int i = 0; i < FFT_SIZE; i++) { nci_sum[i] += mag(up_prod[i]); }
+      // note repli has been FFTed already
+      fft_c32(FFT_SIZE, up_samp, true); // forward FFT
+      for (int k = 0; k < FFT_SIZE; k++) { up_prod[k] = mult(up_samp[k], get_conj(up_repli[k])); }
+      fft_c32(FFT_SIZE, up_prod, false); // IFFT
+      for (int i = 0; i < FFT_SIZE; i++) { nci_sum[i] += mag(up_prod[i]); }
 
-    printf("loop %d \n", loop);
-  } // end NCI for loop
+      printf("loop %d \n", loop);
+    } // end NCI for loop
 
+    errno_t er = fopen_s(&fp_out, "C:/Python/out3.csv", "w");
+    if (er != 0 || fp_out == NULL) { fprintf(stderr, "Failed to open output file\n"); return; }
+    top2_pks peaks;
+    find_top2_peaks_real(nci_sum, FFT_SIZE, 3, &peaks, fp_out);
+    fclose(fp_out);
+    double cn0 = compute_snr_real(nci_sum, FFT_SIZE, peaks.val1, peaks.idx1);
+    double interp = InterpolateCodePhase(peaks.idx1, nci_sum[peaks.idx1 - 1], peaks.val1, nci_sum[peaks.idx1 + 1]);
+    printf("ratio %f loc %d interp %f CN0 %f\n", (peaks.val1 / peaks.val2), (int)peaks.idx1, interp, cn0);
 
-  float max = 0; float max2 = 0;
-  int pos = 0; int pos2 = 0;
-  for (int i = 0; i < FFT_SIZE; i++) {
-    float mag = nci_sum[i];
-
-    fprintf(fp_out, "%d, %f \n", i, mag);
-    if (mag > max) { max = mag; pos = i; }
-  }
-  printf("max_float = %f pos=%d frac=%f\n", max, pos, (pos / 16384.0));
+    rewind(fp_1bitcsv);
+  } // end for prn_loop
  
-  fclose(fp_1bitcsv); fclose(fp_out);
-  free(sampl); free(up_samp); free(up_repli); free(up_prod); free(nci_sum); free(sum_prod);
+  fclose(fp_1bitcsv); 
+  free(sampl); free(repli); free(up_samp); free(up_repli); free(up_prod); free(nci_sum); free(sum_prod);
 }
 
 // try differential coherent integration. Insensitive to bit transitions

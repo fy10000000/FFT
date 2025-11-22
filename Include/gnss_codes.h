@@ -33,6 +33,11 @@
 #define PI               3.14159265358979f
 #endif
 
+typedef struct {
+  int prn;
+  double doppler;
+  int constel;
+} acq_struct;
 
 typedef struct {
   size_t idx1;   /* index of highest peak */
