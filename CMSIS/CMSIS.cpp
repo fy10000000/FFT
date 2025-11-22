@@ -903,7 +903,6 @@ void read_E5A(char* input) {
   memset(nci_sum , 0, sizeof(float) * FFT_SIZE);
   memset(sum_prod, 0, sizeof(c32) * FFT_SIZE);
 
-#ifdef DO_FLOAT
   float* replica = (float*)malloc(FFT_SIZE * 2 * sizeof(float));
   if (replica == NULL) {
     fprintf(stderr, "Memory allocation failed for 'replica'.\n");
@@ -911,13 +910,6 @@ void read_E5A(char* input) {
   }
   memset(replica, 0, sizeof(float) * FFT_SIZE * 2); 
 
-#else
-  q31_t* prod    = (q31_t*)malloc(FFT_SIZE * 2 * sizeof(q31_t));
-  q31_t* replica = (q31_t*)malloc(FFT_SIZE * 2 * sizeof(q31_t));
-  memset(replica, 0, sizeof(q31_t) * FFT_SIZE * 2);
-  memset(actual, 0, sizeof(q31_t) * FFT_SIZE * 2);
-  memset(prod, 0, sizeof(q31_t) * FFT_SIZE * 2);
-#endif //DO_FLOAT
 
   if (gal_proc) {
     synth_e5a_prn(prn, -doppler, SAMP, repli, 0);
@@ -935,7 +927,7 @@ void read_E5A(char* input) {
   char line[256];
   int LEN = SAMP;
   ///////////// main loop /////////////////////////////////////////////
-  for (int loop = 0; loop < 5; loop++) {
+  for (int loop = 0; loop < 20; loop++) {
     int idx = 0;
     while (!feof(fp_1bitcsv)) {
       if (fgets(line, sizeof(line), fp_1bitcsv) != NULL) {
@@ -956,71 +948,21 @@ void read_E5A(char* input) {
     }
     up_sample_10k_to_16k(sampl, up_samp);
     
-#ifdef DO_FLOAT
-  
     // note repli has been FFTed already
-
     fft_c32(FFT_SIZE, up_samp, true); // forward FFT
-
-    for (int k = 0; k < FFT_SIZE; k++) { // pt-wise * with conj of replica
-      up_prod[k] = mult(up_samp[k], get_conj(up_repli[k]));
-    }
-
-    //fft_c32(FFT_SIZE, up_prod, false); // IFFT
-    //for (int i = 0; i < FFT_SIZE; i++) { nci_sum[i] += mag(up_prod[i]); }
-
-    for (int k = 0; k < FFT_SIZE; k++) { sum_prod[k] = add(sum_prod[k], up_prod[k]); }
+    for (int k = 0; k < FFT_SIZE; k++) { up_prod[k] = mult(up_samp[k], get_conj(up_repli[k])); }
+    fft_c32(FFT_SIZE, up_prod, false); // IFFT
+    for (int i = 0; i < FFT_SIZE; i++) { nci_sum[i] += mag(up_prod[i]); }
 
     printf("loop %d \n", loop);
-#else
-    // do the q31 thing
-    arm_cfft_radix4_instance_q31 aq;
-    arm_cfft_radix4_instance_q31 rq;
-    
-    for (int i = 0; i < FFT_SIZE; i++) {
-      actual[2 * i] = f2q31(up_samp[i].r * 0.00001);
-      actual[2 * i + 1] = f2q31(up_samp[i].i * 0.00001);
-      replica[2 * i] = f2q31(up_repli[i].r * 0.00001);
-      replica[2 * i + 1] = f2q31(up_repli[i].i * 0.00001);
-    }
-
-    arm_cfft_radix4_init_q31(&aq, FFT_SIZE, 0, 1); // Initialize the CFFT instance for 8-point FFT
-    arm_cfft_radix4_q31(&aq, actual);
-
-    arm_cfft_radix4_init_q31(&rq, FFT_SIZE, 0, 1); // Initialize the CFFT instance for 8-point FFT
-    arm_cfft_radix4_q31(&rq, replica);
-    
-    // Mult Actual with conjugate of Replica
-    for (int i = 0; i < FFT_SIZE; i++) {
-      float Ar = actual[i * 2], Ai = actual[i * 2 + 1];
-      float Rr = replica[i * 2], Ri = replica[i * 2 + 1];
-      // A * conj(R)
-      prod[i * 2] = q31_add(q31_mul(Ar, Rr), q31_mul(Ai, Ri));     // (Ar + jAi) * (Rr - jRi)
-      prod[i * 2 + 1] = q31_sub(q31_mul(Ai, Rr), q31_mul(Ar, Ri));     // 
-    }
-
-    arm_cfft_radix4_instance_q31 conv;
-    arm_cfft_radix4_init_q31(&conv, FFT_SIZE, 1, 1); // inverse FFT
-    arm_cfft_radix4_q31(&conv, prod);
-
-    for (int i = 0; i < FFT_SIZE; i++) {
-      nci_sum[i] += sqrt(prod[2 * i] * prod[2 * i] + prod[2 * i + 1] * prod[2 * i + 1]);
-    }
-
-    printf("loop %d \n", loop);
-#endif //DO_FLOAT
   } // end NCI for loop
 
-  fft_c32(FFT_SIZE, sum_prod, false); // IFFT
-  for (int i = 0; i < FFT_SIZE; i++) { nci_sum[i] = mag(sum_prod[i]); }
 
   float max = 0; float max2 = 0;
   int pos = 0; int pos2 = 0;
   for (int i = 0; i < FFT_SIZE; i++) {
     float mag = nci_sum[i];
-#ifndef DO_FLOAT
-    if (i <= 8 || i >= FFT_SIZE - 8) { mag = 0; } // nix edges
-#endif
+
     fprintf(fp_out, "%d, %f \n", i, mag);
     if (mag > max) { max = mag; pos = i; }
   }
@@ -1028,10 +970,6 @@ void read_E5A(char* input) {
  
   fclose(fp_1bitcsv); fclose(fp_out);
   free(sampl); free(up_samp); free(up_repli); free(up_prod); free(nci_sum); free(sum_prod);
-
-#ifndef DO_FLOAT
-  free(prod); free(replica);
-#endif 
 }
 
 // try differential coherent integration. Insensitive to bit transitions
@@ -1795,7 +1733,7 @@ int main(int argc,char* argv[])
     return 0;
   }
 
-  if (0) {
+  if (1) {
     read_E5A((char*)"C:/work/Baseband/TestData/E5/t14/G_2024_10_21_22_29_43.047.csv");
     //read_E5A((char*)"C:/work/Baseband/TestData/E5/t14/G_2024_10_21_22_32_30.500_resampled_16368Hz.csv");
     //read_E5A((char*)"C:/work/Baseband/TestData/E5/t14/G_2024_10_21_22_29_43.047_resampled_16368Hz.csv");
@@ -1806,7 +1744,7 @@ int main(int argc,char* argv[])
     read_L1((char*)"C:/Python/out-1bit_1spc_1bit.csv");// "C:/work/Baseband/TestData/E5/t14/G_2024_10_21_22_29_43.047.csv");
   }
 
-  if (1) {
+  if (0) {
     read_ors((char*)"C:/work/Baseband/TestData/100ms/bw25/G_2025_09_03_23_04_45.ors");
     //read_ors((char*)"C:/work/Baseband/TestData/100ms/bw25/G_2025_09_03_23_22_41.ors");
     //read_ors((char*)"C:/work/Baseband/TestData/100ms/bw25/G_2025_09_03_23_04_45.ors");
