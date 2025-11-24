@@ -654,21 +654,23 @@ void read_ors(char* input) {
 #define SIZE 1024*SPC *4 // 16K for Galileo and 4K for GPS
 
   acq_struct prn2acq[15] = {0};
-  prn2acq[0].prn = 4 ; prn2acq[0].doppler = 791;   prn2acq[0].constel = 1; // GPS
-  prn2acq[1].prn = 9 ; prn2acq[1].doppler = -112;  prn2acq[1].constel = 2; // GAL
-  prn2acq[2].prn = 6 ; prn2acq[2].doppler = -1243; prn2acq[2].constel = 2;
-  prn2acq[3].prn = 26; prn2acq[3].doppler = -544;  prn2acq[3].constel = 1;
-  prn2acq[4].prn = 3 ; prn2acq[4].doppler = -2584; prn2acq[4].constel = 1; 
-  prn2acq[5].prn = 31; prn2acq[5].doppler = 1915;  prn2acq[5].constel = 2;
-  prn2acq[6].prn = 5 ; prn2acq[6].doppler = 2268;  prn2acq[6].constel = 2;
-  prn2acq[7].prn = 16; prn2acq[7].doppler = 2822;  prn2acq[7].constel = 1;
-  prn2acq[8].prn = 9 ; prn2acq[8].doppler = 2986;  prn2acq[8].constel = 1;
-  prn2acq[9].prn = 31; prn2acq[9].doppler = -2867; prn2acq[9].constel = 1;
-  prn2acq[10].prn = 23; prn2acq[10].doppler = -867;  prn2acq[10].constel = 2;
-  prn2acq[11].prn = 4 ; prn2acq[11].doppler = -2020; prn2acq[11].constel = 2;
-  prn2acq[12].prn = 34; prn2acq[12].doppler = -1027; prn2acq[12].constel = 2;
-  prn2acq[13].prn = 6 ; prn2acq[13].doppler = -882;  prn2acq[13].constel = 1;
-  prn2acq[14].prn = 24; prn2acq[14].doppler = 3545;  prn2acq[14].constel = 2;
+  int cnt = 0;
+  prn2acq[cnt].prn = 3;  prn2acq[cnt].doppler = -2584; prn2acq[cnt].constel = 1; cnt++;// GPS
+  prn2acq[cnt].prn = 4;  prn2acq[cnt].doppler = 791;   prn2acq[cnt].constel = 1; cnt++;
+  prn2acq[cnt].prn = 6;  prn2acq[cnt].doppler = -882;  prn2acq[cnt].constel = 1; cnt++;
+  prn2acq[cnt].prn = 9;  prn2acq[cnt].doppler = 2986;  prn2acq[cnt].constel = 1; cnt++;
+  prn2acq[cnt].prn = 16; prn2acq[cnt].doppler = 2822;  prn2acq[cnt].constel = 1; cnt++;
+  prn2acq[cnt].prn = 26; prn2acq[cnt].doppler = -544;  prn2acq[cnt].constel = 1; cnt++;
+  prn2acq[cnt].prn = 31; prn2acq[cnt].doppler = -2867; prn2acq[cnt].constel = 1; cnt++;
+  
+  prn2acq[cnt].prn = 4;  prn2acq[cnt].doppler = -2020; prn2acq[cnt].constel = 2; cnt++; // GAL
+  prn2acq[cnt].prn = 5;  prn2acq[cnt].doppler = 2268;  prn2acq[cnt].constel = 2; cnt++;
+  prn2acq[cnt].prn = 6;  prn2acq[cnt].doppler = -1243; prn2acq[cnt].constel = 2; cnt++;
+  prn2acq[cnt].prn = 9 ; prn2acq[cnt].doppler = -112;  prn2acq[cnt].constel = 2; cnt++;
+  prn2acq[cnt].prn = 23; prn2acq[cnt].doppler = -867;  prn2acq[cnt].constel = 2; cnt++;
+  prn2acq[cnt].prn = 24; prn2acq[cnt].doppler = 3545;  prn2acq[cnt].constel = 2; cnt++;
+  prn2acq[cnt].prn = 31; prn2acq[cnt].doppler = 1915;  prn2acq[cnt].constel = 2; cnt++;
+  prn2acq[cnt].prn = 34; prn2acq[cnt].doppler = -1027; prn2acq[cnt].constel = 2; cnt++;
   
   /////////////////////////////////////////////////////
 
@@ -726,7 +728,7 @@ void read_ors(char* input) {
     fclose(fp_out);
     // compute noise stats for SNR
     double BW = 0.3e3; // 10 MHz
-    double cn0 = compute_snr_cplx(prod, size, peaks.val1, peaks.idx1) + 35;// +10 * log(BW);
+    double cn0 = compute_snr_cplx(prod, size, peaks) + 35;// +10 * log(BW);
 
     //printf("%s %d v1=%f idx1=%d ; v2=%f idx2=%d ratio=%f len=%d\n", (proc_gps == 1) ? "GPS" : "GAL", prn2acq[loop].prn, 
     //  peaks.val1, peaks.idx1, peaks.val2, peaks.idx2, (peaks.val1 / peaks.val2), size);
@@ -747,7 +749,14 @@ void read_ors(char* input) {
       meas.num_sat++;
     }
   }
-  write_msb(&meas, (char*)"C:/Python/out2.bin");
+  int num_bytes = write_msb(&meas, (char*)"C:/Python/out2.bin");
+  bb_meas_t check = { 0 };
+  FILE* test = NULL;
+  errno_t er2 = fopen_s(&test, "C:/Python/out2.bin", "rb");
+  uint8_t tbuff[50] = { 0 };
+  fread(tbuff,1, num_bytes,test);
+  read_bb_msb(tbuff, num_bytes, &check);
+  fclose(test);
    
   free(iandq); free(repli); free(prod);
   //////////////////////////////////////////////////////
@@ -864,26 +873,33 @@ void read_E5A(char* input) {
   //int prn = 36;// 6;// 6;// 36;// 9;// 36
   //double doppler = -1*(1580 + 1e6 +2500);// E36:1580 E6: 1261 ; G10:-582, G32:1232
 
-  acq_struct prn2acq[15] = { 0 };
-  prn2acq[0].prn = 36; prn2acq[0].doppler = 1580; prn2acq[0].constel = 2; // GPS
-  prn2acq[1].prn = 6;  prn2acq[1].doppler = 1261; prn2acq[1].constel = 2; // GAL
-  prn2acq[2].prn = 10; prn2acq[2].doppler = -582; prn2acq[2].constel = 1;
-  prn2acq[3].prn = 32; prn2acq[3].doppler = 1232; prn2acq[3].constel = 1;
+  acq_struct prn2acq[15] = { 0 }; int cnt = 0;
+  prn2acq[cnt].prn = 10; prn2acq[cnt].doppler = -582;  prn2acq[cnt].constel = 1; cnt++;
+  prn2acq[cnt].prn = 32; prn2acq[cnt].doppler = 1232;  prn2acq[cnt].constel = 1; cnt++;
+  
+  prn2acq[cnt].prn = 4;  prn2acq[cnt].doppler = 317;   prn2acq[cnt].constel = 2; cnt++;
+  prn2acq[cnt].prn = 6;  prn2acq[cnt].doppler = 1261;  prn2acq[cnt].constel = 2; cnt++;
+  prn2acq[cnt].prn = 9;  prn2acq[cnt].doppler = 1725;  prn2acq[cnt].constel = 2; cnt++;
+  prn2acq[cnt].prn = 10; prn2acq[cnt].doppler = -1513; prn2acq[cnt].constel = 2; cnt++;
+  prn2acq[cnt].prn = 12; prn2acq[cnt].doppler = -2430; prn2acq[cnt].constel = 2; cnt++;
+  prn2acq[cnt].prn = 19; prn2acq[cnt].doppler = -2828; prn2acq[cnt].constel = 2; cnt++;
+  prn2acq[cnt].prn = 36; prn2acq[cnt].doppler = 1580;  prn2acq[cnt].constel = 2; cnt++;
+  
 
   /////////////////////////////////////////////////////
-  c32* sampl = (c32*)malloc(SAMP * sizeof(c32));
-  c32* repli = (c32*)malloc(SAMP * sizeof(c32));
-  c32* up_samp = (c32*)malloc(FFT_SIZE * sizeof(c32));
-  c32* up_repli = (c32*)malloc(FFT_SIZE * sizeof(c32));
-  c32* up_prod = (c32*)malloc(FFT_SIZE * sizeof(c32));
-  c32* sum_prod = (c32*)malloc(FFT_SIZE * sizeof(c32));
+  c32* sampl     = (c32*)malloc(SAMP * sizeof(c32));
+  c32* repli     = (c32*)malloc(SAMP * sizeof(c32));
+  c32* up_samp   = (c32*)malloc(FFT_SIZE * sizeof(c32));
+  c32* up_repli  = (c32*)malloc(FFT_SIZE * sizeof(c32));
+  c32* up_prod   = (c32*)malloc(FFT_SIZE * sizeof(c32));
+  c32* sum_prod  = (c32*)malloc(FFT_SIZE * sizeof(c32));
   float* nci_sum = (float*)malloc(FFT_SIZE * sizeof(float));
 
   bb_meas_t meas;
   memset(&meas, 0, sizeof(bb_meas_sat_t)); 
   
   ///////////////////// main prn loop ////////////////////////////////
-  for (int prn_loop = 0; prn_loop < 4; prn_loop++) {
+  for (int prn_loop = 0; prn_loop < 9; prn_loop++) {
     int prn = prn2acq[prn_loop].prn;
     double doppler = -1 * (prn2acq[prn_loop].doppler + 1e6 + 2500);
     int gal_proc = (prn2acq[prn_loop].constel == 2) ? 1 : 0;
@@ -947,9 +963,9 @@ void read_E5A(char* input) {
     top2_pks peaks;
     find_top2_peaks_real(nci_sum, FFT_SIZE, 3, &peaks, fp_out);
     fclose(fp_out);
-    double cn0 = compute_snr_real(nci_sum, FFT_SIZE, peaks.val1, peaks.idx1);
+    double cn0 = compute_snr_real(nci_sum, FFT_SIZE, peaks) + 35.0;
     double interp = InterpolateCodePhase(peaks.idx1, nci_sum[peaks.idx1 - 1], peaks.val1, nci_sum[peaks.idx1 + 1]);
-    //printf("ratio %f loc %d interp %f CN0 %f\n", (peaks.val1 / peaks.val2), (int)peaks.idx1, interp, cn0);
+    printf("Avail PRN %s%d ratio %f loc %d interp %f CN0 %f\n", (gal_proc == 1) ? "GAL" : "GPS", prn2acq[prn_loop].prn, (peaks.val1 / peaks.val2), (int)peaks.idx1, interp, cn0);
 
     if ((peaks.val1 / peaks.val2) > 1.29) {
       meas.sats[meas.num_sat].prn = prn2acq[prn_loop].prn;
@@ -959,14 +975,22 @@ void read_E5A(char* input) {
       meas.sats[meas.num_sat].constellation = gal_proc ? SYS_GAL : SYS_GPS;
 
       float ratio = (peaks.val1 / peaks.val2);
-      printf("Acquired %s %d Doppler %f Hz CodePhase %f [ms] C/N0 %f dB-Hz ratio=%f\n", (gal_proc == 2) ? "GAL" : "GPS",
-        prn2acq[prn_loop].prn, -prn2acq[prn_loop].doppler, meas.sats[meas.num_sat].code_phase, meas.sats[meas.num_sat].cno, ratio * ratio);
+      //printf("Acquired %s %d Doppler %f Hz CodePhase %f [ms] C/N0 %f dB-Hz ratio=%f\n", (gal_proc == 1) ? "GAL" : "GPS",
+      //  prn2acq[prn_loop].prn, -prn2acq[prn_loop].doppler, meas.sats[meas.num_sat].code_phase, meas.sats[meas.num_sat].cno, ratio * ratio);
       meas.num_sat++;
     }
 
     rewind(fp_1bitcsv);
   } // end for prn_loop
-  write_msb(&meas, (char*)"C:/Python/E5A-L5.bin");
+  int num_bytes = write_msb(&meas, (char*)"C:/Python/L5-E5A.msb");
+  bb_meas_t check = { 0 };
+  FILE* test = NULL;
+  errno_t er2 = fopen_s(&test, "C:/Python/L5-E5A.msb", "rb");
+  uint8_t tbuff[50] = { 0 };
+  fread(tbuff, 1, num_bytes, test);
+  read_bb_msb(tbuff, num_bytes, &check);
+  fclose(test);
+
  
   fclose(fp_1bitcsv); 
   free(sampl); free(repli); free(up_samp); free(up_repli); free(up_prod); free(nci_sum); free(sum_prod);

@@ -1107,11 +1107,11 @@ double InterpolateCodePhase(uint32_t index, double earlyPower, double promptPowe
   return interpolatedIndex;
 }
 
-double compute_snr_cplx(c32* convol, int cov_size, double peak, int peak_loc) {
+double compute_snr_cplx(c32* convol, int cov_size, top2_pks peaks) {
   double sum = 0, sum_sq = 0;
   for (int i = 0; i < cov_size; i++) {
     float magn = mag(convol[i]);
-    if (abs(i - peak_loc) > 2) {
+    if (abs(i - peaks.idx1) > 2) {
       sum += magn;
       sum_sq += magn * magn;
     }
@@ -1119,25 +1119,26 @@ double compute_snr_cplx(c32* convol, int cov_size, double peak, int peak_loc) {
   double mean = sum / (cov_size - 5);
   double var = (sum_sq / (cov_size - 5)) - (mean * mean);
   //double snr_lin = 10.0 * log10((peak * peak) / (var * (float)(cov_size - 5)));
-  double snr_lin = peak / mean;// (peak - mean) / var
+  double snr_lin = peaks.val1 / mean;// (peak - mean) / var
   double snr = 10.0 * log10(snr_lin);
   return snr;
 }
 
-double compute_snr_real(float* convol, int cov_size, double peak, int peak_loc) {
+double compute_snr_real(float* convol, int cov_size, top2_pks peaks) {
   double sum = 0, sum_sq = 0;
   for (int i = 0; i < cov_size; i++) {
     float magn = convol[i];
-    if (abs(i - peak_loc) > 2) {
+    if (abs(i - peaks.idx1) > 2) {
       sum += magn;
       sum_sq += magn * magn;
     }
   }
   double mean = sum / (cov_size - 5);
   double var = (sum_sq / (cov_size - 5)) - (mean * mean);
-  //double snr_lin = 10.0 * log10((peak * peak) / (var * (float)(cov_size - 5)));
-  double snr_lin = peak / mean;// (peak - mean) / var
-  double snr = 10.0 * log10(snr_lin);
+  //double snr_lin = 10.0 * log10((peaks.val1) / sqrt(var));
+  double snr_lin = (peaks.val1 - mean) / (peaks.val2 - mean);
+  //printf("SNR Lin2: %f , SNR Lin: %f \n", snr_lin2, snr_lin);
+  double snr = 20.0 * log10(snr_lin); // x by 20 for power
   return snr;
 }
 

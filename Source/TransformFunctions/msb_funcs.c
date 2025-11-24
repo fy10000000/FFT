@@ -105,9 +105,9 @@ extern int write_bb_msb(const bb_meas_t* measurements, uint8_t* bin_buff, int bu
   // write per prn data
   for (int i = 0; i < measurements->num_sat; i++) {
     if (measurements->sats[i].constellation == SYS_GPS) {
-      int64_t code_phase = (int64_t)(measurements->sats[i].code_phase / 9.54e-7f);
-      int64_t doppler = (int64_t)(measurements->sats[i].doppler / 2.0f);
-      int64_t cno = (int64_t)((measurements->sats[i].cno - 28) / 4);
+      int64_t code_phase = (int64_t)round(measurements->sats[i].code_phase / 9.54e-7f);
+      int64_t doppler = (int64_t)round(measurements->sats[i].doppler / 2.0f);
+      int64_t cno = (int64_t)round((round(measurements->sats[i].cno) - 28) / 2.0f);
       bit_writer(&buff, code_phase, 20);
       bit_writer(&buff, doppler, 13);
       bit_writer(&buff, cno, 4);
@@ -133,16 +133,16 @@ extern int write_bb_msb(const bb_meas_t* measurements, uint8_t* bin_buff, int bu
     // write per prn data
     for (int i = 0; i < measurements->num_sat; i++) {
       if (measurements->sats[i].constellation == SYS_GAL) {
-        int64_t code_phase = (int64_t)(measurements->sats[i].code_phase / 9.54e-7f);
-        int64_t doppler = (int64_t)(measurements->sats[i].doppler / 2.0f);
-        int64_t cno = (int64_t)((measurements->sats[i].cno - 28) / 4);
+        int64_t code_phase = (int64_t)round(measurements->sats[i].code_phase / 9.54e-7f);
+        int64_t doppler = (int64_t)round(measurements->sats[i].doppler / 2.0f);
+        int64_t cno = (int64_t)round((round(measurements->sats[i].cno) - 28) / 2.0f);
         bit_writer(&buff, code_phase, 22);
         bit_writer(&buff, doppler, 13);
         bit_writer(&buff, cno, 4);
       }
     }
   }
-  return buff.bit_pos / 8;
+  return (int) ceil(buff.bit_pos / 8.0f);
 }
 
 /// <summary>
@@ -185,7 +185,7 @@ extern void read_bb_msb(uint8_t* bin_buff, int bin_size, bb_meas_t* measurements
     measurements->sats[i].time_tag = measurements->time + measurements->sec;
     measurements->sats[i].pseudorange = 0;
     measurements->sats[i].code_phase = ((float)code_phase) * 9.54e-7f;
-    measurements->sats[i].cno = (float)(cno * 4 + 28);
+    measurements->sats[i].cno = (float)(cno * 2 + 28);
     measurements->sats[i].doppler = (float)(2 * doppler);
     measurements->sats[i].prn = used_gps_svs[i];
     measurements->sats[i].constellation = SYS_GPS; // GPS constellation
@@ -218,7 +218,7 @@ extern void read_bb_msb(uint8_t* bin_buff, int bin_size, bb_meas_t* measurements
       measurements->sats[num_gps + i].time_tag = measurements->time + measurements->sec;
       measurements->sats[num_gps + i].pseudorange = 0;
       measurements->sats[num_gps + i].code_phase = ((float)code_phase) * 9.54e-7f;
-      measurements->sats[num_gps + i].cno = (float)(cno * 4 + 28);
+      measurements->sats[num_gps + i].cno = (float)(cno * 2 + 28);
       measurements->sats[num_gps + i].doppler = (float)(2 * doppler);
       measurements->sats[num_gps + i].prn = used_gal_svs[i];
       measurements->sats[num_gps + i].constellation = SYS_GAL; // Galileo constellation
