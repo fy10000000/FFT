@@ -1209,3 +1209,39 @@ int compareConstelPRN(const void* a, const void* b) {
     }
   }
 }
+
+int parse_log(char* log_file, char* record, acq_struct* acq_results) {
+  // record needs to have path removed to find just file name
+  record = strrchr(record, '/') + 1;
+  FILE* fp_out = NULL; //output file
+  errno_t er = fopen_s(&fp_out, log_file, "r");
+  char* next_token = NULL;
+  char line[512]; bool find_ast = false;
+  int rec_cnt = 0;
+  while (fgets(line, sizeof(line), fp_out)) {
+    if (strstr(line, "Reading file:") != NULL) {
+      if (strstr(line, record) != NULL) { find_ast = true; } // now start looking for %AST
+    }
+    if (find_ast) {
+      if (strstr(line, "%AST") != NULL) {
+        if (strstr(line, "Number of visible") != NULL) { continue; } //%AST,Number of visible satellites (after adjusting with -331 (+/- 50): 20
+        //%AST, 343150.451, G04, 413.48, 87.97, 26.49
+        char* token = strtok_s(line, ",", &next_token);
+        strtok_s(NULL, ",", &next_token);
+        token = strtok_s(NULL, ",", &next_token);
+        acq_results[rec_cnt].constel = (token[1] == 'G') ? 1 : 2; // G or E
+        acq_results[rec_cnt].prn = atoi(&token[2]); // skip G
+        token = strtok_s(NULL, ",", &next_token);
+        acq_results[rec_cnt].doppler = atof(token);
+        token = strtok_s(NULL, ",", &next_token);
+        acq_results[rec_cnt].elev = atof(token);
+        //token = strtok_s(NULL, ",", &next_token);
+        //acq_results[rec_cnt].azim = atof(token);
+        rec_cnt++;
+      }
+    }
+    if (strstr(line, "Noise floor") != NULL && find_ast == true) { break; } //stop looking
+  }
+  fclose(fp_out);
+  return rec_cnt;
+}

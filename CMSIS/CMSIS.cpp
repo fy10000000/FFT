@@ -652,9 +652,9 @@ void read_ors(char* input) {
 #define SPC  4
 #define SIZE 1024*SPC *4 // 16K for Galileo and 4K for GPS
 
-  acq_struct prn2acq[15] = {0};
-  int cnt = 0;
+  acq_struct prn2acq[30] = {0};
   
+  int cnt = parse_log((char*)"C:/work/Baseband/TestData/100ms/bw25/replay_bw25.log", input, prn2acq);
   //  G_2025_09_03_23_04_45.ors
   /*
   prn2acq[cnt].prn = 4;  prn2acq[cnt].doppler = 791;   prn2acq[cnt].constel = 1; cnt++;
@@ -719,6 +719,7 @@ void read_ors(char* input) {
   */
 
   //G_2025_09_03_23_19_10.ors
+  /*
   prn2acq[cnt].prn = 4;  prn2acq[cnt].doppler = 413.48;  prn2acq[cnt].constel = 1; cnt++;
   prn2acq[cnt].prn = 9;  prn2acq[cnt].doppler = -320.46;  prn2acq[cnt].constel = 2; cnt++;
   prn2acq[cnt].prn = 31;  prn2acq[cnt].doppler = 1557.68;  prn2acq[cnt].constel = 2; cnt++;
@@ -730,15 +731,13 @@ void read_ors(char* input) {
   prn2acq[cnt].prn = 3;  prn2acq[cnt].doppler = -2934.39;  prn2acq[cnt].constel = 1; cnt++;
   prn2acq[cnt].prn = 23;  prn2acq[cnt].doppler = -1216.65;  prn2acq[cnt].constel = 2; cnt++;
   prn2acq[cnt].prn = 31;  prn2acq[cnt].doppler = -3019.53;  prn2acq[cnt].constel = 1; cnt++;
-  
+  */
   
   /////////////////////////////////////////////////////
 
-  // sort by prn 
+  // sort by constel & prn for expected order
   qsort(prn2acq, cnt, sizeof(acq_struct), compareConstelPRN);
-  for (int i = 0; i < cnt; i++) {
-    printf("cons %d prn %d \n", prn2acq[i].constel, prn2acq[i].prn);
-  }
+  //for (int i = 0; i < cnt; i++) { printf("cons %d prn %d \n", prn2acq[i].constel, prn2acq[i].prn); }
 
   c32* iandq = (c32*)malloc(SIZE * sizeof(c32));
   c32* signl = (c32*)malloc(SIZE * sizeof(c32));
@@ -838,7 +837,7 @@ void sim_E5A() {
   #define FFT_SIZE 16384
   int    prn_a = 5, prn_b = 15;
   double doppler_a = 1580, doppler_b = -2580;
-  int    offset = 1;// 10229;
+  int    offset = 300;// 10229;
   float  up_offset = (float)offset * 16384.0f / 10230.0f; // upsampled offset
   printf("should be %f \n", up_offset);
 
@@ -1748,6 +1747,8 @@ void test_quasi_pilot3() {
   free(out);
 }
 
+
+
 /**
  * Main for testing and developing under Visual Studio 2022
  */
@@ -1766,6 +1767,10 @@ int main(int argc,char* argv[])
 //#define DO_Q15_RADIX4
 //#define DO_Q31_RADIX2 
 //#define DO_Q31_RADIX4
+
+  //acq_struct acq_results[32] = { 0 };
+  //parse_log((char*)"C:/work/Baseband/TestData/100ms/bw25/replay_bw25.log", (char*)"G_2025_09_03_23_19_10.ors", acq_results);
+  //return 0;
 
   if (0) {
     // set to 1 above if need to recalculate some of the twiddleCoefs
@@ -1799,7 +1804,7 @@ int main(int argc,char* argv[])
 
   if (1) {
     // G_2025_09_03_23_04_45.ors G_2025_09_03_23_04_56.ors G_2025_09_03_23_05_33.ors G_2025_09_03_23_04_56.ors G_2025_09_03_23_12_45.ors G_2025_09_03_23_19_10.ors
-    read_ors((char*)"C:/work/Baseband/TestData/100ms/bw25/G_2025_09_03_23_19_10.ors");
+    read_ors((char*)"C:/work/Baseband/TestData/100ms/bw25/G_2025_09_03_23_04_45.ors");
     //read_ors((char*)"C:/work/Baseband/TestData/100ms/bw25/G_2025_09_03_23_22_41.ors");
     //read_ors((char*)"C:/work/Baseband/TestData/100ms/bw25/G_2025_09_03_23_04_45.ors");
     //read_ors((char*)"C:/work/Baseband/TestData/G_2025_06_05_22_11_26.ors");

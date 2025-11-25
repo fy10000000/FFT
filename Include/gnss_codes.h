@@ -37,6 +37,7 @@ typedef struct {
   int prn;
   double doppler;
   int constel;
+  double elev;
 } acq_struct;
 
 typedef struct {
@@ -126,6 +127,8 @@ int find_top2_peaks_cplx(const c32* data, int data_size, int pk_sep, top2_pks* p
 int find_top2_peaks_real(const float* data, int data_size, int pk_sep, top2_pks* peaks, FILE* fp_out);
 
 int compareConstelPRN(const void* a, const void* b);
+
+int parse_log(char* log_file, char* record, acq_struct* acq_results);
 
 #ifdef __cplusplus
 }
