@@ -494,7 +494,7 @@ void read_L1(char* input) {
   fseek(fp_msb, 0L, SEEK_END);
   size_t bytes_to_read = ftell(fp_msb);
   rewind(fp_msb);
-  
+
 
   FILE* fp_out = NULL; //output file
   errno_t er = fopen_s(&fp_out, "C:/Python/out5.csv", "w");
@@ -502,10 +502,10 @@ void read_L1(char* input) {
     fprintf(stderr, "Failed to open output file\n");
     return;
   }
- 
+
   //// Dial in the prn and doppler here ////////////////
-  #define SPC 1 // samples per chip
-  #define SIZE 1024*SPC *1 // 1 for GPS 4 for Gal -> 16K for Galileo and 4K for GPS
+#define SPC 1 // samples per chip
+#define SIZE 1024*SPC *1 // 1 for GPS 4 for Gal -> 16K for Galileo and 4K for GPS
   int proc_gps = 1; // 1 for GPS, 0 for Galileo
   int prn = 3;// 4;// 10;// 10;// 11;// 4;
   double doppler = -2570;// 805;// 1232;// -582;// -2263;// -912;// 67;
@@ -606,7 +606,6 @@ void read_L1(char* input) {
     }
     printf("max_float = %f pos=%d\n", max, pos);
   }
-
 }
 
 void read_ors(char* input) {
@@ -655,14 +654,15 @@ void read_ors(char* input) {
 
   acq_struct prn2acq[15] = {0};
   int cnt = 0;
-  prn2acq[cnt].prn = 3;  prn2acq[cnt].doppler = -2584; prn2acq[cnt].constel = 1; cnt++;// GPS
+  
+  //  G_2025_09_03_23_04_45.ors
+  /*
   prn2acq[cnt].prn = 4;  prn2acq[cnt].doppler = 791;   prn2acq[cnt].constel = 1; cnt++;
   prn2acq[cnt].prn = 6;  prn2acq[cnt].doppler = -882;  prn2acq[cnt].constel = 1; cnt++;
   prn2acq[cnt].prn = 9;  prn2acq[cnt].doppler = 2986;  prn2acq[cnt].constel = 1; cnt++;
   prn2acq[cnt].prn = 16; prn2acq[cnt].doppler = 2822;  prn2acq[cnt].constel = 1; cnt++;
   prn2acq[cnt].prn = 26; prn2acq[cnt].doppler = -544;  prn2acq[cnt].constel = 1; cnt++;
   prn2acq[cnt].prn = 31; prn2acq[cnt].doppler = -2867; prn2acq[cnt].constel = 1; cnt++;
-  
   prn2acq[cnt].prn = 4;  prn2acq[cnt].doppler = -2020; prn2acq[cnt].constel = 2; cnt++; // GAL
   prn2acq[cnt].prn = 5;  prn2acq[cnt].doppler = 2268;  prn2acq[cnt].constel = 2; cnt++;
   prn2acq[cnt].prn = 6;  prn2acq[cnt].doppler = -1243; prn2acq[cnt].constel = 2; cnt++;
@@ -671,8 +671,74 @@ void read_ors(char* input) {
   prn2acq[cnt].prn = 24; prn2acq[cnt].doppler = 3545;  prn2acq[cnt].constel = 2; cnt++;
   prn2acq[cnt].prn = 31; prn2acq[cnt].doppler = 1915;  prn2acq[cnt].constel = 2; cnt++;
   prn2acq[cnt].prn = 34; prn2acq[cnt].doppler = -1027; prn2acq[cnt].constel = 2; cnt++;
+  prn2acq[cnt].prn = 3;  prn2acq[cnt].doppler = -2584; prn2acq[cnt].constel = 1; cnt++;// GPS
+  */
+
+  // G_2025_09_03_23_05_33.ors
+  /*
+  prn2acq[cnt].prn = 3;  prn2acq[cnt].doppler = -2582.95; prn2acq[cnt].constel = 1; cnt++;
+  prn2acq[cnt].prn = 4;  prn2acq[cnt].doppler = 792.66;   prn2acq[cnt].constel = 1; cnt++;
+  prn2acq[cnt].prn = 9;  prn2acq[cnt].doppler = 2994.19;  prn2acq[cnt].constel = 1; cnt++;
+  prn2acq[cnt].prn = 16; prn2acq[cnt].doppler = 2818.65;  prn2acq[cnt].constel = 1; cnt++;
+  prn2acq[cnt].prn = 26; prn2acq[cnt].doppler = -551.65;  prn2acq[cnt].constel = 1; cnt++;
+  prn2acq[cnt].prn = 31; prn2acq[cnt].doppler = -2857.60; prn2acq[cnt].constel = 1; cnt++;
+  prn2acq[cnt].prn = 5;  prn2acq[cnt].doppler = 2280.17;  prn2acq[cnt].constel = 2; cnt++;
+  prn2acq[cnt].prn = 6;  prn2acq[cnt].doppler = -1232.54; prn2acq[cnt].constel = 2; cnt++;
+  prn2acq[cnt].prn = 9;  prn2acq[cnt].doppler = -103.26;  prn2acq[cnt].constel = 2; cnt++;
+  prn2acq[cnt].prn = 23; prn2acq[cnt].doppler = -865.79;  prn2acq[cnt].constel = 2; cnt++;
+  prn2acq[cnt].prn = 31; prn2acq[cnt].doppler = 1917.15;  prn2acq[cnt].constel = 2; cnt++;
+  */
+
+  //G_2025_09_03_23_04_56.ors
+  /*
+  prn2acq[cnt].prn = 4;  prn2acq[cnt].doppler = 791.11;  prn2acq[cnt].constel = 1; cnt++;
+  prn2acq[cnt].prn = 9;  prn2acq[cnt].doppler = -111.67;  prn2acq[cnt].constel = 2; cnt++;
+  prn2acq[cnt].prn = 6;  prn2acq[cnt].doppler = -1242.55;  prn2acq[cnt].constel = 2; cnt++;
+  prn2acq[cnt].prn = 26; prn2acq[cnt].doppler = -544.44;  prn2acq[cnt].constel = 1; cnt++;
+  prn2acq[cnt].prn = 3;  prn2acq[cnt].doppler = -2583.86;  prn2acq[cnt].constel = 1; cnt++;
+  prn2acq[cnt].prn = 31; prn2acq[cnt].doppler = 1914.56;  prn2acq[cnt].constel = 2; cnt++;
+  prn2acq[cnt].prn = 5;  prn2acq[cnt].doppler = 2267.56;  prn2acq[cnt].constel = 2; cnt++;
+  prn2acq[cnt].prn = 16; prn2acq[cnt].doppler = 2821.88;  prn2acq[cnt].constel = 1; cnt++;
+  prn2acq[cnt].prn = 9;  prn2acq[cnt].doppler = 2985.82;  prn2acq[cnt].constel = 1; cnt++;
+  prn2acq[cnt].prn = 31; prn2acq[cnt].doppler = -2867.21;  prn2acq[cnt].constel = 1; cnt++;
+  prn2acq[cnt].prn = 23; prn2acq[cnt].doppler = -867.52;  prn2acq[cnt].constel = 2; cnt++;
+  */
+  //G_2025_09_03_23_12_45.ors
+  /*
+  prn2acq[cnt].prn = 4;  prn2acq[cnt].doppler = 594.76;  prn2acq[cnt].constel = 1; cnt++;
+  prn2acq[cnt].prn = 9;  prn2acq[cnt].doppler = -217.2;  prn2acq[cnt].constel = 2; cnt++;
+  prn2acq[cnt].prn = 6;  prn2acq[cnt].doppler = -1326.04;  prn2acq[cnt].constel = 2; cnt++;
+  prn2acq[cnt].prn = 31;  prn2acq[cnt].doppler = 1730.46;  prn2acq[cnt].constel = 2; cnt++;
+  prn2acq[cnt].prn = 26;  prn2acq[cnt].doppler = -846.45;  prn2acq[cnt].constel = 1; cnt++;
+  prn2acq[cnt].prn = 5;  prn2acq[cnt].doppler = 2214.50;  prn2acq[cnt].constel = 2; cnt++;
+  prn2acq[cnt].prn = 16;  prn2acq[cnt].doppler = 2556.61;  prn2acq[cnt].constel = 1; cnt++;
+  prn2acq[cnt].prn = 9;  prn2acq[cnt].doppler = 2874.28;  prn2acq[cnt].constel = 1; cnt++;
+  prn2acq[cnt].prn = 3;  prn2acq[cnt].doppler = -2776.23;  prn2acq[cnt].constel = 1; cnt++;
+  prn2acq[cnt].prn = 23;  prn2acq[cnt].doppler = -1054.56;  prn2acq[cnt].constel = 2; cnt++;
+  prn2acq[cnt].prn = 31;  prn2acq[cnt].doppler = -2948.91;  prn2acq[cnt].constel = 1; cnt++;
+  */
+
+  //G_2025_09_03_23_19_10.ors
+  prn2acq[cnt].prn = 4;  prn2acq[cnt].doppler = 413.48;  prn2acq[cnt].constel = 1; cnt++;
+  prn2acq[cnt].prn = 9;  prn2acq[cnt].doppler = -320.46;  prn2acq[cnt].constel = 2; cnt++;
+  prn2acq[cnt].prn = 31;  prn2acq[cnt].doppler = 1557.68;  prn2acq[cnt].constel = 2; cnt++;
+  prn2acq[cnt].prn = 6;  prn2acq[cnt].doppler = -1409.15;  prn2acq[cnt].constel = 2; cnt++;
+  prn2acq[cnt].prn = 16;  prn2acq[cnt].doppler = 2307.65;  prn2acq[cnt].constel = 1; cnt++;
+  prn2acq[cnt].prn = 5;  prn2acq[cnt].doppler = 2151.29;  prn2acq[cnt].constel = 2; cnt++;
+  prn2acq[cnt].prn = 9;  prn2acq[cnt].doppler = 2756.78;  prn2acq[cnt].constel = 1; cnt++;
+  prn2acq[cnt].prn = 26;  prn2acq[cnt].doppler = -1101.45;  prn2acq[cnt].constel = 1; cnt++;
+  prn2acq[cnt].prn = 3;  prn2acq[cnt].doppler = -2934.39;  prn2acq[cnt].constel = 1; cnt++;
+  prn2acq[cnt].prn = 23;  prn2acq[cnt].doppler = -1216.65;  prn2acq[cnt].constel = 2; cnt++;
+  prn2acq[cnt].prn = 31;  prn2acq[cnt].doppler = -3019.53;  prn2acq[cnt].constel = 1; cnt++;
+  
   
   /////////////////////////////////////////////////////
+
+  // sort by prn 
+  qsort(prn2acq, cnt, sizeof(acq_struct), compareConstelPRN);
+  for (int i = 0; i < cnt; i++) {
+    printf("cons %d prn %d \n", prn2acq[i].constel, prn2acq[i].prn);
+  }
 
   c32* iandq = (c32*)malloc(SIZE * sizeof(c32));
   c32* signl = (c32*)malloc(SIZE * sizeof(c32));
@@ -705,7 +771,7 @@ void read_ors(char* input) {
     fclose(fp1bt_out);
   }
 
-  for (int loop = 0; loop < 15; loop++) {
+  for (int loop = 0; loop < cnt; loop++) {
 
     int size = prn2acq[loop].constel == 1 ? 4096 : 16384;
     int proc_gps = (prn2acq[loop].constel == 1) ? 1 : 0;
@@ -727,18 +793,19 @@ void read_ors(char* input) {
     find_top2_peaks_cplx(prod, size, 3, &peaks, fp_out);
     fclose(fp_out);
     // compute noise stats for SNR
-    double BW = 0.3e3; // 10 MHz
+    double BW = 3.1623e3; // Hz
     double cn0 = compute_snr_cplx(prod, size, peaks) + 35;// +10 * log(BW);
 
     //printf("%s %d v1=%f idx1=%d ; v2=%f idx2=%d ratio=%f len=%d\n", (proc_gps == 1) ? "GPS" : "GAL", prn2acq[loop].prn, 
     //  peaks.val1, peaks.idx1, peaks.val2, peaks.idx2, (peaks.val1 / peaks.val2), size);
     double early = mag(prod[peaks.idx1 - 1]), prompt = peaks.val1, late = mag(prod[peaks.idx1 + 1]);
-    double interp = InterpolateCodePhase(peaks.idx1, early, prompt, late);
+    double interp = InterpolateCodePhase(peaks.idx1, early * early, prompt * prompt, late * late);
     //printf("interpolated %f cn0 %f\n", interp, cn0);
+    interp *= (4092.0f / 4096.0f); 
 
     if ((peaks.val1 / peaks.val2) > 1.3) {
       meas.sats[meas.num_sat].prn = prn2acq[loop].prn;
-      meas.sats[meas.num_sat].code_phase = float(interp) / 4096.0f;
+      meas.sats[meas.num_sat].code_phase = float(interp) / 4092.0f; // ie (interp / 4096) * (4096/4092)
       meas.sats[meas.num_sat].doppler = -prn2acq[loop].doppler;
       meas.sats[meas.num_sat].cno = (float)cn0;
       meas.sats[meas.num_sat].constellation = proc_gps ? SYS_GPS : SYS_GAL;
@@ -749,11 +816,16 @@ void read_ors(char* input) {
       meas.num_sat++;
     }
   }
-  int num_bytes = write_msb(&meas, (char*)"C:/Python/out2.bin");
+
+  char fname[256] = "";
+  strcat_s(fname,256, input);
+  strcat_s(fname,256, ".msb");
+  printf("writing to %s \n", fname);
+  int num_bytes = write_msb(&meas, (char*)fname);
   bb_meas_t check = { 0 };
   FILE* test = NULL;
-  errno_t er2 = fopen_s(&test, "C:/Python/out2.bin", "rb");
-  uint8_t tbuff[50] = { 0 };
+  errno_t er2 = fopen_s(&test, (char*)fname, "rb");
+  uint8_t tbuff[128] = { 0 };
   fread(tbuff,1, num_bytes,test);
   read_bb_msb(tbuff, num_bytes, &check);
   fclose(test);
@@ -764,12 +836,10 @@ void read_ors(char* input) {
 
 void sim_E5A() {
   #define FFT_SIZE 16384
-  double doppler_a = 1580;
-  int prn_a = 5;
-  double doppler_b = -2580;
-  int prn_b = 15;
-  int offset = 5000;
-  float up_offset = (float)offset * 16384.0f / 10230.0f; // upsampled offset
+  int    prn_a = 5, prn_b = 15;
+  double doppler_a = 1580, doppler_b = -2580;
+  int    offset = 1;// 10229;
+  float  up_offset = (float)offset * 16384.0f / 10230.0f; // upsampled offset
   printf("should be %f \n", up_offset);
 
   c32* samp_a  = (c32*)malloc(E5A_CODE_LEN * sizeof(c32));
@@ -786,71 +856,29 @@ void sim_E5A() {
   }
   free(samp_b);
   // now up sample both samples and replicas
-
   c32* up_samp  = (c32*)malloc(FFT_SIZE * sizeof(c32));
   c32* up_repli = (c32*)malloc(FFT_SIZE * sizeof(c32));
+  c32* up_prod  = (c32*)malloc(FFT_SIZE * sizeof(c32));
   
   up_sample_10k_to_16k(samp_a, up_samp);
   up_sample_10k_to_16k(repli_a, up_repli);
   free(samp_a); free(repli_a);
 
-  /*
-  FILE* dbg_fp = NULL;
-  fopen_s(&dbg_fp, "C:/Python/check.csv", "w");
-  for (int i = 0; i < FFT_SIZE; i++) {
-    fprintf(dbg_fp, "%d, %f, %f \n", i, up_samp[i].r, up_samp[i].i);
-  }
-  fclose(dbg_fp);
-  */
-
-  //now do the FFT based correlation
-  float* actual = (float*)malloc(FFT_SIZE * 2 * sizeof(float));
-  float* replica = (float*)malloc(FFT_SIZE * 2 * sizeof(float));
-  float* prod = (float*)malloc(FFT_SIZE * 2 * sizeof(float));
-  for (int i = 0; i < FFT_SIZE; i++) {
-    actual[2 * i] = up_samp[i].r * 0.25;
-    actual[2 * i + 1] = up_samp[i].i * 0.25;
-    replica[2 * i] = up_repli[i].r * 0.25;
-    replica[2 * i + 1] = up_repli[i].i * 0.25;
-  }
-  free(up_samp); free(up_repli);
-
-  arm_cfft_radix2_instance_f32 as;
-  arm_cfft_radix2_instance_f32 rs;
-
-  // do the float thing
-  arm_cfft_radix2_init_f32(&as, FFT_SIZE, 0, 1); // Initialize the CFFT instance for 8-point FFT
-  arm_cfft_radix2_f32(&as, actual);
-
-  arm_cfft_radix2_init_f32(&rs, FFT_SIZE, 0, 1); // Initialize the CFFT instance for 8-point FFT
-  arm_cfft_radix2_f32(&rs, replica);
-
-  // conjugate the replica
-  for (int i = 0; i < FFT_SIZE; i++) {
-    float Ar = actual[i * 2], Ai = actual[i * 2 + 1];
-    float Rr = replica[i * 2], Ri = replica[i * 2 + 1];
-    // A * conj(R)
-    prod[i * 2] = Ar * Rr + Ai * Ri;     // (Ar + jAi) * (Rr - jRi)
-    prod[i * 2 + 1] = Ai * Rr - Ar * Ri;     // 
-  }
-  free(actual); free(replica);
-  arm_cfft_radix2_instance_f32 conv;
-  arm_cfft_radix2_init_f32(&conv, FFT_SIZE, 1, 1); // inverse FFT
-  arm_cfft_radix2_f32(&conv, prod);
-  
-  float max = 0;
-  int pos = 0;
+  fft_c32(FFT_SIZE, up_samp, true); 
+  fft_c32(FFT_SIZE, up_repli, true);
+  for (int i = 0; i < FFT_SIZE; i++) { up_prod[i] = mult(up_samp[i], get_conj(up_repli[i])); }
+  fft_c32(FFT_SIZE, up_prod, false); // in-place inv F(prod)
 
   FILE* dbg_fp = NULL;
   fopen_s(&dbg_fp, "C:/Python/out6.csv", "w");
-  for (int i = 0; i < FFT_SIZE; i++) {
-    float mag = sqrt(prod[2 * i] * prod[2 * i] + prod[2 * i + 1] * prod[2 * i + 1]);
-    fprintf(dbg_fp, "%d, %f \n", i, mag);
-    if (mag > max) { max = mag; pos = i; }
-  }
-  free(prod);
+  top2_pks peaks = { 0 };
+  find_top2_peaks_cplx(up_prod, FFT_SIZE, 3, &peaks, dbg_fp);
+  double early = mag(up_prod[peaks.idx1 - 1]), prompt = peaks.val1, late = mag(up_prod[peaks.idx1 + 1]);
+  double interp = InterpolateCodePhase(round(peaks.idx1 * 1.0), early * early, prompt * prompt, late * late);
+
   fclose(dbg_fp);
-  printf("max_float = %f pos=%d\n", max, pos);
+  free(up_prod); free(up_samp); free(up_repli);
+  printf("max_float=%f offset=%d pos=%d interp=%f check=%f\n", peaks.val1, offset, peaks.idx1, interp, interp * (10230.0/16384.0));
 }
 
 /////////////////////////////////////////////////////////////////////////////
@@ -964,12 +992,13 @@ void read_E5A(char* input) {
     find_top2_peaks_real(nci_sum, FFT_SIZE, 3, &peaks, fp_out);
     fclose(fp_out);
     double cn0 = compute_snr_real(nci_sum, FFT_SIZE, peaks) + 35.0;
-    double interp = InterpolateCodePhase(peaks.idx1, nci_sum[peaks.idx1 - 1], peaks.val1, nci_sum[peaks.idx1 + 1]);
+    double early = nci_sum[peaks.idx1 - 1], prompt = peaks.val1, late = nci_sum[peaks.idx1 + 1];
+    double interp = InterpolateCodePhase(peaks.idx1*(16368.0/16384.0), early*early, prompt*prompt, late*late);
     printf("Avail PRN %s%d ratio %f loc %d interp %f CN0 %f\n", (gal_proc == 1) ? "GAL" : "GPS", prn2acq[prn_loop].prn, (peaks.val1 / peaks.val2), (int)peaks.idx1, interp, cn0);
 
     if ((peaks.val1 / peaks.val2) > 1.29) {
       meas.sats[meas.num_sat].prn = prn2acq[prn_loop].prn;
-      meas.sats[meas.num_sat].code_phase = float(interp) / 16384.0f;
+      meas.sats[meas.num_sat].code_phase = float(interp) / 16368.0f; // ie (interp / 16384) * (16384 /16368) fixme!
       meas.sats[meas.num_sat].doppler = -prn2acq[prn_loop].doppler;
       meas.sats[meas.num_sat].cno = (float)cn0;
       meas.sats[meas.num_sat].constellation = gal_proc ? SYS_GAL : SYS_GPS;
@@ -1757,7 +1786,7 @@ int main(int argc,char* argv[])
     return 0;
   }
 
-  if (1) {
+  if (0) {
     read_E5A((char*)"C:/work/Baseband/TestData/E5/t14/G_2024_10_21_22_29_43.047.csv");
     //read_E5A((char*)"C:/work/Baseband/TestData/E5/t14/G_2024_10_21_22_32_30.500_resampled_16368Hz.csv");
     //read_E5A((char*)"C:/work/Baseband/TestData/E5/t14/G_2024_10_21_22_29_43.047_resampled_16368Hz.csv");
@@ -1768,8 +1797,9 @@ int main(int argc,char* argv[])
     read_L1((char*)"C:/Python/out-1bit_1spc_1bit.csv");// "C:/work/Baseband/TestData/E5/t14/G_2024_10_21_22_29_43.047.csv");
   }
 
-  if (0) {
-    read_ors((char*)"C:/work/Baseband/TestData/100ms/bw25/G_2025_09_03_23_04_45.ors");
+  if (1) {
+    // G_2025_09_03_23_04_45.ors G_2025_09_03_23_04_56.ors G_2025_09_03_23_05_33.ors G_2025_09_03_23_04_56.ors G_2025_09_03_23_12_45.ors G_2025_09_03_23_19_10.ors
+    read_ors((char*)"C:/work/Baseband/TestData/100ms/bw25/G_2025_09_03_23_19_10.ors");
     //read_ors((char*)"C:/work/Baseband/TestData/100ms/bw25/G_2025_09_03_23_22_41.ors");
     //read_ors((char*)"C:/work/Baseband/TestData/100ms/bw25/G_2025_09_03_23_04_45.ors");
     //read_ors((char*)"C:/work/Baseband/TestData/G_2025_06_05_22_11_26.ors");

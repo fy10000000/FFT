@@ -125,6 +125,8 @@ int find_top2_peaks_cplx(const c32* data, int data_size, int pk_sep, top2_pks* p
 
 int find_top2_peaks_real(const float* data, int data_size, int pk_sep, top2_pks* peaks, FILE* fp_out);
 
+int compareConstelPRN(const void* a, const void* b);
+
 #ifdef __cplusplus
 }
 #endif

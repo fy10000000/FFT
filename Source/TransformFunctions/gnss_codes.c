@@ -1189,3 +1189,23 @@ int find_top2_peaks_real(const float* data, int data_size, int pk_sep, top2_pks*
   peaks->idx2 = idx2;
   return 0; // Success
 }
+
+int compareConstelPRN(const void* a, const void* b) {
+  if (((acq_struct*)a)->constel > ((acq_struct*)b)->constel) {
+    return 1;
+  }
+  else if (((acq_struct*)a)->constel < ((acq_struct*)b)->constel) {
+    return -1;
+  }
+  else {
+    if (((acq_struct*)a)->prn > ((acq_struct*)b)->prn) {
+      return 1;
+    }
+    else if (((acq_struct*)a)->prn < ((acq_struct*)b)->prn) {
+      return -1;
+    }
+    else {
+      return 0;
+    }
+  }
+}
