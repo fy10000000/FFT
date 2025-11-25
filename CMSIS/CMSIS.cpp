@@ -905,14 +905,10 @@ void read_E5A(char* input) {
           if (token != NULL) {
             sampl[idx].r = (float)atof(token);
             token = strtok_s(NULL, ",", &context);
-            if (token != NULL) {
-              sampl[idx].i = (float)atof(token);
-            }
+            if (token != NULL) { sampl[idx].i = (float)atof(token); }
           }
           idx++;
-          if ((idx != 0) && (idx % LEN == 0)) {
-            break;
-          }
+          if ((idx != 0) && (idx % LEN == 0)) { break; }
         }
       }
       up_sample_10k_to_16k(sampl, up_samp);
@@ -1379,7 +1375,7 @@ void test_quasi_pilot_330(results_s* results) {
   int nci = 500;
 #define SPC 1 // samples per chip
   int   len = E5_QP_CODE_LEN * SPC * nci; // 4 samples per chip and 100 ms
-  int   c_phase = 119;// 1;// 329; // which chip to set the code phase to
+  int   c_phase = 165;// 1;// 329; // which chip to set the code phase to
   int   prn1 = 14, prn2 = 18;
   float dop1 = 2000, dop2 = 2000;
   float dop_error = 1500;// 10; // full 2*250 Hz error in wipeoff
@@ -1395,7 +1391,7 @@ void test_quasi_pilot_330(results_s* results) {
   int* prn_c2  = (int*)malloc(sizeof(int) * E5_QP_CODE_LEN * SPC);
   int* prn_c3  = (int*)malloc(sizeof(int) * E5_QP_CODE_LEN * SPC);
   c32* replica = (c32*)malloc(sizeof(c32) * E5_QP_CODE_LEN * SPC);
-  float* mag_sum = (float*)malloc(sizeof(float) * FFT_QP_SIZE * SPC);
+  //float* mag_sum = (float*)malloc(sizeof(float) * FFT_QP_SIZE * SPC);
   memset(prn_c1 , 0, sizeof(int) * E5_QP_CODE_LEN * SPC);
   memset(prn_c2 , 0, sizeof(int) * E5_QP_CODE_LEN * SPC);
   memset(replica, 0, sizeof(c32) * E5_QP_CODE_LEN * SPC);
@@ -1440,7 +1436,7 @@ void test_quasi_pilot_330(results_s* results) {
   //for (int center = window / 2; center <= nci - window / 2; center++) {
   for (int center = window / 2; center <= nci - window; center++) {
     memset(fft_sum, 0, sizeof(c32) * FFT_QP_SIZE * SPC);
-    memset(mag_sum, 0, sizeof(float) * FFT_QP_SIZE * SPC);
+    //memset(mag_sum, 0, sizeof(float) * FFT_QP_SIZE * SPC);
     for (int windex = center - window / 2; windex < center + window / 2; windex +=1) {
       memset(fft_data, 0, sizeof(c32) * FFT_QP_SIZE * SPC);
       memcpy(fft_data, &out[E5_QP_CODE_LEN * SPC * windex], sizeof(c32) * SPC * (E5_QP_CODE_LEN));
@@ -1459,16 +1455,16 @@ void test_quasi_pilot_330(results_s* results) {
 
     // used to have the IFFT here
     //fft_c32(FFT_QP_SIZE * SPC, fft_sum, false); // IFFT
-    for (int k = 0; k < FFT_QP_SIZE * SPC; k++) { mag_sum[k] += mag(fft_sum[k]); }
+    //for (int k = 0; k < FFT_QP_SIZE * SPC; k++) { mag_sum[k] = mag(fft_sum[k]); }
 
     FILE* fp_out = NULL;
     if (center == 15) {
       errno_t er = fopen_s(&fp_out, "C:/Python/nci_sum4.csv", "w");
     }
     top2_pks peaks;
-    find_top2_peaks_real(mag_sum, E5_QP_CODE_LEN * SPC, 3, &peaks, fp_out);
+    find_top2_peaks_cplx(fft_sum, E5_QP_CODE_LEN * SPC, 3, &peaks, fp_out);
     if (fp_out != NULL) { fclose(fp_out); }
-    double early = mag_sum[peaks.idx1 - 1], prompt = peaks.val1, late = mag_sum[peaks.idx1 + 1];
+    double early = mag(fft_sum[peaks.idx1 - 1]), prompt = peaks.val1, late = mag(fft_sum[peaks.idx1 + 1]);
     double interp = InterpolateCodePhase(peaks.idx1, early * early, prompt * prompt, late * late);
 
     num_tries++;
@@ -1489,7 +1485,7 @@ void test_quasi_pilot_330(results_s* results) {
       min_idx = 0;
     }
     */
-    //printf("center=%03d max=%6.1f pos=%d mean=%6.1f ratio=%3.1f sep=%d\n", center, max_coh, pos_coh, mean2, (v1 / v2), (int)abs(idx1 - idx2));// E5_QP_CODE_LEN / FFT_QP_SIZE));
+    //printf("center=%03d max=%6.1f pos=%d inter=%4.2f ratio=%3.1f sep=%d\n", center, peaks.val1, peaks.idx1, interp, (peaks.val1/peaks.val2));
   } // for center
   auto end = std::chrono::high_resolution_clock::now();////////////////////////////////////////
   std::chrono::duration<double> duration = end - start;
@@ -1502,7 +1498,7 @@ void test_quasi_pilot_330(results_s* results) {
     printf("Bit transition at %d ms \n", locations[i]);
   }
   //printf("BTs: %d Random number: %d\n", loc_cnt, rand());
-  free(out); free(fft_data); free(fft_sum); free(fft_repl); free(mag_sum); free(fft_prod);
+  free(out); free(fft_data); free(fft_sum); free(fft_repl); free(fft_prod); //free(mag_sum);
 }
 
 void test_quasi_pilot2() {
