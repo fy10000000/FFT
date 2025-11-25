@@ -150,11 +150,9 @@ extern int write_bb_msb(const bb_meas_t* measurements, uint8_t* bin_buff, int bu
 /// </summary>
 /// <param name="input"></param>
 extern void read_bb_msb(uint8_t* bin_buff, int bin_size, bb_meas_t* measurements) {
-
-  printf("Size of buffer %d \n", (int)bin_size);
+  //printf("Size of buffer %d \n", (int)bin_size);
 
   // read header for time and then the binary data after converting from hex to binary
-
   reset_bit_reader((int)bin_size);
   ////////////////////
 
@@ -194,9 +192,9 @@ extern void read_bb_msb(uint8_t* bin_buff, int bin_size, bb_meas_t* measurements
   }
   int64_t gal = bit_reader(bin_buff, 3, 0);
   if (gal == 1) {
-    printf("Galileo is present \n");
+    //printf("Galileo is present \n");
     int64_t gal_prns = bit_reader(bin_buff, 50, 0);
-    printf("Galileo PRNs %lld \n", gal_prns);
+    //printf("Galileo PRNs %lld \n", gal_prns);
     int64_t ans = gal_prns;
     int num_svs = 0;
     int cnt = 0;

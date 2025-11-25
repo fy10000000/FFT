@@ -136,6 +136,7 @@ extern void mix_two_prns_oversampled_per_prn(const int32_t* prn_a,
 }
 
 extern void rotate_fwd(int array[], int size, int offset) {
+  if (offset == 0) { return; }
   int* temp = (int*)malloc(sizeof(int) * size);
   if (temp == NULL) { printf("rotate_fwd's malloc failed");  return; }
   for (int i = 0; i < size; i++) {

@@ -1063,9 +1063,10 @@ void mix_prn(const int32_t* prn_a,
 }
 
 
-void synth_gps_prn(int prn, float doppler, size_t size, c32*  replica, int spc) {
+void synth_gps_prn(int prn, float doppler, size_t size, c32*  replica, int spc, int c_phase) {
   int* code = (int*)malloc(sizeof(int) * size);
   getCode(size/ spc, spc, prn, code);
+  rotate_fwd(code, size, c_phase);
   mix_prn(code,doppler,0, replica, size, spc);
   free(code);
 }
@@ -1212,7 +1213,7 @@ int compareConstelPRN(const void* a, const void* b) {
 
 int parse_log(char* log_file, char* record, acq_struct* acq_results) {
   // record needs to have path removed to find just file name
-  record = strrchr(record, '/') + 1;
+  record = strrchr(record, '/') + 1; // only handles / separators only
   FILE* fp_out = NULL; //output file
   errno_t er = fopen_s(&fp_out, log_file, "r");
   char* next_token = NULL;

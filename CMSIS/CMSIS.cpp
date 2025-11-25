@@ -557,7 +557,7 @@ void read_L1(char* input) {
   memset(prod, 0, sizeof(float) * SIZE * 2);
 
   if (proc_gps) {
-    synth_gps_prn(prn, -doppler, SIZE, repli, SPC);
+    synth_gps_prn(prn, -doppler, SIZE, repli, SPC, 0);
   }
   else { // Galileo
     synth_e1b_prn(prn, -doppler, SIZE, repli);
@@ -641,6 +641,7 @@ void read_ors(char* input) {
   printf("%4d-%02d-%02d-%02d-%02d-%02d msec=%d nanos=%d \n", yr, mon, day, hr, min, sec, msec, nanos);
   uint16_t size = ((uint16_t)bytes_to_read) - hdrlen;
   printf("size (total bytes - hdrs) %d \n", size);
+  printf("Working on %s\n", input);
 
   FILE* fp_out = NULL; //output file
   errno_t er = fopen_s(&fp_out, "C:/Python/out2.csv", "w");
@@ -653,129 +654,29 @@ void read_ors(char* input) {
 #define SIZE 1024*SPC *4 // 16K for Galileo and 4K for GPS
 
   acq_struct prn2acq[30] = {0};
-  
   int cnt = parse_log((char*)"C:/work/Baseband/TestData/100ms/bw25/replay_bw25.log", input, prn2acq);
-  //  G_2025_09_03_23_04_45.ors
-  /*
-  prn2acq[cnt].prn = 4;  prn2acq[cnt].doppler = 791;   prn2acq[cnt].constel = 1; cnt++;
-  prn2acq[cnt].prn = 6;  prn2acq[cnt].doppler = -882;  prn2acq[cnt].constel = 1; cnt++;
-  prn2acq[cnt].prn = 9;  prn2acq[cnt].doppler = 2986;  prn2acq[cnt].constel = 1; cnt++;
-  prn2acq[cnt].prn = 16; prn2acq[cnt].doppler = 2822;  prn2acq[cnt].constel = 1; cnt++;
-  prn2acq[cnt].prn = 26; prn2acq[cnt].doppler = -544;  prn2acq[cnt].constel = 1; cnt++;
-  prn2acq[cnt].prn = 31; prn2acq[cnt].doppler = -2867; prn2acq[cnt].constel = 1; cnt++;
-  prn2acq[cnt].prn = 4;  prn2acq[cnt].doppler = -2020; prn2acq[cnt].constel = 2; cnt++; // GAL
-  prn2acq[cnt].prn = 5;  prn2acq[cnt].doppler = 2268;  prn2acq[cnt].constel = 2; cnt++;
-  prn2acq[cnt].prn = 6;  prn2acq[cnt].doppler = -1243; prn2acq[cnt].constel = 2; cnt++;
-  prn2acq[cnt].prn = 9 ; prn2acq[cnt].doppler = -112;  prn2acq[cnt].constel = 2; cnt++;
-  prn2acq[cnt].prn = 23; prn2acq[cnt].doppler = -867;  prn2acq[cnt].constel = 2; cnt++;
-  prn2acq[cnt].prn = 24; prn2acq[cnt].doppler = 3545;  prn2acq[cnt].constel = 2; cnt++;
-  prn2acq[cnt].prn = 31; prn2acq[cnt].doppler = 1915;  prn2acq[cnt].constel = 2; cnt++;
-  prn2acq[cnt].prn = 34; prn2acq[cnt].doppler = -1027; prn2acq[cnt].constel = 2; cnt++;
-  prn2acq[cnt].prn = 3;  prn2acq[cnt].doppler = -2584; prn2acq[cnt].constel = 1; cnt++;// GPS
-  */
-
-  // G_2025_09_03_23_05_33.ors
-  /*
-  prn2acq[cnt].prn = 3;  prn2acq[cnt].doppler = -2582.95; prn2acq[cnt].constel = 1; cnt++;
-  prn2acq[cnt].prn = 4;  prn2acq[cnt].doppler = 792.66;   prn2acq[cnt].constel = 1; cnt++;
-  prn2acq[cnt].prn = 9;  prn2acq[cnt].doppler = 2994.19;  prn2acq[cnt].constel = 1; cnt++;
-  prn2acq[cnt].prn = 16; prn2acq[cnt].doppler = 2818.65;  prn2acq[cnt].constel = 1; cnt++;
-  prn2acq[cnt].prn = 26; prn2acq[cnt].doppler = -551.65;  prn2acq[cnt].constel = 1; cnt++;
-  prn2acq[cnt].prn = 31; prn2acq[cnt].doppler = -2857.60; prn2acq[cnt].constel = 1; cnt++;
-  prn2acq[cnt].prn = 5;  prn2acq[cnt].doppler = 2280.17;  prn2acq[cnt].constel = 2; cnt++;
-  prn2acq[cnt].prn = 6;  prn2acq[cnt].doppler = -1232.54; prn2acq[cnt].constel = 2; cnt++;
-  prn2acq[cnt].prn = 9;  prn2acq[cnt].doppler = -103.26;  prn2acq[cnt].constel = 2; cnt++;
-  prn2acq[cnt].prn = 23; prn2acq[cnt].doppler = -865.79;  prn2acq[cnt].constel = 2; cnt++;
-  prn2acq[cnt].prn = 31; prn2acq[cnt].doppler = 1917.15;  prn2acq[cnt].constel = 2; cnt++;
-  */
-
-  //G_2025_09_03_23_04_56.ors
-  /*
-  prn2acq[cnt].prn = 4;  prn2acq[cnt].doppler = 791.11;  prn2acq[cnt].constel = 1; cnt++;
-  prn2acq[cnt].prn = 9;  prn2acq[cnt].doppler = -111.67;  prn2acq[cnt].constel = 2; cnt++;
-  prn2acq[cnt].prn = 6;  prn2acq[cnt].doppler = -1242.55;  prn2acq[cnt].constel = 2; cnt++;
-  prn2acq[cnt].prn = 26; prn2acq[cnt].doppler = -544.44;  prn2acq[cnt].constel = 1; cnt++;
-  prn2acq[cnt].prn = 3;  prn2acq[cnt].doppler = -2583.86;  prn2acq[cnt].constel = 1; cnt++;
-  prn2acq[cnt].prn = 31; prn2acq[cnt].doppler = 1914.56;  prn2acq[cnt].constel = 2; cnt++;
-  prn2acq[cnt].prn = 5;  prn2acq[cnt].doppler = 2267.56;  prn2acq[cnt].constel = 2; cnt++;
-  prn2acq[cnt].prn = 16; prn2acq[cnt].doppler = 2821.88;  prn2acq[cnt].constel = 1; cnt++;
-  prn2acq[cnt].prn = 9;  prn2acq[cnt].doppler = 2985.82;  prn2acq[cnt].constel = 1; cnt++;
-  prn2acq[cnt].prn = 31; prn2acq[cnt].doppler = -2867.21;  prn2acq[cnt].constel = 1; cnt++;
-  prn2acq[cnt].prn = 23; prn2acq[cnt].doppler = -867.52;  prn2acq[cnt].constel = 2; cnt++;
-  */
-  //G_2025_09_03_23_12_45.ors
-  /*
-  prn2acq[cnt].prn = 4;  prn2acq[cnt].doppler = 594.76;  prn2acq[cnt].constel = 1; cnt++;
-  prn2acq[cnt].prn = 9;  prn2acq[cnt].doppler = -217.2;  prn2acq[cnt].constel = 2; cnt++;
-  prn2acq[cnt].prn = 6;  prn2acq[cnt].doppler = -1326.04;  prn2acq[cnt].constel = 2; cnt++;
-  prn2acq[cnt].prn = 31;  prn2acq[cnt].doppler = 1730.46;  prn2acq[cnt].constel = 2; cnt++;
-  prn2acq[cnt].prn = 26;  prn2acq[cnt].doppler = -846.45;  prn2acq[cnt].constel = 1; cnt++;
-  prn2acq[cnt].prn = 5;  prn2acq[cnt].doppler = 2214.50;  prn2acq[cnt].constel = 2; cnt++;
-  prn2acq[cnt].prn = 16;  prn2acq[cnt].doppler = 2556.61;  prn2acq[cnt].constel = 1; cnt++;
-  prn2acq[cnt].prn = 9;  prn2acq[cnt].doppler = 2874.28;  prn2acq[cnt].constel = 1; cnt++;
-  prn2acq[cnt].prn = 3;  prn2acq[cnt].doppler = -2776.23;  prn2acq[cnt].constel = 1; cnt++;
-  prn2acq[cnt].prn = 23;  prn2acq[cnt].doppler = -1054.56;  prn2acq[cnt].constel = 2; cnt++;
-  prn2acq[cnt].prn = 31;  prn2acq[cnt].doppler = -2948.91;  prn2acq[cnt].constel = 1; cnt++;
-  */
-
-  //G_2025_09_03_23_19_10.ors
-  /*
-  prn2acq[cnt].prn = 4;  prn2acq[cnt].doppler = 413.48;  prn2acq[cnt].constel = 1; cnt++;
-  prn2acq[cnt].prn = 9;  prn2acq[cnt].doppler = -320.46;  prn2acq[cnt].constel = 2; cnt++;
-  prn2acq[cnt].prn = 31;  prn2acq[cnt].doppler = 1557.68;  prn2acq[cnt].constel = 2; cnt++;
-  prn2acq[cnt].prn = 6;  prn2acq[cnt].doppler = -1409.15;  prn2acq[cnt].constel = 2; cnt++;
-  prn2acq[cnt].prn = 16;  prn2acq[cnt].doppler = 2307.65;  prn2acq[cnt].constel = 1; cnt++;
-  prn2acq[cnt].prn = 5;  prn2acq[cnt].doppler = 2151.29;  prn2acq[cnt].constel = 2; cnt++;
-  prn2acq[cnt].prn = 9;  prn2acq[cnt].doppler = 2756.78;  prn2acq[cnt].constel = 1; cnt++;
-  prn2acq[cnt].prn = 26;  prn2acq[cnt].doppler = -1101.45;  prn2acq[cnt].constel = 1; cnt++;
-  prn2acq[cnt].prn = 3;  prn2acq[cnt].doppler = -2934.39;  prn2acq[cnt].constel = 1; cnt++;
-  prn2acq[cnt].prn = 23;  prn2acq[cnt].doppler = -1216.65;  prn2acq[cnt].constel = 2; cnt++;
-  prn2acq[cnt].prn = 31;  prn2acq[cnt].doppler = -3019.53;  prn2acq[cnt].constel = 1; cnt++;
-  */
-  
-  /////////////////////////////////////////////////////
-
-  // sort by constel & prn for expected order
-  qsort(prn2acq, cnt, sizeof(acq_struct), compareConstelPRN);
-  //for (int i = 0; i < cnt; i++) { printf("cons %d prn %d \n", prn2acq[i].constel, prn2acq[i].prn); }
-
+  qsort(prn2acq, cnt, sizeof(acq_struct), compareConstelPRN); // sort by constel & prn for expected order
+ 
   c32* iandq = (c32*)malloc(SIZE * sizeof(c32));
   c32* signl = (c32*)malloc(SIZE * sizeof(c32));
   c32* repli = (c32*)malloc(SIZE * sizeof(c32));
   c32* prod  = (c32*)malloc(SIZE * sizeof(c32));
-  if (iandq == NULL || repli == NULL) {
+  if (iandq == NULL || prod == NULL) {
     fprintf(stderr, "Memory allocation failed for q32 array.\n");
-    free(iandq); free(repli); free(prod); return;
+    free(iandq); free(repli); free(prod); free(signl); return;
   }
 
-  int num_meas = 0;
   bb_meas_t meas;
   memset(&meas, 0, sizeof(bb_meas_t));  
 
   DecodeOrsIQCplx(&buffer[hdrlen], SIZE / 2, iandq);
   free(buffer);
 
-  if (0) {
-    FILE* fp1bt_out = NULL; //output file
-    errno_t er2 = fopen_s(&fp1bt_out, "C:/Python/out-1bit.csv", "w");
-    if (er2 != 0 || fp1bt_out == NULL) {
-      fprintf(stderr, "Failed to open output file\n");
-      return;
-    }
-    fprintf(fp1bt_out, "I, Q\n");
-    for (int i = 0; i < 4 * 1024; i++) {
-      fprintf(fp1bt_out, "%f, %f \n",0.25* iandq[i].r,0.25* iandq[i].i); 
-      printf("%d: I=%f Q=%f \n", i, iandq[i].r, iandq[i].i);
-    }
-    fclose(fp1bt_out);
-  }
-
   for (int loop = 0; loop < cnt; loop++) {
-
     int size = prn2acq[loop].constel == 1 ? 4096 : 16384;
     int proc_gps = (prn2acq[loop].constel == 1) ? 1 : 0;
     if (proc_gps) {
-      synth_gps_prn(prn2acq[loop].prn, -prn2acq[loop].doppler, size, repli, SPC);
+      synth_gps_prn(prn2acq[loop].prn, -prn2acq[loop].doppler, size, repli, SPC, 0);
     }
     else { // Galileo
       synth_e1b_prn(prn2acq[loop].prn, -prn2acq[loop].doppler, size, repli);
@@ -793,10 +694,7 @@ void read_ors(char* input) {
     fclose(fp_out);
     // compute noise stats for SNR
     double BW = 3.1623e3; // Hz
-    double cn0 = compute_snr_cplx(prod, size, peaks) + 35;// +10 * log(BW);
-
-    //printf("%s %d v1=%f idx1=%d ; v2=%f idx2=%d ratio=%f len=%d\n", (proc_gps == 1) ? "GPS" : "GAL", prn2acq[loop].prn, 
-    //  peaks.val1, peaks.idx1, peaks.val2, peaks.idx2, (peaks.val1 / peaks.val2), size);
+    double cn0 = compute_snr_cplx(prod, size, peaks) + 35;// +10 * log(BW)
     double early = mag(prod[peaks.idx1 - 1]), prompt = peaks.val1, late = mag(prod[peaks.idx1 + 1]);
     double interp = InterpolateCodePhase(peaks.idx1, early * early, prompt * prompt, late * late);
     //printf("interpolated %f cn0 %f\n", interp, cn0);
@@ -808,7 +706,6 @@ void read_ors(char* input) {
       meas.sats[meas.num_sat].doppler = -prn2acq[loop].doppler;
       meas.sats[meas.num_sat].cno = (float)cn0;
       meas.sats[meas.num_sat].constellation = proc_gps ? SYS_GPS : SYS_GAL;
-      
       float ratio = (peaks.val1 / peaks.val2);
       printf("Acquired %s %d Doppler %f Hz CodePhase %f [ms] C/N0 %f dB-Hz ratio=%f\n", (proc_gps == 1) ? "GPS" : "GAL",
         prn2acq[loop].prn, -prn2acq[loop].doppler,meas.sats[meas.num_sat].code_phase, meas.sats[meas.num_sat].cno, ratio* ratio);
@@ -878,6 +775,50 @@ void sim_E5A() {
   fclose(dbg_fp);
   free(up_prod); free(up_samp); free(up_repli);
   printf("max_float=%f offset=%d pos=%d interp=%f check=%f\n", peaks.val1, offset, peaks.idx1, interp, interp * (10230.0/16384.0));
+}
+
+void sim_L1() {
+#define FFT_SIZE 1024
+#define SPC  16
+  int    prn_a = 5, prn_b = 15;
+  double doppler_a = 1580, doppler_b = -2580;
+  int    offset = 500;// 
+  
+  printf("should be %d \n", offset);
+  c32* samp_a  = (c32*)malloc(FFT_SIZE * SPC * sizeof(c32));
+  c32* samp_b  = (c32*)malloc(FFT_SIZE * SPC * sizeof(c32));
+  c32* repl_a  = (c32*)malloc(FFT_SIZE * SPC * sizeof(c32));
+  c32* prod    = (c32*)malloc(FFT_SIZE * SPC * sizeof(c32));
+  memset(samp_a, 0, FFT_SIZE * SPC * sizeof(c32));
+  memset(samp_b, 0, FFT_SIZE * SPC * sizeof(c32));
+  memset(repl_a, 0, FFT_SIZE * SPC * sizeof(c32));
+  memset(prod  , 0, FFT_SIZE * SPC * sizeof(c32));
+
+  synth_gps_prn(prn_a, doppler_a, FFT_SIZE, samp_a, SPC, offset);
+  synth_gps_prn(prn_b, doppler_b, FFT_SIZE, samp_b, SPC, 300);
+  synth_gps_prn(prn_a, doppler_a + 100, FFT_SIZE, repl_a, SPC, 0);
+
+  for (int i = 0; i < FFT_SIZE * SPC; i++) {
+    samp_a[i].r += samp_b[i].r; // add noise & quantize later
+    samp_a[i].i += samp_b[i].i;
+  }
+  free(samp_b);
+  
+  fft_c32(FFT_SIZE * SPC, samp_a, true);
+  fft_c32(FFT_SIZE * SPC, repl_a, true);
+  for (int i = 0; i < FFT_SIZE * SPC; i++) { prod[i] = mult(samp_a[i], get_conj(repl_a[i])); }
+  fft_c32(FFT_SIZE * SPC, prod, false); // in-place inv F(prod)
+
+  FILE* dbg_fp = NULL;
+  fopen_s(&dbg_fp, "C:/Python/out6.csv", "w");
+  top2_pks peaks = { 0 };
+  find_top2_peaks_cplx(prod, FFT_SIZE , 3, &peaks, dbg_fp);
+  double early = mag(prod[peaks.idx1 - 1]), prompt = peaks.val1, late = mag(prod[peaks.idx1 + 1]);
+  double interp = InterpolateCodePhase(peaks.idx1, early * early, prompt * prompt, late * late);
+
+  fclose(dbg_fp);
+  free(prod); free(samp_a); free(repl_a);
+  printf("max_float=%f offset=%d pos=%d interp=%f\n", peaks.val1, offset, peaks.idx1, interp );
 }
 
 /////////////////////////////////////////////////////////////////////////////
@@ -1800,6 +1741,12 @@ int main(int argc,char* argv[])
 
   if (0) {
     read_L1((char*)"C:/Python/out-1bit_1spc_1bit.csv");// "C:/work/Baseband/TestData/E5/t14/G_2024_10_21_22_29_43.047.csv");
+    return 0;
+  }
+
+  if (0) {
+    sim_L1();
+    return 0;
   }
 
   if (1) {

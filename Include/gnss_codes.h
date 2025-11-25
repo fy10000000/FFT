@@ -101,7 +101,7 @@ void up_sample_10k_to_16k(c32* in, c32* out);
 
 void getGalCode(int prn, int* out, int size);
 
-void synth_gps_prn(int prn, float doppler, size_t size, c32* replica, int spc);
+void synth_gps_prn(int prn, float doppler, size_t size, c32* replica, int spc, int c_phase);
 
 void mix_two_prns_oversampled_per_prn(const int32_t* prn_a, const int32_t* prn_b,
   double doppler_a_hz, double doppler_b_hz,
