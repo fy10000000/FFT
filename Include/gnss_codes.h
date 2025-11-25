@@ -47,6 +47,55 @@ typedef struct {
   float  val2;   /* value of second-highest peak */
 } top2_pks;
 
+typedef struct {
+  double tau;
+  double num;
+  double ave;
+  double aveSq;
+  double min;
+  double max;
+} exp_stat_s;
+
+void exp_stat_init(exp_stat_s* s) {
+  s->tau = 1000000.0;
+  s->num = 0.0;
+  s->ave = 0.0;
+  s->aveSq = 0.0;
+  s->min = 1e30;
+  s->max = -1e30;
+}
+
+void exp_stat_add_data(exp_stat_s* s, double val) {
+  if (s->num < s->tau) {
+    s->num++;
+  }
+
+  if (s->num == 1) {
+    s->ave = val;
+    s->aveSq = val * val;
+  }
+  else {
+    s->ave += (val - s->ave) / s->num;
+    s->aveSq += (val * val - s->aveSq) / s->num;
+  }
+
+  if (val > s->max) {
+    s->max = val;
+  }
+  if (val < s->min) {
+    s->min = val;
+  }
+}
+
+double exp_stat_mean(exp_stat_s* s) {
+  return s->ave;
+}
+
+double exp_stat_stdev(exp_stat_s* s) {
+  return sqrt(s->aveSq - s->ave * s->ave);
+}
+
+
 int8_t E1B_Code[E1B_MAX_PRN + 1][E1B_CODE_LEN]; // one based indexing
 
 

@@ -1379,7 +1379,7 @@ void test_quasi_pilot_330(results_s* results) {
   int nci = 500;
 #define SPC 1 // samples per chip
   int   len = E5_QP_CODE_LEN * SPC * nci; // 4 samples per chip and 100 ms
-  int   c_phase = 329;// 1;// 329; // which chip to set the code phase to
+  int   c_phase = 119;// 1;// 329; // which chip to set the code phase to
   int   prn1 = 14, prn2 = 18;
   float dop1 = 2000, dop2 = 2000;
   float dop_error = 1500;// 10; // full 2*250 Hz error in wipeoff
@@ -1409,6 +1409,8 @@ void test_quasi_pilot_330(results_s* results) {
   rotate_fwd(prn_c1, E5_QP_CODE_LEN * SPC, c_phase); // now advance code-phase  
   free(prn_c3);
   int sign2 = 1; // sign applied a posteriori after finding BTT
+  exp_stat_s exp_s;
+  exp_stat_init(&exp_s);
   stat_s stat;
   stat_init(&stat); // moving average of peak values window size = 3
   for (int i = 0; i < nci; i++) {
@@ -1425,6 +1427,7 @@ void test_quasi_pilot_330(results_s* results) {
   c32* fft_repl = (c32*)malloc(sizeof(c32) * FFT_QP_SIZE * SPC);
   c32* fft_data = (c32*)malloc(sizeof(c32) * FFT_QP_SIZE * SPC);
   c32* fft_sum  = (c32*)malloc(sizeof(c32) * FFT_QP_SIZE * SPC);
+  c32* fft_prod = (c32*)malloc(sizeof(c32) * FFT_QP_SIZE * SPC);
   memset(fft_repl, 0, sizeof(c32) * FFT_QP_SIZE * SPC);
   if (fft_data == NULL || fft_repl == NULL) { printf("Error allocating fft_data or fft_prod\n"); return; }
 
@@ -1446,76 +1449,60 @@ void test_quasi_pilot_330(results_s* results) {
       fft_c32(FFT_QP_SIZE * SPC, fft_data, true); // forward FFT
 
       for (int k = 0; k < FFT_QP_SIZE * SPC; k++) { // accumulate pt-wise * with conj of replica
-        fft_sum[k] = add(fft_sum[k], mult(fft_data[k], get_conj(fft_repl[k])));
-        //fft_sum[k] = mult(fft_data[k], get_conj(fft_repl[k]));
+        //fft_sum[k] = add(fft_sum[k], mult(fft_data[k], get_conj(fft_repl[k])));
+        fft_prod[k] = mult(fft_data[k], get_conj(fft_repl[k]));
       }
 
-      //fft_c32(FFT_QP_SIZE * SPC, fft_sum, false); // IFFT
-      //for (int k = 0; k < FFT_QP_SIZE * SPC; k++) { mag_sum[k] += mag(fft_sum[k]); }
+      fft_c32(FFT_QP_SIZE * SPC, fft_prod, false); // IFFT
+      for (int k = 0; k < FFT_QP_SIZE * SPC; k++) { fft_sum[k] = add(fft_sum[k], fft_prod[k]); }
     } // for windex 
 
     // used to have the IFFT here
-    fft_c32(FFT_QP_SIZE * SPC, fft_sum, false); // IFFT
+    //fft_c32(FFT_QP_SIZE * SPC, fft_sum, false); // IFFT
     for (int k = 0; k < FFT_QP_SIZE * SPC; k++) { mag_sum[k] += mag(fft_sum[k]); }
 
-    if (false) {//center == 17) {
-      FILE* fp_out = NULL; //output file
+    FILE* fp_out = NULL;
+    if (center == 15) {
       errno_t er = fopen_s(&fp_out, "C:/Python/nci_sum4.csv", "w");
-      for (int m = 0; m < FFT_QP_SIZE * SPC; m++) {
-        fprintf(fp_out, "%d, %f\n", m, mag_sum[m]);
-      }
-      fclose(fp_out);
     }
-
-    float max_coh = 0; int pos_coh = 0;
-    int idx1 = -1, idx2 = -1;
-    float v1 = -1e6, v2 = -1e6;
-    // E5_QP_CODE_LEN FFT_QP_SIZE
-    for (int m = 0; m < E5_QP_CODE_LEN * SPC; m++) {
-      float mag_coh = mag_sum[m];// mag(fft_sum[m]);
-      if (mag_coh > max_coh) { max_coh = mag_coh; pos_coh = m; }
-
-      if (mag_coh >= v1) {
-        // Promote current best to second, insert new best
-        if (idx1 != -1) { v2 = v1; idx2 = idx1;}
-        v1 = mag_coh; idx1 = m;
-      }
-      else if (mag_coh > v2) {
-        // Update second best if it doesn't collide with best 
-        if (mag_coh != v1) { v2 = mag_coh;  idx2 = m; }
-      }
-    }
+    top2_pks peaks;
+    find_top2_peaks_real(mag_sum, E5_QP_CODE_LEN * SPC, 3, &peaks, fp_out);
+    if (fp_out != NULL) { fclose(fp_out); }
+    double early = mag_sum[peaks.idx1 - 1], prompt = peaks.val1, late = mag_sum[peaks.idx1 + 1];
+    double interp = InterpolateCodePhase(peaks.idx1, early * early, prompt * prompt, late * late);
 
     num_tries++;
     //pos_coh = (c_phase > 165) ? pos_coh + 165 : pos_coh;
-    if (pos_coh != c_phase) {
-      num_errors++;
-    }
-
-    stat_add(&stat, max_coh);
+    if (peaks.idx1 != c_phase) { num_errors++; }
+    exp_stat_add_data(&exp_s, (peaks.val1 / peaks.val2));
+    
+    /*
+    stat_add(&stat, peaks.val1);
     float mean2 = stat_mean(&stat);
-    if (max_coh < min_val && max_coh < mean2 - 1000 && max_coh < 2500) { // for 4 SPC
-      min_val = max_coh;
+    if (peaks.val1 < min_val && peaks.val1 < mean2 - 1000 && peaks.val1 < 2500) { // for 4 SPC
+      min_val = peaks.val1;
       min_idx = center;
     }
-    if ((center == min_idx + 1) && (max_coh > min_val)) {
+    if ((center == min_idx + 1) && (peaks.val1 > min_val)) {
       locations[loc_cnt++] = min_idx; // empirically the wider the window the earlier the bit transition appears
       min_val = 1e5;
       min_idx = 0;
     }
+    */
     //printf("center=%03d max=%6.1f pos=%d mean=%6.1f ratio=%3.1f sep=%d\n", center, max_coh, pos_coh, mean2, (v1 / v2), (int)abs(idx1 - idx2));// E5_QP_CODE_LEN / FFT_QP_SIZE));
   } // for center
   auto end = std::chrono::high_resolution_clock::now();////////////////////////////////////////
   std::chrono::duration<double> duration = end - start;
   printf("Processing time for quasi pilot 330 ms: %f seconds\n", duration.count());
-  printf("cn0=%4.2f sigma=%6.3f num errors pilot_330: %d out of %d\n",cn0,sigma, num_errors, num_tries);
+  float mean_ratio = exp_stat_mean(&exp_s);
+  printf("cn0=%4.2f sigma=%6.3f <ratio> %4.3f num errors pilot_330: %d out of %d\n",cn0,sigma, mean_ratio, num_errors, num_tries);
   results->num_errors += num_errors;
   results->num_trials += num_tries;
   for (int i = 0; i < loc_cnt; i++) {
     printf("Bit transition at %d ms \n", locations[i]);
   }
   //printf("BTs: %d Random number: %d\n", loc_cnt, rand());
-  free(out); free(fft_data); free(fft_sum); free(fft_repl); free(mag_sum);
+  free(out); free(fft_data); free(fft_sum); free(fft_repl); free(mag_sum); free(fft_prod);
 }
 
 void test_quasi_pilot2() {
@@ -1749,7 +1736,7 @@ int main(int argc,char* argv[])
     return 0;
   }
 
-  if (1) {
+  if (0) {
     // G_2025_09_03_23_04_45.ors G_2025_09_03_23_04_56.ors G_2025_09_03_23_05_33.ors G_2025_09_03_23_04_56.ors G_2025_09_03_23_12_45.ors G_2025_09_03_23_19_10.ors
     read_ors((char*)"C:/work/Baseband/TestData/100ms/bw25/G_2025_09_03_23_04_45.ors");
     //read_ors((char*)"C:/work/Baseband/TestData/100ms/bw25/G_2025_09_03_23_22_41.ors");
@@ -1758,7 +1745,7 @@ int main(int argc,char* argv[])
     return 0;
   }
 
-  if (0) {
+  if (1) {
     //test_quasi_pilot_330Up();
     results_s results = {0};
     for (int i = 0; i < 50; i++) {
