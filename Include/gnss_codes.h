@@ -179,6 +179,8 @@ int compareConstelPRN(const void* a, const void* b);
 
 int parse_log(char* log_file, char* record, acq_struct* acq_results);
 
+int cnt_monotonic(float val);
+
 #ifdef __cplusplus
 }
 #endif

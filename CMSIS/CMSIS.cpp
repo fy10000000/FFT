@@ -970,9 +970,9 @@ void test_quasi_diff_pilot() {
   int loc_cnt = 0;
   float min_val = 1e5;
 
-  int locations[50] = { 20, 40, 60, 80, 100, 120, 140, 160, 180, 200, 220, 240, 260, 280 };
-  int window = 2; // 2 * window ms either side of center (window>=5 does not work with noise window > 7 does not work with no noise)
-  int nci = 300;
+  int locations[50] = { 50, 100, 150, 200, 250, 300, 350 };
+  int window = 20; // 2 * window ms either side of center (window>=5 does not work with noise window > 7 does not work with no noise)
+  int nci = 400;
 #define SPC 4 // samples per chip
   int len = 1023 * SPC * nci; // 4 samples per chip and 100 ms
   int c_phase = 4*4096 /8 ;// 1023 * SPC / 8; // which chip to set the code phase to
@@ -1370,7 +1370,7 @@ void test_quasi_pilot_330(results_s* results) {
   // uncomment "//shift" for type 2) method
 #define FFT_QP_SIZE 512 * 2
   float chipping_rate = 5.115e6; // chips per sec
-  int locations[50] = { -1 };// { 20, 40, 60, 80, 100, 120, 140, 160, 180, 200, 220, 240, 260, 280 };
+  int locations[50] = { 50, 100, 150, 200, 250, 300, 350, 400, 450 };// { 20, 40, 60, 80, 100, 120, 140, 160, 180, 200, 220, 240, 260, 280 };
   int window = 26; //  window/2 ms either side of center 
   int nci = 500;
 #define SPC 1 // samples per chip
@@ -1381,7 +1381,7 @@ void test_quasi_pilot_330(results_s* results) {
   float dop_error = 1500;// 10; // full 2*250 Hz error in wipeoff
   float dop_err_rate = 0.6;// 0.6;// 0.6;//Hz per ms
   float N0 = -174.0 + 2.5;// dBm/Hz thermal noise ktb density + noise figure
-  float cn0 = -128.75 - N0; // dBm/Hz pgae 14 Galileo_OS_SIS_ICD_v2.2
+  float cn0 = -120.75 - N0; // dBm/Hz pgae 14 Galileo_OS_SIS_ICD_v2.2
   float sigma = sqrt((1.0 * chipping_rate * SPC) / (2.0f* pow(10.0,cn0/10.0)));
   //float sigma = 12.7;// 15.98;// 3.5;// 3.5; // noise level 15->6*31
   int   num_errors = 0; int num_tries = 0;
@@ -1419,11 +1419,13 @@ void test_quasi_pilot_330(results_s* results) {
   }
   free(prn_c1); free(prn_c2);
 
+  memset(locations, 0, sizeof(int) * 50);
   // Compute circular correlation C_k(τ) = FFT^-1{ FFT[signal] · conj(FFT[replica]) }.
   c32* fft_repl = (c32*)malloc(sizeof(c32) * FFT_QP_SIZE * SPC);
   c32* fft_data = (c32*)malloc(sizeof(c32) * FFT_QP_SIZE * SPC);
   c32* fft_sum  = (c32*)malloc(sizeof(c32) * FFT_QP_SIZE * SPC);
   c32* fft_prod = (c32*)malloc(sizeof(c32) * FFT_QP_SIZE * SPC);
+  //c32* fft_prev = (c32*)malloc(sizeof(c32) * FFT_QP_SIZE * SPC);
   memset(fft_repl, 0, sizeof(c32) * FFT_QP_SIZE * SPC);
   if (fft_data == NULL || fft_repl == NULL) { printf("Error allocating fft_data or fft_prod\n"); return; }
 
@@ -1433,9 +1435,12 @@ void test_quasi_pilot_330(results_s* results) {
   free(replica);
   fft_c32(FFT_QP_SIZE * SPC, fft_repl, true);
   auto start = std::chrono::high_resolution_clock::now();////////////////////////////////////////
+  int last_num_ascending = 0;
+  //bool have_prev = false;
   //for (int center = window / 2; center <= nci - window / 2; center++) {
-  for (int center = window / 2; center <= nci - window; center++) {
-    memset(fft_sum, 0, sizeof(c32) * FFT_QP_SIZE * SPC);
+  for (int center = window / 2; center <= nci - window / 2; center++) {
+    memset(fft_sum , 0, sizeof(c32) * FFT_QP_SIZE * SPC);
+    //memset(fft_prev, 0, sizeof(c32) * FFT_QP_SIZE * SPC);
     //memset(mag_sum, 0, sizeof(float) * FFT_QP_SIZE * SPC);
     for (int windex = center - window / 2; windex < center + window / 2; windex +=1) {
       memset(fft_data, 0, sizeof(c32) * FFT_QP_SIZE * SPC);
@@ -1450,7 +1455,16 @@ void test_quasi_pilot_330(results_s* results) {
       }
 
       fft_c32(FFT_QP_SIZE * SPC, fft_prod, false); // IFFT
+
+      //if (have_prev) {
+      //  for (int k = 0; k < 1024 * SPC; k++) {
+      //    fft_sum[k] = add(fft_sum[k], mult(fft_prod[k], get_conj(fft_prev[k])));
+      //  }
+      //}
+      
       for (int k = 0; k < FFT_QP_SIZE * SPC; k++) { fft_sum[k] = add(fft_sum[k], fft_prod[k]); }
+      //memcpy(fft_prev, fft_prod, sizeof(c32) * FFT_QP_SIZE * SPC);
+      //have_prev = true;
     } // for windex 
 
     // used to have the IFFT here
@@ -1458,7 +1472,7 @@ void test_quasi_pilot_330(results_s* results) {
     //for (int k = 0; k < FFT_QP_SIZE * SPC; k++) { mag_sum[k] = mag(fft_sum[k]); }
 
     FILE* fp_out = NULL;
-    if (center == 15) {
+    if (false) {//center == 15) {
       errno_t er = fopen_s(&fp_out, "C:/Python/nci_sum4.csv", "w");
     }
     top2_pks peaks;
@@ -1472,20 +1486,13 @@ void test_quasi_pilot_330(results_s* results) {
     if (peaks.idx1 != c_phase) { num_errors++; }
     exp_stat_add_data(&exp_s, (peaks.val1 / peaks.val2));
     
-    /*
-    stat_add(&stat, peaks.val1);
-    float mean2 = stat_mean(&stat);
-    if (peaks.val1 < min_val && peaks.val1 < mean2 - 1000 && peaks.val1 < 2500) { // for 4 SPC
-      min_val = peaks.val1;
-      min_idx = center;
+    double ang = atan2(fft_sum[peaks.idx1].r, fft_sum[peaks.idx1].i) * 57.2957795;
+    int cnt2 = cnt_monotonic(mag(fft_sum[peaks.idx1]));
+    if (cnt2 == 0 && last_num_ascending > 5) {
+      locations[loc_cnt++] = center - 14;
     }
-    if ((center == min_idx + 1) && (peaks.val1 > min_val)) {
-      locations[loc_cnt++] = min_idx; // empirically the wider the window the earlier the bit transition appears
-      min_val = 1e5;
-      min_idx = 0;
-    }
-    */
-    //printf("center=%03d max=%6.1f pos=%d inter=%4.2f ratio=%3.1f sep=%d\n", center, peaks.val1, peaks.idx1, interp, (peaks.val1/peaks.val2));
+    last_num_ascending = cnt2;
+    printf("center,%03d, max,%6.1f, pos,%d, inter,%4.2f, ratio,%3.1f, ang,%4.2f, cnt, %d\n", center, peaks.val1, peaks.idx1, interp, (peaks.val1/peaks.val2), ang, cnt2);
   } // for center
   auto end = std::chrono::high_resolution_clock::now();////////////////////////////////////////
   std::chrono::duration<double> duration = end - start;
@@ -1498,7 +1505,7 @@ void test_quasi_pilot_330(results_s* results) {
     printf("Bit transition at %d ms \n", locations[i]);
   }
   //printf("BTs: %d Random number: %d\n", loc_cnt, rand());
-  free(out); free(fft_data); free(fft_sum); free(fft_repl); free(fft_prod); //free(mag_sum);
+  free(out); free(fft_data); free(fft_sum); free(fft_repl); free(fft_prod);// free(fft_prev); //free(mag_sum);
 }
 
 void test_quasi_pilot2() {
@@ -1742,13 +1749,16 @@ int main(int argc,char* argv[])
   }
 
   if (1) {
+    //test_quasi_diff_pilot();
     //test_quasi_pilot_330Up();
+    
     results_s results = {0};
-    for (int i = 0; i < 50; i++) {
+    for (int i = 0; i < 1; i++) {
       test_quasi_pilot_330(&results);
     }
     printf("Total tries: %d, Total errors: %d, Avg errors per try: %f\n", results.num_trials, results.num_errors,
       (float)results.num_errors / (float)results.num_trials);
+    
     //test_quasi_pilot2();
     return 0;
   }

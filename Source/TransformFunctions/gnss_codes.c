@@ -1159,7 +1159,7 @@ int find_top2_peaks_cplx(const c32* data, int data_size, int pk_sep, top2_pks* p
       if ((magn != v1) && (abs(m - idx1) > pk_sep)) { v2 = magn;  idx2 = m; } // Update second best if it doesn't collide with best
     }
   }
-
+  
   peaks->val1 = v1;
   peaks->idx1 = idx1;
   peaks->val2 = v2;
@@ -1245,4 +1245,35 @@ int parse_log(char* log_file, char* record, acq_struct* acq_results) {
   }
   fclose(fp_out);
   return rec_cnt;
+}
+
+int cnt_monotonic(float val) {
+#define MEM_SIZE 3 
+  static num_tot = 0;
+  static num_monotone = 0;
+  static float last_n[MEM_SIZE] = { -1.0e9f };
+  for (int i = 0; i < MEM_SIZE- 1; i++) {
+    last_n[i] = last_n[i + 1];
+  }
+  last_n[MEM_SIZE - 1] = val;
+
+  int tp_idx = MEM_SIZE - 1;
+  if (num_tot >= 3) {
+    if (last_n[tp_idx - 2] < last_n[tp_idx - 1] && last_n[tp_idx - 1] < last_n[tp_idx] && last_n[tp_idx] - last_n[tp_idx - 1] > 300) {
+      num_monotone++; // increasing
+    }
+    else {
+      num_monotone = 0; // change
+    }
+    
+    //else if (last_n[tp_idx - 2] > last_n[tp_idx - 1] && last_n[tp_idx - 1] > last_n[tp_idx]) {
+    //  num_monotone++; // decreasing
+    //}
+    //else if (last_n[tp_idx - 2] > last_n[tp_idx - 1] && last_n[tp_idx - 1] < last_n[tp_idx] ||
+    //         last_n[tp_idx - 2] < last_n[tp_idx - 1] && last_n[tp_idx - 1] > last_n[tp_idx]) {
+    //  num_monotone = 0; // change
+    //}
+  }
+  num_tot++;
+  return num_monotone;
 }
