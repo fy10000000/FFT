@@ -30,6 +30,8 @@
 typedef struct {
   int num_errors;
   int num_trials;
+  int btt_missed_detects;
+  int btt_false_alarms;
 } results_s;
 
 typedef struct {
@@ -1370,12 +1372,13 @@ void test_quasi_pilot_330(results_s* results) {
   // uncomment "//shift" for type 2) method
 #define FFT_QP_SIZE 512 * 2
   float chipping_rate = 5.115e6; // chips per sec
-  int locations[50] = { 50, 100, 150, 200, 250, 300, 350, 400, 450};// { 20, 40, 60, 80, 100, 120, 140, 160, 180, 200, 220, 240, 260, 280 };
-  int window = 30; //  window/2 ms either side of center 
-  int nci = 500;
+  // note can do code-phase error stats or BTT detection stats but not both at once!!!! use {-1} for no BTTs
+  int locations[50] = { 50, 100, 150, 200, 250, 300, 350, 400, 450, 500 };// { 20, 40, 60, 80, 100, 120, 140, 160, 180, 200, 220, 240, 260, 280 };
+  int window = 26; //  window/2 ms either side of center 
+  int nci = 550;
 #define SPC 1 // samples per chip
   int   len = E5_QP_CODE_LEN * SPC * nci; // 4 samples per chip and 100 ms
-  int   c_phase = 165;// 1;// 329; // which chip to set the code phase to
+  int   c_phase = 15;// 1;// 329; // which chip to set the code phase to
   int   prn1 = 14, prn2 = 18;
   float dop1 = 2000, dop2 = 2000;
   float dop_error = 1500;// 10; // full 2*250 Hz error in wipeoff
@@ -1493,18 +1496,18 @@ void test_quasi_pilot_330(results_s* results) {
       locations[loc_cnt++] = center - (window/2) -1;
     }
     last_num_ascending = cnt2;
-    printf("center,%03d, max,%6.1f, pos,%d, inter,%4.2f, ratio,%3.1f, ang,%4.2f, cnt, %d\n", center, peaks.val1, peaks.idx1, interp, (peaks.val1/peaks.val2), ang, cnt2);
+    //printf("center,%03d, max,%6.1f, pos,%d, inter,%4.2f, ratio,%3.1f, ang,%4.2f, cnt, %d\n", center, peaks.val1, peaks.idx1, interp, (peaks.val1/peaks.val2), ang, cnt2);
   } // for center
   auto end = std::chrono::high_resolution_clock::now();////////////////////////////////////////
   std::chrono::duration<double> duration = end - start;
   //printf("Processing time for quasi pilot 330 ms: %f seconds\n", duration.count());
   float mean_ratio = exp_stat_mean(&exp_s);
-  printf("cn0=%4.2f sigma=%6.3f <ratio> %4.3f num errors pilot_330: %d out of %d missed_detect:%d false_alarms:%d \n",cn0,sigma, mean_ratio, num_errors, num_tries, (num_btts - loc_cnt), (loc_cnt - num_btts));
+  //printf("cn0=%4.2f sigma=%6.3f <ratio> %4.3f num errors pilot_330: %d out of %d missed_detect:%d false_alarms:%d \n",cn0,sigma, mean_ratio, num_errors, num_tries, (num_btts - loc_cnt), (loc_cnt - num_btts));
   results->num_errors += num_errors;
   results->num_trials += num_tries;
-  for (int i = 0; i < loc_cnt; i++) {
-    printf("Bit transition at %d ms \n", locations[i]);
-  }
+  if ((loc_cnt - num_btts) > 0) { results->btt_false_alarms+= (loc_cnt - num_btts); }
+  if ((num_btts - loc_cnt) > 0) { results->btt_missed_detects+= (num_btts - loc_cnt); }
+  //for (int i = 0; i < loc_cnt; i++) { printf("Bit transition at %d ms \n", locations[i]); }
   //printf("BTs: %d Random number: %d\n", loc_cnt, rand());
   free(out); free(fft_data); free(fft_sum); free(fft_repl); free(fft_prod);// free(fft_prev); //free(mag_sum);
 }
@@ -1754,11 +1757,11 @@ int main(int argc,char* argv[])
     //test_quasi_pilot_330Up();
     
     results_s results = {0};
-    for (int i = 0; i < 1; i++) {
+    for (int i = 0; i < 100; i++) {
       test_quasi_pilot_330(&results);
     }
-    printf("Total tries: %d, Total errors: %d, Avg errors per try: %f\n", results.num_trials, results.num_errors,
-      (float)results.num_errors / (float)results.num_trials);
+    printf("Total tries: %d, Total errors: %d, Avg errors per try: %f #fa %d #md %d\n", results.num_trials, results.num_errors,
+      (float)results.num_errors / (float)results.num_trials, results.btt_false_alarms, results.btt_missed_detects);
     
     //test_quasi_pilot2();
     return 0;
