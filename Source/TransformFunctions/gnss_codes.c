@@ -1248,7 +1248,7 @@ int parse_log(char* log_file, char* record, acq_struct* acq_results) {
 }
 
 int cnt_monotonic(float val) {
-#define MEM_SIZE 3 
+#define MEM_SIZE 6 
   static num_tot = 0;
   static num_monotone = 0;
   static float last_n[MEM_SIZE] = { -1.0e9f };
@@ -1259,7 +1259,7 @@ int cnt_monotonic(float val) {
 
   int tp_idx = MEM_SIZE - 1;
   if (num_tot >= 3) {
-    if (last_n[tp_idx - 2] < last_n[tp_idx - 1] && last_n[tp_idx - 1] < last_n[tp_idx] && last_n[tp_idx] - last_n[tp_idx - 1] > 300) {
+    if (last_n[tp_idx - 2] < last_n[tp_idx - 1] && last_n[tp_idx - 1] < last_n[tp_idx] && last_n[tp_idx] - last_n[0] > 2000) {
       num_monotone++; // increasing
     }
     else {

@@ -1370,8 +1370,8 @@ void test_quasi_pilot_330(results_s* results) {
   // uncomment "//shift" for type 2) method
 #define FFT_QP_SIZE 512 * 2
   float chipping_rate = 5.115e6; // chips per sec
-  int locations[50] = { 50, 100, 150, 200, 250, 300, 350, 400, 450 };// { 20, 40, 60, 80, 100, 120, 140, 160, 180, 200, 220, 240, 260, 280 };
-  int window = 26; //  window/2 ms either side of center 
+  int locations[50] = { 50, 100, 150, 200, 250, 300, 350, 400, 450};// { 20, 40, 60, 80, 100, 120, 140, 160, 180, 200, 220, 240, 260, 280 };
+  int window = 30; //  window/2 ms either side of center 
   int nci = 500;
 #define SPC 1 // samples per chip
   int   len = E5_QP_CODE_LEN * SPC * nci; // 4 samples per chip and 100 ms
@@ -1381,7 +1381,7 @@ void test_quasi_pilot_330(results_s* results) {
   float dop_error = 1500;// 10; // full 2*250 Hz error in wipeoff
   float dop_err_rate = 0.6;// 0.6;// 0.6;//Hz per ms
   float N0 = -174.0 + 2.5;// dBm/Hz thermal noise ktb density + noise figure
-  float cn0 = -120.75 - N0; // dBm/Hz pgae 14 Galileo_OS_SIS_ICD_v2.2
+  float cn0 = -128.75 - N0; // dBm/Hz pgae 14 Galileo_OS_SIS_ICD_v2.2
   float sigma = sqrt((1.0 * chipping_rate * SPC) / (2.0f* pow(10.0,cn0/10.0)));
   //float sigma = 12.7;// 15.98;// 3.5;// 3.5; // noise level 15->6*31
   int   num_errors = 0; int num_tries = 0;
@@ -1409,9 +1409,10 @@ void test_quasi_pilot_330(results_s* results) {
   exp_stat_init(&exp_s);
   stat_s stat;
   stat_init(&stat); // moving average of peak values window size = 3
+  int num_btts = -1;
   for (int i = 0; i < nci; i++) {
     for (int j = 0; j < 50; j++) {
-      if (locations[j] == i) { sign2 *= -1; break; } // change sign at the bit transitions
+      if (locations[j] == i) { sign2 *= -1; num_btts++;  break; } // change sign at the bit transitions
     }
     // offset doppler by 250 Hz and add a residual doppler ramp of 0.1 Hz per ms
     mix_two_prns_oversampled_per_prn(prn_c1, prn_c2, dop1 + i * dop_err_rate, dop2 - i * dop_err_rate, 
@@ -1438,7 +1439,7 @@ void test_quasi_pilot_330(results_s* results) {
   int last_num_ascending = 0;
   //bool have_prev = false;
   //for (int center = window / 2; center <= nci - window / 2; center++) {
-  for (int center = window / 2; center <= nci - window / 2; center++) {
+  for (int center = window / 2; center <= nci - window; center++) {
     memset(fft_sum , 0, sizeof(c32) * FFT_QP_SIZE * SPC);
     //memset(fft_prev, 0, sizeof(c32) * FFT_QP_SIZE * SPC);
     //memset(mag_sum, 0, sizeof(float) * FFT_QP_SIZE * SPC);
@@ -1488,17 +1489,17 @@ void test_quasi_pilot_330(results_s* results) {
     
     double ang = atan2(fft_sum[peaks.idx1].r, fft_sum[peaks.idx1].i) * 57.2957795;
     int cnt2 = cnt_monotonic(mag(fft_sum[peaks.idx1]));
-    if (cnt2 == 0 && last_num_ascending > 5) {
-      locations[loc_cnt++] = center - 14;
+    if (cnt2 == 0 && last_num_ascending >= 3 && fabs(ang)> 50) {
+      locations[loc_cnt++] = center - (window/2) -1;
     }
     last_num_ascending = cnt2;
     printf("center,%03d, max,%6.1f, pos,%d, inter,%4.2f, ratio,%3.1f, ang,%4.2f, cnt, %d\n", center, peaks.val1, peaks.idx1, interp, (peaks.val1/peaks.val2), ang, cnt2);
   } // for center
   auto end = std::chrono::high_resolution_clock::now();////////////////////////////////////////
   std::chrono::duration<double> duration = end - start;
-  printf("Processing time for quasi pilot 330 ms: %f seconds\n", duration.count());
+  //printf("Processing time for quasi pilot 330 ms: %f seconds\n", duration.count());
   float mean_ratio = exp_stat_mean(&exp_s);
-  printf("cn0=%4.2f sigma=%6.3f <ratio> %4.3f num errors pilot_330: %d out of %d\n",cn0,sigma, mean_ratio, num_errors, num_tries);
+  printf("cn0=%4.2f sigma=%6.3f <ratio> %4.3f num errors pilot_330: %d out of %d missed_detect:%d false_alarms:%d \n",cn0,sigma, mean_ratio, num_errors, num_tries, (num_btts - loc_cnt), (loc_cnt - num_btts));
   results->num_errors += num_errors;
   results->num_trials += num_tries;
   for (int i = 0; i < loc_cnt; i++) {
