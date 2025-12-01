@@ -165,6 +165,10 @@ int8_t quantize_pm1(double x);
 
 double noise(double sigma);
 
+void DecodeOrsIQCplx(uint8_t* data, uint32_t byteLength, c32 iqs[]);
+
+void EncodeOrsIQCplx(c32 iqs[], uint8_t* data, uint32_t byteLength);
+
 double InterpolateCodePhase(uint32_t index, double earlyPower, double promptPower, double latePower);
 
 double compute_snr_cplx(c32* convol, int cov_size, top2_pks peaks);

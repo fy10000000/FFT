@@ -464,28 +464,6 @@ float signalf(float x, float F1, float F2, float F3, float F4) {
   return ans;
 }
 
-void DecodeOrsIQCplx(uint8_t* data, uint32_t byteLength, c32 iqs[])
-{
-  /// A 2-bit look up table for decoding
-  static int16_t TwoBitTable[4] = { 1,-1,3,-3 };
-
-  for (uint32_t i = 0; i < byteLength; i++) {
-    uint8_t byte = data[i];
-
-    uint8_t bits = (byte) & 0x03;
-    iqs[2 * i].r = (float)TwoBitTable[bits];
-
-    bits = (byte >> 2) & 0x03;
-    iqs[2 * i].i = (float)TwoBitTable[bits];
-
-    bits = (byte >> 4) & 0x03;
-    iqs[2 * i + 1].r = (float)TwoBitTable[bits];
-
-    bits = (byte >> 6) & 0x03;
-    iqs[2 * i + 1].i = (float)TwoBitTable[bits];
-  }
-}
-
 void read_L1(char* input) {
   FILE* fp_msb = NULL;
   fopen_s(&fp_msb, input, "r");
@@ -672,6 +650,14 @@ void read_ors(char* input) {
   memset(&meas, 0, sizeof(bb_meas_t));  
 
   DecodeOrsIQCplx(&buffer[hdrlen], SIZE / 2, iandq);
+  // debug encoder
+  //uint8_t test_enc[SIZE/2];
+  //EncodeOrsIQCplx(iandq, test_enc, SIZE / 2);
+  //c32 test_dec[SIZE];
+  //DecodeOrsIQCplx(test_enc, SIZE / 2, test_dec);
+  //for (int i = 0; i < SIZE; i++) {
+  //  if (test_dec[i].i != iandq[i].i || test_dec[i].r != iandq[i].r) {  printf("Error in encode/decode at %d \n", i); }
+  //}
   free(buffer);
 
   for (int loop = 0; loop < cnt; loop++) {
@@ -1378,7 +1364,7 @@ void test_quasi_pilot_330(results_s* results) {
   int nci = 550;
 #define SPC 1 // samples per chip
   int   len = E5_QP_CODE_LEN * SPC * nci; // 4 samples per chip and 100 ms
-  int   c_phase = 15;// 1;// 329; // which chip to set the code phase to
+  int   c_phase = 329;// 1;// 329; // which chip to set the code phase to
   int   prn1 = 14, prn2 = 18;
   float dop1 = 2000, dop2 = 2000;
   float dop_error = 1500;// 10; // full 2*250 Hz error in wipeoff
@@ -1422,6 +1408,7 @@ void test_quasi_pilot_330(results_s* results) {
       PI / 2, 0,&out[E5_QP_CODE_LEN * SPC * i], E5_QP_CODE_LEN * SPC, chipping_rate * SPC, sigma, sign2); // was 2.31 for -128.5 dBm 3.1 for -131.5
   }
   free(prn_c1); free(prn_c2);
+  //write out the received signal for external checking
 
   memset(locations, 0, sizeof(int) * 50);
   // Compute circular correlation C_k(τ) = FFT^-1{ FFT[signal] · conj(FFT[replica]) }.
@@ -1682,8 +1669,6 @@ void test_quasi_pilot3() {
   free(out);
 }
 
-
-
 /**
  * Main for testing and developing under Visual Studio 2022
  */
@@ -1743,7 +1728,7 @@ int main(int argc,char* argv[])
     return 0;
   }
 
-  if (0) {
+  if (1) {
     // G_2025_09_03_23_04_45.ors G_2025_09_03_23_04_56.ors G_2025_09_03_23_05_33.ors G_2025_09_03_23_04_56.ors G_2025_09_03_23_12_45.ors G_2025_09_03_23_19_10.ors
     read_ors((char*)"C:/work/Baseband/TestData/100ms/bw25/G_2025_09_03_23_04_45.ors");
     //read_ors((char*)"C:/work/Baseband/TestData/100ms/bw25/G_2025_09_03_23_22_41.ors");

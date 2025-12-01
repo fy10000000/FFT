@@ -1094,6 +1094,63 @@ double noise(double sigma) {
   return ans;
 }
 
+void DecodeOrsIQCplx(uint8_t* data, uint32_t byteLength, c32 iqs[])
+{
+  /// A 2-bit look up table for decoding
+  static int16_t TwoBitTable[4] = { 1,-1,3,-3 };
+
+  for (uint32_t i = 0; i < byteLength; i++) {
+    uint8_t byte = data[i];
+
+    uint8_t bits = (byte) & 0x03;
+    iqs[2 * i].r = (float)TwoBitTable[bits];
+
+    bits = (byte >> 2) & 0x03;
+    iqs[2 * i].i = (float)TwoBitTable[bits];
+
+    bits = (byte >> 4) & 0x03;
+    iqs[2 * i + 1].r = (float)TwoBitTable[bits];
+
+    bits = (byte >> 6) & 0x03;
+    iqs[2 * i + 1].i = (float)TwoBitTable[bits];
+  }
+}
+
+int16_t map13(int8_t val) {
+  // must corresp to TwoBitTable[4] = { 1,-1,3,-3 };
+  switch (val) {
+  case 1:
+    return 0;
+  case -1:
+    return 1;
+  case 3:
+    return 2;
+  case -3:
+    return 3;
+  default:
+    printf("Error bit map out of range"); exit(0);
+    return 0; // should not happen
+  }
+}
+
+void EncodeOrsIQCplx(c32 iqs[], uint8_t* data, uint32_t byteLength)
+{
+  /// A 2-bit look up table for encoding
+  static int16_t TwoBitTable[4] = { 1,-1,3,-3 };
+  for (uint32_t i = 0; i < byteLength; i++) {
+    uint8_t byte = 0;
+    int8_t r_ = (int)iqs[2 * i].r;
+    int8_t i_ = (int)iqs[2 * i].i;
+    byte |= ((map13(r_) & 0x03) << 0); // bits 0-1
+    byte |= ((map13(i_) & 0x03) << 2); // bits 2-3
+    r_ = (int)iqs[2 * i + 1].r;
+    i_ = (int)iqs[2 * i + 1].i;
+    byte |= ((map13(r_) & 0x03) << 4); // bits 4-5
+    byte |= ((map13(i_) & 0x03) << 6); // bits 6-7
+    data[i] = byte;
+  }
+}
+
 double InterpolateCodePhase(uint32_t index, double earlyPower, double promptPower, double latePower)
 {
   double interpolatedIndex;
