@@ -16,3 +16,5 @@ c32 add(const c32 a, const c32 b);
 
 float mag(const c32 in);
 
+float pow_c32(const c32 in);
+

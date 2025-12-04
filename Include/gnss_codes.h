@@ -13,18 +13,24 @@
 #include <stdbool.h>
 #include "cplx_types.h"
 
+#define SPEED_LIGHT 299792458.0 // speed of light in m/s
+
  // L5 code length per epoch 
 #define L5_CODE_LEN 10230
 
+#define E1C_CODE_LEN 4092
 #define E1B_CODE_LEN 4092
 #define E5A_CODE_LEN 10230
+#define L1C_CODE_LEN 1023
 
 #define E1B_HEX_LEN  1023
+#define E1C_HEX_LEN  1023
 #define E5A_HEX_LEN  2558
 
 #define E5_QP_HEX_LEN  83
 #define E5_QP_CODE_LEN 330
 
+#define E1C_MAX_PRN    50
 #define E1B_MAX_PRN    50
 #define E5A_MAX_PRN    50
 #define E5_QP_MAX_PRN  40
@@ -118,7 +124,17 @@ void synth_e1b_prn(
   int prn, // one based indexing
   float doppler,
   size_t N,
-  c32* out
+  c32* out,
+  int spc,
+  int rotate_offset
+);
+
+void synth_e1c_prn(
+  int prn, // one based indexing
+  float doppler,
+  size_t N,
+  c32* out,
+  int rotate_offset
 );
 
 void synth_e5a_prn(
@@ -159,6 +175,7 @@ void mix_two_prns_oversampled_per_prn(const int32_t* prn_a, const int32_t* prn_b
 
 void make_replica(const int32_t* prn_a, c32* out_iandq, float doppler, int size, float samp_freq);
 void rotate_fwd(int array[], int size, int offset);
+void rotate_fwd_int8(int8_t array[], int size, int offset);
 
 int8_t quantize_pm13(double x);
 int8_t quantize_pm1(double x);
@@ -170,6 +187,8 @@ void DecodeOrsIQCplx(uint8_t* data, uint32_t byteLength, c32 iqs[]);
 void EncodeOrsIQCplx(c32 iqs[], uint8_t* data, uint32_t byteLength);
 
 double InterpolateCodePhase(uint32_t index, double earlyPower, double promptPower, double latePower);
+
+double interpCodePhase(c32* correl, int size, top2_pks* peaks);
 
 double compute_snr_cplx(c32* convol, int cov_size, top2_pks peaks);
 

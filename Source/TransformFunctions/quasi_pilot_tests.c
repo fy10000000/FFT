@@ -113,8 +113,8 @@ extern void mix_two_prns_oversampled_per_prn(const int32_t* prn_a,
     double ia = a * pca, qa = a * psa;
     double ib = b * pcb, qb = b * psb;
     int quant = 0;
-    out_iandq[samp].r = quant ? quantize_pm13(ia + ib + noise(sigma))* sign : ((ia + ib) + noise(sigma))* sign;
-    out_iandq[samp].i = quant ? quantize_pm13(qa + qb + noise(sigma))* sign : ((qa + qb) + noise(sigma))* sign;
+    out_iandq[samp].r = quant ? quantize_pm13((ia + ib + noise(sigma))* sign)/sigma : (((ia + ib) + noise(sigma))* sign);
+    out_iandq[samp].i = quant ? quantize_pm13((qa + qb + noise(sigma))* sign)/sigma : (((qa + qb) + noise(sigma))* sign);
 
     // advance both phasors
     double npca = pca * ca_inc - psa * sa_inc;
@@ -148,6 +148,22 @@ extern void rotate_fwd(int array[], int size, int offset) {
     }
   }
   memcpy(array, temp, sizeof(int) * size);
+  free(temp);
+}
+
+extern void rotate_fwd_int8(int8_t array[], int size, int offset) {
+  if (offset == 0) { return; }
+  int8_t* temp = (int8_t*)malloc(sizeof(int8_t) * size);
+  if (temp == NULL) { printf("rotate_fwd_int8's malloc failed");  return; }
+  for (int i = 0; i < size; i++) {
+    if (i - offset < 0) {
+      temp[i] = array[size + (i - offset)];
+    }
+    else {
+      temp[i] = array[i - offset];
+    }
+  }
+  memcpy(array, temp, sizeof(int8_t) * size);
   free(temp);
 }
 

@@ -540,7 +540,7 @@ void read_L1(char* input) {
     synth_gps_prn(prn, -doppler, SIZE, repli, SPC, 0);
   }
   else { // Galileo
-    synth_e1b_prn(prn, -doppler, SIZE, repli);
+    synth_e1b_prn(prn, -doppler, SIZE, repli, SPC, 0);
   }
 
   if (1) {
@@ -616,11 +616,13 @@ void read_ors(char* input) {
   int sec = (int)floor((tods / 60.0 - floor(tods / 60.0)) * 60);
   // map back to GPS time
   double dtime = compute_gps_time(yr, mon, day, hr, min, sec);
+  dtime -= 18; // leap seconds
+  printf("week %d tow %f \n", (int)floor(dtime / 604800.0), dtime - floor(dtime / 604800.0) * 604800.0);
   int msec = (int)round((sec - floor(sec)) * 1000);
   uint32_t nanos = U3(&buffer[18]); // 21
   printf("%4d-%02d-%02d-%02d-%02d-%02d msec=%d nanos=%d \n", yr, mon, day, hr, min, sec, msec, nanos);
-  uint16_t size = ((uint16_t)bytes_to_read) - hdrlen;
-  printf("size (total bytes - hdrs) %d \n", size);
+  int payload_size = bytes_to_read - hdrlen;
+  printf("size (total bytes - hdrs) %d \n", payload_size);
   printf("Working on %s\n", input);
 
   FILE* fp_out = NULL; //output file
@@ -637,10 +639,13 @@ void read_ors(char* input) {
   int cnt = parse_log((char*)"C:/work/Baseband/TestData/100ms/bw25/replay_bw25.log", input, prn2acq);
   qsort(prn2acq, cnt, sizeof(acq_struct), compareConstelPRN); // sort by constel & prn for expected order
  
-  c32* iandq = (c32*)malloc(SIZE * sizeof(c32));
+  c32* iandq = (c32*)malloc(payload_size * sizeof(c32));
   c32* signl = (c32*)malloc(SIZE * sizeof(c32));
   c32* repli = (c32*)malloc(SIZE * sizeof(c32));
   c32* prod  = (c32*)malloc(SIZE * sizeof(c32));
+  //c32* sums  = (c32*)malloc(SIZE * sizeof(c32));
+  float* sums = (float*)malloc(SIZE * sizeof(c32));
+
   if (iandq == NULL || prod == NULL) {
     fprintf(stderr, "Memory allocation failed for q32 array.\n");
     free(iandq); free(repli); free(prod); free(signl); return;
@@ -649,7 +654,7 @@ void read_ors(char* input) {
   bb_meas_t meas;
   memset(&meas, 0, sizeof(bb_meas_t));  
 
-  DecodeOrsIQCplx(&buffer[hdrlen], SIZE / 2, iandq);
+  DecodeOrsIQCplx(&buffer[hdrlen], payload_size / 2, iandq);
   // debug encoder
   //uint8_t test_enc[SIZE/2];
   //EncodeOrsIQCplx(iandq, test_enc, SIZE / 2);
@@ -661,32 +666,41 @@ void read_ors(char* input) {
   free(buffer);
 
   for (int loop = 0; loop < cnt; loop++) {
-    int size = prn2acq[loop].constel == 1 ? 4096 : 16384;
+    int size = prn2acq[loop].constel == 1 ? 4092: 16368; // the samples per epoch
+    int fft_size = prn2acq[loop].constel == 1 ? 4096 : 16384;
     int proc_gps = (prn2acq[loop].constel == 1) ? 1 : 0;
+    memset(repli, 0, SIZE * sizeof(c32));
     if (proc_gps) {
       synth_gps_prn(prn2acq[loop].prn, -prn2acq[loop].doppler, size, repli, SPC, 0);
     }
     else { // Galileo
-      synth_e1b_prn(prn2acq[loop].prn, -prn2acq[loop].doppler, size, repli);
+      synth_e1b_prn(prn2acq[loop].prn, -prn2acq[loop].doppler, size, repli, SPC, 0);
     }
-    memcpy(signl, iandq, size * sizeof(c32));
-    memset(prod, 0, size * sizeof(c32));
-
-    fft_c32(size, repli, true); // F(repli)
-    fft_c32(size, signl, true); // F(iandq) and prod=F(iandq) * conj(F(repli)) below
-    for (int i = 0; i < size; i++) { prod[i] = mult(signl[i], get_conj(repli[i])); }
-    fft_c32(size, prod, false); // in-place inv F(prod) 
+    memset(sums, 0, SIZE * sizeof(float));
+    fft_c32(fft_size, repli, true); // F(repli)
+    for (int j = 0; j < 3; j++) {
+      memset(prod, 0, SIZE * sizeof(c32));
+      memset(signl, 0, SIZE * sizeof(c32));
+      memcpy(signl, &iandq[j * size], size * sizeof(c32));
+      
+      fft_c32(fft_size, signl, true); // F(iandq) and prod=F(iandq) * conj(F(repli)) below
+      for (int i = 0; i < fft_size; i++) { prod[i] = mult(signl[i], get_conj(repli[i])); }
+      fft_c32(fft_size, prod, false); // in-place inv F(prod) 
+      for (int i = 0; i < fft_size; i++) {
+        sums[i] += mag(prod[i]);// add(sums[i], prod[i]);
+      }
+    }
 
     top2_pks peaks;
-    find_top2_peaks_cplx(prod, size, 3, &peaks, fp_out);
+    find_top2_peaks_real(sums, size, 3, &peaks, fp_out);
     fclose(fp_out);
     // compute noise stats for SNR
     double BW = 3.1623e3; // Hz
-    double cn0 = compute_snr_cplx(prod, size, peaks) + 35;// +10 * log(BW)
-    double early = mag(prod[peaks.idx1 - 1]), prompt = peaks.val1, late = mag(prod[peaks.idx1 + 1]);
+    double cn0 = compute_snr_real(sums, size, peaks) + 35;// +10 * log(BW)
+    double early = (sums[peaks.idx1 - 1]), prompt = peaks.val1, late = (sums[peaks.idx1 + 1]);
     double interp = InterpolateCodePhase(peaks.idx1, early * early, prompt * prompt, late * late);
     //printf("interpolated %f cn0 %f\n", interp, cn0);
-    interp *= (4092.0f / 4096.0f); 
+    //interp *= (1023.0f / 1024.0f); 
 
     if ((peaks.val1 / peaks.val2) > 1.3) {
       meas.sats[meas.num_sat].prn = prn2acq[loop].prn;
@@ -695,8 +709,8 @@ void read_ors(char* input) {
       meas.sats[meas.num_sat].cno = (float)cn0;
       meas.sats[meas.num_sat].constellation = proc_gps ? SYS_GPS : SYS_GAL;
       float ratio = (peaks.val1 / peaks.val2);
-      printf("Acquired %s %d Doppler %f Hz CodePhase %f [ms] C/N0 %f dB-Hz ratio=%f\n", (proc_gps == 1) ? "GPS" : "GAL",
-        prn2acq[loop].prn, -prn2acq[loop].doppler,meas.sats[meas.num_sat].code_phase, meas.sats[meas.num_sat].cno, ratio* ratio);
+      printf("Acquired %s %d Doppler %f Hz Code %f [ms] Chips %f  C/N0 %f dB-Hz ratio=%f\n", (proc_gps == 1) ? "GPS" : "GAL",
+        prn2acq[loop].prn, -prn2acq[loop].doppler, meas.sats[meas.num_sat].code_phase, meas.sats[meas.num_sat].code_phase * 4092.0, meas.sats[meas.num_sat].cno, ratio* ratio);
       meas.num_sat++;
     }
   }
@@ -714,7 +728,7 @@ void read_ors(char* input) {
   read_bb_msb(tbuff, num_bytes, &check);
   fclose(test);
    
-  free(iandq); free(repli); free(prod);
+  free(iandq); free(repli); free(prod); free(signl); free(sums);
   //////////////////////////////////////////////////////
 }
 
@@ -766,47 +780,61 @@ void sim_E5A() {
 }
 
 void sim_L1() {
-#define FFT_SIZE 1024
-#define SPC  16
-  int    prn_a = 5, prn_b = 15;
+#define SPC  1
+  bool   do_gps = false;
+  int    fft_size = 1024 * 4;
+  int    prn_a = 23, prn_b = 30;
   double doppler_a = 1580, doppler_b = -2580;
-  int    offset = 500;// 
+  int    offset = 1;// 
   
   printf("should be %d \n", offset);
-  c32* samp_a  = (c32*)malloc(FFT_SIZE * SPC * sizeof(c32));
-  c32* samp_b  = (c32*)malloc(FFT_SIZE * SPC * sizeof(c32));
-  c32* repl_a  = (c32*)malloc(FFT_SIZE * SPC * sizeof(c32));
-  c32* prod    = (c32*)malloc(FFT_SIZE * SPC * sizeof(c32));
-  memset(samp_a, 0, FFT_SIZE * SPC * sizeof(c32));
-  memset(samp_b, 0, FFT_SIZE * SPC * sizeof(c32));
-  memset(repl_a, 0, FFT_SIZE * SPC * sizeof(c32));
-  memset(prod  , 0, FFT_SIZE * SPC * sizeof(c32));
+  c32* samp_a = (c32*)malloc(fft_size * SPC * sizeof(c32));
+  c32* samp_b = (c32*)malloc(fft_size * SPC * sizeof(c32));
+  c32* repl_a = (c32*)malloc(fft_size * SPC * sizeof(c32));
+  c32* prod   = (c32*)malloc(fft_size * SPC * sizeof(c32));
+  memset(samp_a, 0, fft_size * SPC * sizeof(c32));
+  memset(samp_b, 0, fft_size * SPC * sizeof(c32));
+  memset(repl_a, 0, fft_size * SPC * sizeof(c32));
+  memset(prod,   0, fft_size * SPC * sizeof(c32));
 
-  synth_gps_prn(prn_a, doppler_a, FFT_SIZE, samp_a, SPC, offset);
-  synth_gps_prn(prn_b, doppler_b, FFT_SIZE, samp_b, SPC, 300);
-  synth_gps_prn(prn_a, doppler_a + 100, FFT_SIZE, repl_a, SPC, 0);
-
-  for (int i = 0; i < FFT_SIZE * SPC; i++) {
+  if (do_gps) {
+    synth_gps_prn(prn_a, doppler_a, 1023 * SPC, samp_a, SPC, offset);
+    synth_gps_prn(prn_b, doppler_b, 1023 * SPC, samp_b, SPC, 300);
+    synth_gps_prn(prn_a, doppler_a + 0, 1023 * SPC, repl_a, SPC, 0);
+  } else {
+    synth_e1b_prn(prn_a, doppler_a, 4092 * SPC, samp_a, SPC, offset);
+    synth_e1b_prn(prn_b, doppler_b, 4092 * SPC, samp_b, SPC, 300);
+    synth_e1b_prn(prn_a, doppler_a + 0, 4092 * SPC, repl_a, SPC, 0);
+  }
+  /*
+  c32* temp   = (c32*)malloc(fft_size * SPC * sizeof(c32));
+  memset(temp, 0, fft_size * SPC * sizeof(c32));
+  memcpy(temp, samp_a, fft_size * SPC * sizeof(c32)); 
+  up_sample_N_to_M(temp, 4092, samp_a,  fft_size * SPC);
+  memset(temp, 0, fft_size * SPC * sizeof(c32));
+  memcpy(temp, repl_a, fft_size * SPC * sizeof(c32));
+  up_sample_N_to_M(temp, 4092, repl_a, fft_size * SPC);
+  free(temp);
+  */
+  for (int i = 0; i < fft_size * SPC; i++) {
     samp_a[i].r += samp_b[i].r; // add noise & quantize later
     samp_a[i].i += samp_b[i].i;
   }
-  free(samp_b);
+  free(samp_b); 
   
-  fft_c32(FFT_SIZE * SPC, samp_a, true);
-  fft_c32(FFT_SIZE * SPC, repl_a, true);
-  for (int i = 0; i < FFT_SIZE * SPC; i++) { prod[i] = mult(samp_a[i], get_conj(repl_a[i])); }
-  fft_c32(FFT_SIZE * SPC, prod, false); // in-place inv F(prod)
+  fft_c32(fft_size * SPC, samp_a, true);
+  fft_c32(fft_size * SPC, repl_a, true);
+  for (int i = 0; i < fft_size * SPC; i++) { prod[i] = mult(samp_a[i], get_conj(repl_a[i])); }
+  fft_c32(fft_size * SPC, prod, false); // in-place inv F(prod)
 
-  FILE* dbg_fp = NULL;
-  fopen_s(&dbg_fp, "C:/Python/out6.csv", "w");
+  FILE* dbg_fp = NULL; fopen_s(&dbg_fp, "C:/Python/out6.csv", "w");
   top2_pks peaks = { 0 };
-  find_top2_peaks_cplx(prod, FFT_SIZE , 3, &peaks, dbg_fp);
-  double early = mag(prod[peaks.idx1 - 1]), prompt = peaks.val1, late = mag(prod[peaks.idx1 + 1]);
-  double interp = InterpolateCodePhase(peaks.idx1, early * early, prompt * prompt, late * late);
-
+  find_top2_peaks_cplx(prod, fft_size * SPC, 3, &peaks, dbg_fp);
+  double interp = interpCodePhase(prod, fft_size * SPC,&peaks);
+  
   fclose(dbg_fp);
   free(prod); free(samp_a); free(repl_a);
-  printf("max_float=%f offset=%d pos=%d interp=%f\n", peaks.val1, offset, peaks.idx1, interp );
+  printf("max_float=%f offset=%d pos=%d interp=%f error=%f\n", peaks.val1, offset, peaks.idx1, interp, SPEED_LIGHT * (offset - interp) /(1023.0* SPC));
 }
 
 /////////////////////////////////////////////////////////////////////////////
@@ -1360,7 +1388,7 @@ void test_quasi_pilot_330(results_s* results) {
   float chipping_rate = 5.115e6; // chips per sec
   // note can do code-phase error stats or BTT detection stats but not both at once!!!! use {-1} for no BTTs
   int locations[50] = { 50, 100, 150, 200, 250, 300, 350, 400, 450, 500 };// { 20, 40, 60, 80, 100, 120, 140, 160, 180, 200, 220, 240, 260, 280 };
-  int window = 26; //  window/2 ms either side of center 
+  int window = 30; //  window/2 ms either side of center 
   int nci = 550;
 #define SPC 1 // samples per chip
   int   len = E5_QP_CODE_LEN * SPC * nci; // 4 samples per chip and 100 ms
@@ -1369,9 +1397,11 @@ void test_quasi_pilot_330(results_s* results) {
   float dop1 = 2000, dop2 = 2000;
   float dop_error = 1500;// 10; // full 2*250 Hz error in wipeoff
   float dop_err_rate = 0.6;// 0.6;// 0.6;//Hz per ms
+  float pwr = -128.75;// dBm signal power
   float N0 = -174.0 + 2.5;// dBm/Hz thermal noise ktb density + noise figure
-  float cn0 = -128.75 - N0; // dBm/Hz pgae 14 Galileo_OS_SIS_ICD_v2.2
+  float cn0 = pwr - N0; // dBm/Hz pgae 14 Galileo_OS_SIS_ICD_v2.2
   float sigma = sqrt((1.0 * chipping_rate * SPC) / (2.0f* pow(10.0,cn0/10.0)));
+  //printf("sigma %f \n", sigma);
   //float sigma = 12.7;// 15.98;// 3.5;// 3.5; // noise level 15->6*31
   int   num_errors = 0; int num_tries = 0;
   c32*  out    = (c32*)malloc(len * sizeof(c32));
@@ -1408,6 +1438,15 @@ void test_quasi_pilot_330(results_s* results) {
       PI / 2, 0,&out[E5_QP_CODE_LEN * SPC * i], E5_QP_CODE_LEN * SPC, chipping_rate * SPC, sigma, sign2); // was 2.31 for -128.5 dBm 3.1 for -131.5
   }
   free(prn_c1); free(prn_c2);
+  
+  /*
+  uint8_t* test_enc = (uint8_t*)malloc(sizeof(uint8_t) * nci/2);
+  EncodeOrsIQCplx(out, test_enc, nci / 2);
+  FILE* fp = NULL;
+  fopen_s(&fp, "C:/Python/nci_quasi_pilot_330.csv", "wb");
+  fwrite(test_enc, sizeof(uint8_t), nci / 2,  fp);
+  free(test_enc);
+  */
   //write out the received signal for external checking
 
   memset(locations, 0, sizeof(int) * 50);
@@ -1463,9 +1502,7 @@ void test_quasi_pilot_330(results_s* results) {
     //for (int k = 0; k < FFT_QP_SIZE * SPC; k++) { mag_sum[k] = mag(fft_sum[k]); }
 
     FILE* fp_out = NULL;
-    if (false) {//center == 15) {
-      errno_t er = fopen_s(&fp_out, "C:/Python/nci_sum4.csv", "w");
-    }
+    if (false) {} //center == 50) {  errno_t er = fopen_s(&fp_out, "C:/Python/nci_sum4.csv", "w"); }
     top2_pks peaks;
     find_top2_peaks_cplx(fft_sum, E5_QP_CODE_LEN * SPC, 3, &peaks, fp_out);
     if (fp_out != NULL) { fclose(fp_out); }
@@ -1479,11 +1516,12 @@ void test_quasi_pilot_330(results_s* results) {
     
     double ang = atan2(fft_sum[peaks.idx1].r, fft_sum[peaks.idx1].i) * 57.2957795;
     int cnt2 = cnt_monotonic(mag(fft_sum[peaks.idx1]));
-    if (cnt2 == 0 && last_num_ascending >= 3 && fabs(ang)> 50) {
+    float ratio = peaks.val1 / peaks.val2;
+    if (cnt2 == 0 && last_num_ascending >= 3 && fabs(ang)> 50 /*ratio >= 1.25 */ ) {
       locations[loc_cnt++] = center - (window/2) -1;
     }
     last_num_ascending = cnt2;
-    //printf("center,%03d, max,%6.1f, pos,%d, inter,%4.2f, ratio,%3.1f, ang,%4.2f, cnt, %d\n", center, peaks.val1, peaks.idx1, interp, (peaks.val1/peaks.val2), ang, cnt2);
+    //printf("center,%03d, max,%6.1f, pos,%d, inter,%4.2f, ratio,%3.1f, ang,%4.2f, cnt, %d\n", center, peaks.val1, peaks.idx1, interp, ratio, ang, cnt2);
   } // for center
   auto end = std::chrono::high_resolution_clock::now();////////////////////////////////////////
   std::chrono::duration<double> duration = end - start;
@@ -1494,7 +1532,7 @@ void test_quasi_pilot_330(results_s* results) {
   results->num_trials += num_tries;
   if ((loc_cnt - num_btts) > 0) { results->btt_false_alarms+= (loc_cnt - num_btts); }
   if ((num_btts - loc_cnt) > 0) { results->btt_missed_detects+= (num_btts - loc_cnt); }
-  //for (int i = 0; i < loc_cnt; i++) { printf("Bit transition at %d ms \n", locations[i]); }
+  for (int i = 0; i < loc_cnt; i++) { printf("Bit transition at %d ms \n", locations[i]); }
   //printf("BTs: %d Random number: %d\n", loc_cnt, rand());
   free(out); free(fft_data); free(fft_sum); free(fft_repl); free(fft_prod);// free(fft_prev); //free(mag_sum);
 }
@@ -1587,7 +1625,6 @@ void test_quasi_pilot2() {
     
     //printf("nci pos =%d max=%5.0f \n", pos_nci, max_nci);
     stat_add(&stat, (max_nci));
-
     float mean2 = stat_mean(&stat);
     //if (max_nci < min_val && max_nci < mean2 - 20) {
     if (max_nci < min_val && max_nci < mean2 - 900) {
@@ -1730,14 +1767,15 @@ int main(int argc,char* argv[])
 
   if (1) {
     // G_2025_09_03_23_04_45.ors G_2025_09_03_23_04_56.ors G_2025_09_03_23_05_33.ors G_2025_09_03_23_04_56.ors G_2025_09_03_23_12_45.ors G_2025_09_03_23_19_10.ors
-    read_ors((char*)"C:/work/Baseband/TestData/100ms/bw25/G_2025_09_03_23_04_45.ors");
+    //read_ors((char*)"C:/work/Baseband/TestData/100ms/bw25/G_2025_09_03_23_04_22.ors");
+    read_ors((char*)"C:/work/Baseband/TestData/100ms/bw25/G_2025_09_03_23_05_33.ors");
     //read_ors((char*)"C:/work/Baseband/TestData/100ms/bw25/G_2025_09_03_23_22_41.ors");
     //read_ors((char*)"C:/work/Baseband/TestData/100ms/bw25/G_2025_09_03_23_04_45.ors");
     //read_ors((char*)"C:/work/Baseband/TestData/G_2025_06_05_22_11_26.ors");
     return 0;
   }
 
-  if (1) {
+  if (0) {
     //test_quasi_diff_pilot();
     //test_quasi_pilot_330Up();
     

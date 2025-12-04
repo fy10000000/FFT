@@ -187,8 +187,8 @@ extern void read_bb_msb(uint8_t* bin_buff, int bin_size, bb_meas_t* measurements
     measurements->sats[i].doppler = (float)(2 * doppler);
     measurements->sats[i].prn = used_gps_svs[i];
     measurements->sats[i].constellation = SYS_GPS; // GPS constellation
-    printf("GPS %d Code phase %f, Doppler %.1f, CNO %.1f \n",
-      measurements->sats[i].prn, measurements->sats[i].code_phase * 4 * 1023, measurements->sats[i].doppler, measurements->sats[i].cno);
+    printf("GPS %d code %f, chips %f , Doppler %.1f, CNO %.1f \n",
+      measurements->sats[i].prn, measurements->sats[i].code_phase, measurements->sats[i].code_phase * 1023.0 , measurements->sats[i].doppler, measurements->sats[i].cno);
   }
   int64_t gal = bit_reader(bin_buff, 3, 0);
   if (gal == 1) {
@@ -220,8 +220,8 @@ extern void read_bb_msb(uint8_t* bin_buff, int bin_size, bb_meas_t* measurements
       measurements->sats[num_gps + i].doppler = (float)(2 * doppler);
       measurements->sats[num_gps + i].prn = used_gal_svs[i];
       measurements->sats[num_gps + i].constellation = SYS_GAL; // Galileo constellation
-      printf("GAL %d Code phase %f, Doppler %.1f, CNO %.1f \n",
-        measurements->sats[num_gps + i].prn, measurements->sats[num_gps + i].code_phase, measurements->sats[num_gps + i].doppler, measurements->sats[num_gps + i].cno);
+      printf("GAL %d code %f chips %f, Doppler %.1f, CNO %.1f \n",
+        measurements->sats[num_gps + i].prn, measurements->sats[num_gps + i].code_phase, measurements->sats[num_gps + i].code_phase * 1023.0, measurements->sats[num_gps + i].doppler, measurements->sats[num_gps + i].cno);
     }
   }
   else {
