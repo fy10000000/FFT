@@ -626,10 +626,6 @@ void read_ors(char* input) {
   printf("Working on %s\n", input);
 
   FILE* fp_out = NULL; //output file
-  errno_t er = fopen_s(&fp_out, "C:/Python/out2.csv", "w");
-  if (er != 0 || fp_out == NULL) {
-    fprintf(stderr, "Failed to open output file\n"); return;
-  }
 
   //// Dial in the prn and doppler here ////////////////
 #define SPC  4
@@ -676,6 +672,7 @@ void read_ors(char* input) {
     else { // Galileo
       synth_e1b_prn(prn2acq[loop].prn, -prn2acq[loop].doppler, size, repli, SPC, 0);
     }
+    //rotate_fwd_c32(repli, SIZE, 16368 - 2000); //fixx remove
     memset(sums, 0, SIZE * sizeof(float));
     fft_c32(fft_size, repli, true); // F(repli)
     for (int j = 0; j < 3; j++) {
@@ -692,6 +689,9 @@ void read_ors(char* input) {
     }
 
     top2_pks peaks;
+    char str[128];
+    snprintf(str, sizeof(str), "C:/Python/out%s-%d.csv", (proc_gps == 1) ? "GPS" : "GAL", prn2acq[loop].prn);
+    errno_t err= fopen_s(&fp_out, str, "w");
     find_top2_peaks_real(sums, size, 3, &peaks, fp_out);
     fclose(fp_out);
     // compute noise stats for SNR
@@ -780,12 +780,12 @@ void sim_E5A() {
 }
 
 void sim_L1() {
-#define SPC  1
+#define SPC  4
   bool   do_gps = false;
-  int    fft_size = 1024 * 4;
+  int    fft_size = 1024 *4 ;
   int    prn_a = 23, prn_b = 30;
   double doppler_a = 1580, doppler_b = -2580;
-  int    offset = 1;// 
+  int    offset = 4000;//1990 is threshold for error
   
   printf("should be %d \n", offset);
   c32* samp_a = (c32*)malloc(fft_size * SPC * sizeof(c32));
@@ -806,16 +806,9 @@ void sim_L1() {
     synth_e1b_prn(prn_b, doppler_b, 4092 * SPC, samp_b, SPC, 300);
     synth_e1b_prn(prn_a, doppler_a + 0, 4092 * SPC, repl_a, SPC, 0);
   }
-  /*
-  c32* temp   = (c32*)malloc(fft_size * SPC * sizeof(c32));
-  memset(temp, 0, fft_size * SPC * sizeof(c32));
-  memcpy(temp, samp_a, fft_size * SPC * sizeof(c32)); 
-  up_sample_N_to_M(temp, 4092, samp_a,  fft_size * SPC);
-  memset(temp, 0, fft_size * SPC * sizeof(c32));
-  memcpy(temp, repl_a, fft_size * SPC * sizeof(c32));
-  up_sample_N_to_M(temp, 4092, repl_a, fft_size * SPC);
-  free(temp);
-  */
+  int rep_cylce = 12000;
+  rotate_fwd_c32(repl_a, fft_size * SPC, fft_size * SPC - rep_cylce);
+ 
   for (int i = 0; i < fft_size * SPC; i++) {
     samp_a[i].r += samp_b[i].r; // add noise & quantize later
     samp_a[i].i += samp_b[i].i;
@@ -834,7 +827,9 @@ void sim_L1() {
   
   fclose(dbg_fp);
   free(prod); free(samp_a); free(repl_a);
-  printf("max_float=%f offset=%d pos=%d interp=%f error=%f\n", peaks.val1, offset, peaks.idx1, interp, SPEED_LIGHT * (offset - interp) /(1023.0* SPC));
+
+  float scale = do_gps ? 1 : 4;
+  printf("max_float=%f offset=%d pos=%d interp=%f error=%f\n", peaks.val1, offset, peaks.idx1, interp, SPEED_LIGHT * (offset + rep_cylce - interp) /(1023.0* scale * SPC));
 }
 
 /////////////////////////////////////////////////////////////////////////////

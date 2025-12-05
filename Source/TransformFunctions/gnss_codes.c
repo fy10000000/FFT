@@ -3,7 +3,7 @@
 #include "up_sample.h"
 #include <stdbool.h>
 #include <complex.h>
-
+#include "transform_functions.h"
 
 c32 get_conj(const c32 x) {
   c32 y;
@@ -970,6 +970,27 @@ void up_sample_10k_to_16k(c32* in , c32* out) {
   iq_resamp_zp_free(rs);
 }
 
+void GetE1CodeReversed(const int prn,int spc, int8_t Code[])
+{
+  int i;
+
+  int8_t* cp = &Code[0];
+  const int8_t* codebits = E1B_CODE[prn - 1];
+
+  for (i = 0; i < E1B_CODE_LEN; i++)
+  {
+    int8_t val = ((codebits[i / 8] >> (7 - i % 8)) & 0x01) ? 1 : -1;
+    int j = spc;
+    while (j--)
+    {
+      // apply the sub-code
+      *cp = (j < 2) ? val : -val;
+      cp++;
+    }
+  }
+}
+
+
 // -------------------------------
 // Signal synthesis for two PRNs (PRN2 and PRN4) into one complex baseband stream.
 // Inputs:
@@ -994,45 +1015,56 @@ extern void synth_e1b_prn(
 ) {
   float phi_rad = 0.0;
   float code_phase = 0.0;
-  const float fs_hz = 4.092e6f;
+  const float fs_hz = 1.023e6f * spc; 
   const float code_rate_cps = 1.023e6f;
-  int ret = load_e1b_primary_codes((char*)"C:/work/Baseband/HEX_E1B.txt", E1B_Code);
-  if (ret < 0) { printf("Error loading Galileo codes; check path in synth_e1b_prn()\n"); return; }
+  //int ret = load_e1b_primary_codes((char*)"C:/work/Baseband/HEX_E1B.txt", E1B_Code);
+  //if (ret < 0) { printf("Error loading Galileo codes; check path in synth_e1b_prn()\n"); return; }
+  //int8_t* test = (int8_t*)malloc(sizeof(int8_t)* N);
+  
+
+  //for (int i = 0; i < 4092; i++) {
+  //  if (test[i] != E1B_Code[prn][i]) {
+  //    printf("error test %d old %d \n", test[i], E1B_Code[prn][i]);
+  //  }
+  //}
   const int L = 4092;
   static int8_t ca[4092 * 8] = {0};
 
-  memcpy(ca, E1B_Code[prn], sizeof(int8_t) * L);
-  rotate_fwd_int8(ca, L, rotate_offset);
+  GetE1CodeReversed(prn, spc, ca);
+  //memcpy(ca, E1B_Code[prn], sizeof(int8_t) * L);
 
-  if (spc > 1) {
-    spc = 1;
-    // upsample code to spc
-    int8_t* up_ca = (int8_t*)malloc(sizeof(int8_t) * L * spc);
-    for (int i = 0; i < L; i++) {
-      for (int j = 0; j < spc; j++) {
-        up_ca[i * spc + j] = ca[i];
-      }
-    }
-    memcpy(ca, up_ca, sizeof(int8_t) * L * spc);
-    free(up_ca);
-  } 
+  //if (spc > 1) {
+  //  spc = 1;
+  //  // upsample code to spc
+  //  int8_t* up_ca = (int8_t*)malloc(sizeof(int8_t) * L * spc);
+  //  for (int i = 0; i < L; i++) {
+  //    for (int j = 0; j < spc; j++) {
+  //      // alternate mod 2 to flip 
+  //      up_ca[i * spc + j] = ca[i];// *(j < 2) ? 1 : -1;
+  //    }
+  //  }
+  //  memcpy(ca, up_ca, sizeof(int8_t) * L * spc);
+  //  free(up_ca);
+  //} 
 
+  rotate_fwd_int8(ca, L*spc, rotate_offset);
   float dchips = (code_rate_cps) / fs_hz;
   float dphia = 2.0f * (float) PI * (doppler) / fs_hz; // phase increment per sample
   float chips = code_phase;
   float phia = phi_rad;
 
   //FILE* dbg_fp = NULL;
-  //fopen_s(&dbg_fp, "C:/Python/prn23.csv", "w");
+  //fopen_s(&dbg_fp, "C:/Python/prn23-new.csv", "w");
+  //fprintf(dbg_fp, "num, prn23\n");
 
   for (size_t n = 0; n < N; ++n) {
     // PRN a
     float frac = chips - floorf(chips);
     int code = code_chip_at(ca, chips, L);
     float sca = cboc_e1b_weight(frac);
-    float ampa = ((float)code * sca); // data assumed +/-1
+    float ampa = ca[n];// round((float)code * sca); // data assumed +/-1
 
-    //fprintf(dbg_fp, "%d,  %d, amp, %f\n",n+1, code,ampa); 
+    //fprintf(dbg_fp, "%d, %f, %d, amp, %f\n",n+1, frac , code,ampa); 
 
     float saph, caph; 
     sincosf_fast(phia, &saph, &caph);
@@ -1043,8 +1075,8 @@ extern void synth_e1b_prn(
 
     // advance
     chips += dchips;
-    if (chips >= L) { chips -= L; }
-    else if (chips < 0) { chips += L; }
+    if (chips >= L) { chips -= L * spc; }
+    else if (chips < 0) { chips += L * spc; }
 
     phia += dphia;
     if (phia > 1e9f || phia < -1e9f) { 
@@ -1061,52 +1093,53 @@ extern void synth_e1c_prn(
   float doppler,
   size_t N,
   c32* out,
+  int spc,
   int rotate_offset
 ) {
-  float phi_rad = 0.0;
   float code_phase = 0.0;
-  const float fs_hz = 4.092e6f;
+  double car_phase_deg = 0.0;
+  double fs_hz = 1.023e6 * spc;
   const float code_rate_cps = 1.023e6f;
-  static int8_t ca[4092];
-  int ret = load_e1c_primary_codes((char*)"C:/work/Baseband/HEX_E1C.txt",prn , ca);
+  static int8_t ca_1ec[4092 * 8] = { 0 };
+  int ret = load_e1c_primary_codes((char*)"C:/work/Baseband/HEX_E1C.txt", prn , ca_1ec);
   if (ret < 0) { printf("Error loading Galileo codes; check path in synth_e1c_prn()\n"); return; }
   const int L = 4092;
 
-  rotate_fwd_int8(ca, L, rotate_offset);
+  if (spc > 1) {
+    // upsample code to spc
+    int8_t* up_ca = (int8_t*)malloc(sizeof(int8_t) * L * spc);
+    for (int i = 0, k = 0; i < L; ++i) {
+      for (int j = 0; j < spc; ++j) {
+        up_ca[k++] = ca_1ec[i];
+      }
+    }
+    memcpy(ca_1ec, up_ca, sizeof(int8_t) * L * spc);
+    free(up_ca);
+  }
+
+  rotate_fwd_int8(ca_1ec, N, rotate_offset);
 
   float dchips = (code_rate_cps) / fs_hz;
-  float dphia = 2.0f * (float)PI * (doppler) / fs_hz; // phase increment per sample
-  float chips = code_phase;
-  float phia = phi_rad;
+  const float dphia = 2.0f * (float)PI * (doppler) / fs_hz; // phase increment per sample
+  const double ca_inc = (double)cos(dphia);
+  const double sa_inc = (double)sin(dphia);
 
-  //FILE* dbg_fp = NULL;
-  //fopen_s(&dbg_fp, "C:/Python/e1c-prn23.csv", "w");
+  double pca = cos(car_phase_deg * PI / 180.0);
+  double psa = sin(car_phase_deg * PI / 180.0);
 
   for (size_t n = 0; n < N; ++n) {
-    float frac = chips - floorf(chips);
-    int code = code_chip_at(ca, chips, L);
+    out[n].r = ca_1ec[n] * pca;
+    out[n].i = ca_1ec[n] * psa;
 
-    //fprintf(dbg_fp, "%d, %d\n",n+1, code); 
+    // advance both phasors
+    double npca = pca * ca_inc - psa * sa_inc;
+    double npsa = pca * sa_inc + psa * ca_inc;
+    pca = npca; psa = npsa;
 
-    float saph, caph;
-    sincosf_fast(phia, &saph, &caph);
-    c32 xa = { code * caph, code * saph };
-
-    out[n].r = xa.r;
-    out[n].i = xa.i;
-
-    // advance
-    chips += dchips;
-    if (chips >= L) { chips -= L; }
-    else if (chips < 0) { chips += L; }
-
-    phia += dphia;
-    if (phia > 1e9f || phia < -1e9f) {
-      phia = fmodf(phia, 2.0f * PI);
-    }
-
+    // renormalize occasionally to limit float drift (not necessary for 1 ms)
+    double na = 1.0 / sqrt(pca * pca + psa * psa);
+    pca *= na; psa *= na;
   }
-  //fclose(dbg_fp); //fixme remove
 }
 
 ////////////////////////////////////////////////////////////////
@@ -1187,7 +1220,6 @@ void mix_prn(const int32_t* prn_a,
   double pca = cos(phase_a_deg * PI / 180.0);
   double psa = sin(phase_a_deg * PI / 180.0);
 
-  int n = 0;
   for (int samp = 0; samp < size; ++samp) {
     double a = (double)prn_a[samp];  // +/- 1
 

@@ -167,6 +167,22 @@ extern void rotate_fwd_int8(int8_t array[], int size, int offset) {
   free(temp);
 }
 
+extern void rotate_fwd_c32(c32 array[], int size, int offset) {
+  if (offset == 0) { return; }
+  c32* temp = (c32*)malloc(sizeof(c32) * size);
+  if (temp == NULL) { printf("rotate_fwd_c32's malloc failed");  return; }
+  for (int i = 0; i < size; i++) {
+    if (i - offset < 0) {
+      temp[i] = array[size + (i - offset)];
+    }
+    else {
+      temp[i] = array[i - offset];
+    }
+  }
+  memcpy(array, temp, sizeof(c32) * size);
+  free(temp);
+}
+
 extern void make_replica(const int32_t* prn_a, c32* out_iandq,float doppler, int size, float samp_freq)
 {
   const double phase_deg = 0.0001;
