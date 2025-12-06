@@ -626,6 +626,8 @@ void read_ors(char* input) {
   printf("Working on %s\n", input);
 
   FILE* fp_out = NULL; //output file
+  char str[128];
+  top2_pks peaks;
 
   //// Dial in the prn and doppler here ////////////////
 #define SPC  4
@@ -687,13 +689,11 @@ void read_ors(char* input) {
         sums[i] += mag(prod[i]);// add(sums[i], prod[i]);
       }
     }
-
-    top2_pks peaks;
-    char str[128];
+    
     snprintf(str, sizeof(str), "C:/Python/out%s-%d.csv", (proc_gps == 1) ? "GPS" : "GAL", prn2acq[loop].prn);
     errno_t err= fopen_s(&fp_out, str, "w");
-    find_top2_peaks_real(sums, size, 3, &peaks, fp_out);
-    fclose(fp_out);
+    find_top2_peaks_real(sums, size, 3, &peaks, fp_out); if (fp_out) {fclose(fp_out); }
+    
     // compute noise stats for SNR
     double BW = 3.1623e3; // Hz
     double cn0 = compute_snr_real(sums, size, peaks) + 35;// +10 * log(BW)
@@ -782,54 +782,54 @@ void sim_E5A() {
 void sim_L1() {
 #define SPC  4
   bool   do_gps = false;
-  int    fft_size = 1024 *4 ;
-  int    prn_a = 23, prn_b = 30;
+  float  scale = do_gps ? 1 : 4;
+  int    fft_size = 1024 * scale;
+  int    prn_a = 2, prn_b = 8;
   double doppler_a = 1580, doppler_b = -2580;
-  int    offset = 4000;//1990 is threshold for error
-  
-  printf("should be %d \n", offset);
+  int    offset = 4020;// 1022;//8000 bad is threshold for error
+  int    rep_cylce = 0;// 1024 / 2;// 512;
+  top2_pks peaks = { 0 };
+  //printf("should be %d \n", offset);
   c32* samp_a = (c32*)malloc(fft_size * SPC * sizeof(c32));
   c32* samp_b = (c32*)malloc(fft_size * SPC * sizeof(c32));
   c32* repl_a = (c32*)malloc(fft_size * SPC * sizeof(c32));
   c32* prod   = (c32*)malloc(fft_size * SPC * sizeof(c32));
-  memset(samp_a, 0, fft_size * SPC * sizeof(c32));
-  memset(samp_b, 0, fft_size * SPC * sizeof(c32));
-  memset(repl_a, 0, fft_size * SPC * sizeof(c32));
-  memset(prod,   0, fft_size * SPC * sizeof(c32));
 
-  if (do_gps) {
-    synth_gps_prn(prn_a, doppler_a, 1023 * SPC, samp_a, SPC, offset);
-    synth_gps_prn(prn_b, doppler_b, 1023 * SPC, samp_b, SPC, 300);
-    synth_gps_prn(prn_a, doppler_a + 0, 1023 * SPC, repl_a, SPC, 0);
-  } else {
-    synth_e1b_prn(prn_a, doppler_a, 4092 * SPC, samp_a, SPC, offset);
-    synth_e1b_prn(prn_b, doppler_b, 4092 * SPC, samp_b, SPC, 300);
-    synth_e1b_prn(prn_a, doppler_a + 0, 4092 * SPC, repl_a, SPC, 0);
+  for (int offset = 0; offset < 1024 * SPC * scale; offset += 20) {
+    if (offset > 1024 * SPC * scale / 2) { rep_cylce = 1024 * SPC * scale / 2; }
+    memset(samp_a, 0, fft_size * SPC * sizeof(c32));
+    memset(samp_b, 0, fft_size * SPC * sizeof(c32));
+    memset(repl_a, 0, fft_size * SPC * sizeof(c32));
+    memset(prod, 0, fft_size * SPC * sizeof(c32));
+
+    if (do_gps) {
+      synth_gps_prn(prn_a, doppler_a, 1023 * SPC, samp_a, SPC, offset);
+      synth_gps_prn(prn_b, doppler_b, 1023 * SPC, samp_b, SPC, 300);
+      synth_gps_prn(prn_a, doppler_a + 10, 1023 * SPC, repl_a, SPC, 0);
+    }
+    else {
+      synth_e1b_prn(prn_a, doppler_a, 4092 * SPC, samp_a, SPC, offset);
+      synth_e1b_prn(prn_b, doppler_b, 4092 * SPC, samp_b, SPC, 300);
+      synth_e1b_prn(prn_a, doppler_a + 10, 4092 * SPC, repl_a, SPC, 0);
+    }
+    rotate_fwd_c32(repl_a,(do_gps? 1023 : 4092) * SPC, rep_cylce);// fft_size* SPC - rep_cylce);
+
+    for (int i = 0; i < fft_size * SPC; i++) {
+      //samp_a[i].r += samp_b[i].r; // add noise & quantize later
+      //samp_a[i].i += samp_b[i].i;
+    }
+
+    fft_c32(fft_size * SPC, samp_a, true);
+    fft_c32(fft_size * SPC, repl_a, true);
+    for (int i = 0; i < fft_size * SPC; i++) { prod[i] = mult(samp_a[i], get_conj(repl_a[i])); }
+    fft_c32(fft_size * SPC, prod, false); // in-place inv F(prod)
+    FILE* dbg_fp = NULL; //fopen_s(&dbg_fp, "C:/Python/out6.csv", "w");
+    find_top2_peaks_cplx(prod, fft_size * SPC, 3, &peaks, dbg_fp); if (dbg_fp) { fclose(dbg_fp); }
+    double interp = interpCodePhase(prod, fft_size * SPC, &peaks);
+    printf("max_float,%f offset,%f pos,%d interp,%f error,%f\n", peaks.val1, double(offset), peaks.idx1, interp, SPEED_LIGHT * (offset - rep_cylce - (interp)) / (1023.0 * scale * SPC));
   }
-  int rep_cylce = 12000;
-  rotate_fwd_c32(repl_a, fft_size * SPC, fft_size * SPC - rep_cylce);
- 
-  for (int i = 0; i < fft_size * SPC; i++) {
-    samp_a[i].r += samp_b[i].r; // add noise & quantize later
-    samp_a[i].i += samp_b[i].i;
-  }
-  free(samp_b); 
   
-  fft_c32(fft_size * SPC, samp_a, true);
-  fft_c32(fft_size * SPC, repl_a, true);
-  for (int i = 0; i < fft_size * SPC; i++) { prod[i] = mult(samp_a[i], get_conj(repl_a[i])); }
-  fft_c32(fft_size * SPC, prod, false); // in-place inv F(prod)
-
-  FILE* dbg_fp = NULL; fopen_s(&dbg_fp, "C:/Python/out6.csv", "w");
-  top2_pks peaks = { 0 };
-  find_top2_peaks_cplx(prod, fft_size * SPC, 3, &peaks, dbg_fp);
-  double interp = interpCodePhase(prod, fft_size * SPC,&peaks);
-  
-  fclose(dbg_fp);
-  free(prod); free(samp_a); free(repl_a);
-
-  float scale = do_gps ? 1 : 4;
-  printf("max_float=%f offset=%d pos=%d interp=%f error=%f\n", peaks.val1, offset, peaks.idx1, interp, SPEED_LIGHT * (offset + rep_cylce - interp) /(1023.0* scale * SPC));
+  free(prod); free(samp_a); free(repl_a); free(samp_b);
 }
 
 /////////////////////////////////////////////////////////////////////////////
@@ -1755,7 +1755,7 @@ int main(int argc,char* argv[])
     return 0;
   }
 
-  if (0) {
+  if (1) {
     sim_L1();
     return 0;
   }
@@ -1763,7 +1763,7 @@ int main(int argc,char* argv[])
   if (1) {
     // G_2025_09_03_23_04_45.ors G_2025_09_03_23_04_56.ors G_2025_09_03_23_05_33.ors G_2025_09_03_23_04_56.ors G_2025_09_03_23_12_45.ors G_2025_09_03_23_19_10.ors
     //read_ors((char*)"C:/work/Baseband/TestData/100ms/bw25/G_2025_09_03_23_04_22.ors");
-    read_ors((char*)"C:/work/Baseband/TestData/100ms/bw25/G_2025_09_03_23_05_33.ors");
+    read_ors((char*)"C:/work/Baseband/TestData/100ms/bw25/G_2025_09_03_23_04_56.ors");
     //read_ors((char*)"C:/work/Baseband/TestData/100ms/bw25/G_2025_09_03_23_22_41.ors");
     //read_ors((char*)"C:/work/Baseband/TestData/100ms/bw25/G_2025_09_03_23_04_45.ors");
     //read_ors((char*)"C:/work/Baseband/TestData/G_2025_06_05_22_11_26.ors");
