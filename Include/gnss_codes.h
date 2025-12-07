@@ -192,6 +192,8 @@ double InterpolateCodePhase(uint32_t index, double earlyPower, double promptPowe
 
 double interpCodePhase(c32* correl, int size, top2_pks* peaks);
 
+double interpCodePhaseFloat(float* correl, int size, top2_pks* peaks);
+
 double compute_snr_cplx(c32* convol, int cov_size, top2_pks peaks);
 
 double compute_snr_real(float* convol, int cov_size, top2_pks peaks);
@@ -205,6 +207,16 @@ int compareConstelPRN(const void* a, const void* b);
 int parse_log(char* log_file, char* record, acq_struct* acq_results);
 
 int cnt_monotonic(float val);
+
+void GetE1CodeReversed(const int prn, int spc, int8_t Code[]);
+
+void estimate_prn_code_and_carrier(
+  const c32* buf, size_t N, float fs_hz, float c_search_span,
+  int8_t const* code, float code_rate_cps, float code_guess,
+  float T_coh_ms, float code_step_chips,
+  float f_search_center_hz, float f_search_span_hz, float f_search_step_hz,
+  float* out_code_phase_chips, float* out_carrier_freq_hz, float* out_carrier_phase_rad, c32* c32_sum
+);
 
 
 const uint8_t E1B_CODE[50][512] =

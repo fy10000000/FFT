@@ -294,7 +294,7 @@ extern void synth_e1b_two_prns(
 //   1) Code-phase search (coarse): slide the prompt correlator over a code-phase grid (step ~ 0.5 chips or finer).
 //      For each hypothesis, wipe code*subcarrier and sum complex samples over a short coherent T (e.g., 4 ms), but without carrier wipe.
 //      Then at each hypothesis, we do a small frequency bin search around f_search_center ± f_search_span to find best |sum|.
-//   2)M_PIck the max across code-phase and frequency. Report:
+//   2)M_Pick the max across code-phase and frequency. Report:
 //        - code_phase_chips (chips in [0,4092)),
 //        - carrier_freq_hz (offset from fIF, i.e., Doppler estimate),
 //        - carrier_phase_rad at midpoint of coherent span.

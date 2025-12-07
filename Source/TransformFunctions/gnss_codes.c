@@ -1336,6 +1336,13 @@ double interpCodePhase(c32* correl, int size, top2_pks* peaks)
   return code_phase;
 }
 
+double interpCodePhaseFloat(float* correl, int size, top2_pks* peaks)
+{
+  double early = (correl[(peaks->idx1 - 1) % size]), prompt = (correl[peaks->idx1]), late = (correl[(peaks->idx1 + 1) % size]);
+  double code_phase = InterpolateCodePhase(peaks->idx1, early, prompt, late);
+  return code_phase;
+}
+
 double InterpolateCodePhase(uint32_t index, double earlyPower, double promptPower, double latePower)
 {
   double interpolatedIndex;

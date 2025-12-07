@@ -650,69 +650,83 @@ void read_ors(char* input) {
   }
 
   bb_meas_t meas;
-  memset(&meas, 0, sizeof(bb_meas_t));  
-
+    
+  // use iandq as the main buffer (don't modify)
   DecodeOrsIQCplx(&buffer[hdrlen], payload_size / 2, iandq);
-  // debug encoder
-  //uint8_t test_enc[SIZE/2];
-  //EncodeOrsIQCplx(iandq, test_enc, SIZE / 2);
-  //c32 test_dec[SIZE];
-  //DecodeOrsIQCplx(test_enc, SIZE / 2, test_dec);
-  //for (int i = 0; i < SIZE; i++) {
-  //  if (test_dec[i].i != iandq[i].i || test_dec[i].r != iandq[i].r) {  printf("Error in encode/decode at %d \n", i); }
-  //}
   free(buffer);
-
-  for (int loop = 0; loop < cnt; loop++) {
-    int size = prn2acq[loop].constel == 1 ? 4092: 16368; // the samples per epoch
-    int fft_size = prn2acq[loop].constel == 1 ? 4096 : 16384;
-    int proc_gps = (prn2acq[loop].constel == 1) ? 1 : 0;
-    memset(repli, 0, SIZE * sizeof(c32));
-    if (proc_gps) {
-      synth_gps_prn(prn2acq[loop].prn, -prn2acq[loop].doppler, size, repli, SPC, 0);
-    }
-    else { // Galileo
-      synth_e1b_prn(prn2acq[loop].prn, -prn2acq[loop].doppler, size, repli, SPC, 0);
-    }
-    //rotate_fwd_c32(repli, SIZE, 16368 - 2000); //fixx remove
-    memset(sums, 0, SIZE * sizeof(float));
-    fft_c32(fft_size, repli, true); // F(repli)
-    for (int j = 0; j < 3; j++) {
-      memset(prod, 0, SIZE * sizeof(c32));
-      memset(signl, 0, SIZE * sizeof(c32));
-      memcpy(signl, &iandq[j * size], size * sizeof(c32));
-      
-      fft_c32(fft_size, signl, true); // F(iandq) and prod=F(iandq) * conj(F(repli)) below
-      for (int i = 0; i < fft_size; i++) { prod[i] = mult(signl[i], get_conj(repli[i])); }
-      fft_c32(fft_size, prod, false); // in-place inv F(prod) 
-      for (int i = 0; i < fft_size; i++) {
-        sums[i] += mag(prod[i]);// add(sums[i], prod[i]);
+  int first_pass[15], first_pass_cnt = 0;
+  memset(first_pass, 0, sizeof(int) * 15);
+  for (int pass = 0; pass < 2; pass++) {
+    memset(&meas, 0, sizeof(bb_meas_t)); first_pass_cnt = 0;
+    for (int loop = 0; loop < cnt; loop++) {
+      bool is_gps = (prn2acq[loop].constel == 1) ? true : false;
+      int rep_offset = is_gps ? 0: first_pass[first_pass_cnt];// floor(0.211728852 * 4092) - 200;
+      int size = is_gps ? 4092 : 16368; // the samples per epoch
+      int fft_size = is_gps ? 4096 : 16384;
+      int proc_gps = is_gps ? 1 : 0;
+      memset(repli, 0, SIZE * sizeof(c32));
+      memset(sums, 0, SIZE * sizeof(float));
+      if (is_gps) {
+        synth_gps_prn(prn2acq[loop].prn, -prn2acq[loop].doppler, size, repli, SPC, 0);
       }
-    }
-    
-    snprintf(str, sizeof(str), "C:/Python/out%s-%d.csv", (proc_gps == 1) ? "GPS" : "GAL", prn2acq[loop].prn);
-    errno_t err= fopen_s(&fp_out, str, "w");
-    find_top2_peaks_real(sums, size, 3, &peaks, fp_out); if (fp_out) {fclose(fp_out); }
-    
-    // compute noise stats for SNR
-    double BW = 3.1623e3; // Hz
-    double cn0 = compute_snr_real(sums, size, peaks) + 35;// +10 * log(BW)
-    double early = (sums[peaks.idx1 - 1]), prompt = peaks.val1, late = (sums[peaks.idx1 + 1]);
-    double interp = InterpolateCodePhase(peaks.idx1, early * early, prompt * prompt, late * late);
-    //printf("interpolated %f cn0 %f\n", interp, cn0);
-    //interp *= (1023.0f / 1024.0f); 
+      else { // Galileo
+        synth_e1b_prn(prn2acq[loop].prn, -prn2acq[loop].doppler, size, repli, SPC, 0);
+      }
+      if (is_gps == false && rep_offset > 200) {
+        rep_offset -= 150;//printf("appling %d \n", rep_offset);
+        rotate_fwd_c32(repli, size, rep_offset);
+      }
+      else { rep_offset = 0; }
+      
+      fft_c32(fft_size, repli, true); // F(repli)
+      for (int j = 0; j < 3; j++) {
+        memset(prod, 0, SIZE * sizeof(c32));
+        memset(signl, 0, SIZE * sizeof(c32));
+        memcpy(signl, &iandq[j * size], size * sizeof(c32));
 
-    if ((peaks.val1 / peaks.val2) > 1.3) {
-      meas.sats[meas.num_sat].prn = prn2acq[loop].prn;
-      meas.sats[meas.num_sat].code_phase = float(interp) / 4092.0f; // ie (interp / 4096) * (4096/4092)
-      meas.sats[meas.num_sat].doppler = -prn2acq[loop].doppler;
-      meas.sats[meas.num_sat].cno = (float)cn0;
-      meas.sats[meas.num_sat].constellation = proc_gps ? SYS_GPS : SYS_GAL;
-      float ratio = (peaks.val1 / peaks.val2);
-      printf("Acquired %s %d Doppler %f Hz Code %f [ms] Chips %f  C/N0 %f dB-Hz ratio=%f\n", (proc_gps == 1) ? "GPS" : "GAL",
-        prn2acq[loop].prn, -prn2acq[loop].doppler, meas.sats[meas.num_sat].code_phase, meas.sats[meas.num_sat].code_phase * 4092.0, meas.sats[meas.num_sat].cno, ratio* ratio);
-      meas.num_sat++;
+        fft_c32(fft_size, signl, true); // F(iandq) and prod=F(iandq) * conj(F(repli)) below
+        for (int i = 0; i < fft_size; i++) { prod[i] = mult(signl[i], get_conj(repli[i])); }
+        fft_c32(fft_size, prod, false); // in-place inv F(prod) 
+        for (int i = 0; i < fft_size; i++) {
+          sums[i] += mag(prod[i]);// add(sums[i], prod[i]);
+        }
+      }
+
+      snprintf(str, sizeof(str), "C:/Python/out%s-%d.csv", (is_gps) ? "GPS" : "GAL", prn2acq[loop].prn);
+      //errno_t err= fopen_s(&fp_out, str, "w");
+      find_top2_peaks_real(sums, size, 3, &peaks, fp_out); if (fp_out) { fclose(fp_out); }
+      if (false) {//is_gps == false) {
+        c32 sum = { 0 };
+        float c_span = 3;
+        int8_t e1_code[16368];
+        float code_out = 0, freq_out = 0, phase_out = 0;
+        GetE1CodeReversed(prn2acq[loop].prn, SPC, e1_code);
+        estimate_prn_code_and_carrier(&iandq[0], size, SPC * 1.023e6f, c_span, e1_code, 1.023e6f,
+          peaks.idx1, 4.f, 1, -prn2acq[loop].doppler, 3, 1, &code_out, &freq_out, &phase_out, &sum);
+        printf("code_out=%f, freq_out=%f, phase_out=%f \n", code_out, freq_out, phase_out);
+      }
+      // compute noise stats for SNR
+      double BW = 3.1623e3; // Hz
+      double cn0 = compute_snr_real(sums, size, peaks) + 35;// +10 * log(BW)
+      double interp = interpCodePhaseFloat(sums, size, &peaks);
+     
+      if ((peaks.val1 / peaks.val2) > 1.3) {
+        meas.sats[meas.num_sat].prn = prn2acq[loop].prn;
+        meas.sats[meas.num_sat].code_phase = float(interp + rep_offset) / 4092.0f; // ie (interp / 4096) * (4096/4092)
+        if (is_gps == false) {
+          first_pass[first_pass_cnt] = (int)interp;
+        }
+        meas.sats[meas.num_sat].doppler = -prn2acq[loop].doppler;
+        meas.sats[meas.num_sat].cno = (float)cn0;
+        meas.sats[meas.num_sat].constellation = proc_gps ? SYS_GPS : SYS_GAL;
+        float ratio = (peaks.val1 / peaks.val2);
+        printf("Acquired %s %d Doppler %f Hz Code %f [ms] Chips %f  C/N0 %f dB-Hz ratio=%f\n", (proc_gps == 1) ? "GPS" : "GAL",
+          prn2acq[loop].prn, -prn2acq[loop].doppler, meas.sats[meas.num_sat].code_phase, meas.sats[meas.num_sat].code_phase * 4092.0, meas.sats[meas.num_sat].cno, ratio * ratio);
+        meas.num_sat++;
+      }
+      first_pass_cnt++; // must increment here for things to stay in synch
     }
+    printf("Done inner loop\n");
   }
 
   char fname[256] = "";
@@ -826,7 +840,7 @@ void sim_L1() {
     FILE* dbg_fp = NULL; //fopen_s(&dbg_fp, "C:/Python/out6.csv", "w");
     find_top2_peaks_cplx(prod, fft_size * SPC, 3, &peaks, dbg_fp); if (dbg_fp) { fclose(dbg_fp); }
     double interp = interpCodePhase(prod, fft_size * SPC, &peaks);
-    printf("max_float,%f offset,%f pos,%d interp,%f error,%f\n", peaks.val1, double(offset), peaks.idx1, interp, SPEED_LIGHT * (offset - rep_cylce - (interp)) / (1023.0 * scale * SPC));
+    printf("max_float,%f offset,%f pos,%d interp,%f error,%f\n", peaks.val1, double(offset), peaks.idx1, interp, SPEED_LIGHT * (offset - (rep_cylce + interp)) / (1023.0 * scale * SPC));
   }
   
   free(prod); free(samp_a); free(repl_a); free(samp_b);
@@ -1755,7 +1769,7 @@ int main(int argc,char* argv[])
     return 0;
   }
 
-  if (1) {
+  if (0) {
     sim_L1();
     return 0;
   }
@@ -1763,7 +1777,7 @@ int main(int argc,char* argv[])
   if (1) {
     // G_2025_09_03_23_04_45.ors G_2025_09_03_23_04_56.ors G_2025_09_03_23_05_33.ors G_2025_09_03_23_04_56.ors G_2025_09_03_23_12_45.ors G_2025_09_03_23_19_10.ors
     //read_ors((char*)"C:/work/Baseband/TestData/100ms/bw25/G_2025_09_03_23_04_22.ors");
-    read_ors((char*)"C:/work/Baseband/TestData/100ms/bw25/G_2025_09_03_23_04_56.ors");
+    read_ors((char*)"C:/work/Baseband/TestData/100ms/bw25/G_2025_09_03_23_05_33.ors");
     //read_ors((char*)"C:/work/Baseband/TestData/100ms/bw25/G_2025_09_03_23_22_41.ors");
     //read_ors((char*)"C:/work/Baseband/TestData/100ms/bw25/G_2025_09_03_23_04_45.ors");
     //read_ors((char*)"C:/work/Baseband/TestData/G_2025_06_05_22_11_26.ors");
