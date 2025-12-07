@@ -208,7 +208,7 @@ int parse_log(char* log_file, char* record, acq_struct* acq_results);
 
 int cnt_monotonic(float val);
 
-void GetE1CodeReversed(const int prn, int spc, int8_t Code[]);
+void GetE1BCode(const int prn, int spc, int8_t Code[]);
 
 void estimate_prn_code_and_carrier(
   const c32* buf, size_t N, float fs_hz, float c_search_span,

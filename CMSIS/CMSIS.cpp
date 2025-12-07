@@ -700,7 +700,7 @@ void read_ors(char* input) {
         float c_span = 3;
         int8_t e1_code[16368];
         float code_out = 0, freq_out = 0, phase_out = 0;
-        GetE1CodeReversed(prn2acq[loop].prn, SPC, e1_code);
+        GetE1BCode(prn2acq[loop].prn, SPC, e1_code);
         estimate_prn_code_and_carrier(&iandq[0], size, SPC * 1.023e6f, c_span, e1_code, 1.023e6f,
           peaks.idx1, 4.f, 1, -prn2acq[loop].doppler, 3, 1, &code_out, &freq_out, &phase_out, &sum);
         printf("code_out=%f, freq_out=%f, phase_out=%f \n", code_out, freq_out, phase_out);

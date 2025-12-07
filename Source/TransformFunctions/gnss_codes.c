@@ -970,7 +970,7 @@ void up_sample_10k_to_16k(c32* in , c32* out) {
   iq_resamp_zp_free(rs);
 }
 
-void GetE1CodeReversed(const int prn,int spc, int8_t Code[])
+void GetE1BCode(const int prn,int spc, int8_t Code[])
 {
   int i;
 
@@ -1030,7 +1030,7 @@ extern void synth_e1b_prn(
   const int L = 4092;
   static int8_t ca[4092 * 8] = {0};
 
-  GetE1CodeReversed(prn, spc, ca);
+  GetE1BCode(prn, spc, ca);
   //memcpy(ca, E1B_Code[prn], sizeof(int8_t) * L);
 
   //if (spc > 1) {
