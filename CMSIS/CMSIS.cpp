@@ -724,7 +724,9 @@ void read_ors(char* input) {
           prn2acq[loop].prn, -prn2acq[loop].doppler, meas.sats[meas.num_sat].code_phase, meas.sats[meas.num_sat].code_phase * 4092.0, meas.sats[meas.num_sat].cno, ratio * ratio);
         meas.num_sat++;
       }
-      first_pass_cnt++; // must increment here for things to stay in synch
+      if (is_gps == false) {
+        first_pass_cnt++; // must increment here for things to stay in sync
+      }
     }
     printf("Done inner loop\n");
   }
@@ -1777,7 +1779,7 @@ int main(int argc,char* argv[])
   if (1) {
     // G_2025_09_03_23_04_45.ors G_2025_09_03_23_04_56.ors G_2025_09_03_23_05_33.ors G_2025_09_03_23_04_56.ors G_2025_09_03_23_12_45.ors G_2025_09_03_23_19_10.ors
     //read_ors((char*)"C:/work/Baseband/TestData/100ms/bw25/G_2025_09_03_23_04_22.ors");
-    read_ors((char*)"C:/work/Baseband/TestData/100ms/bw25/G_2025_09_03_23_05_33.ors");
+    read_ors((char*)"C:/work/Baseband/TestData/100ms/bw25/G_2025_09_03_23_04_45.ors");
     //read_ors((char*)"C:/work/Baseband/TestData/100ms/bw25/G_2025_09_03_23_22_41.ors");
     //read_ors((char*)"C:/work/Baseband/TestData/100ms/bw25/G_2025_09_03_23_04_45.ors");
     //read_ors((char*)"C:/work/Baseband/TestData/G_2025_06_05_22_11_26.ors");
