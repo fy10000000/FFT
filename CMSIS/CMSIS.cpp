@@ -664,7 +664,6 @@ void read_ors(char* input) {
       int rep_offset = first_pass[first_pass_cnt];
       int size = is_gps ? 4092 : 16368; // the samples per epoch
       int fft_size = is_gps ? 4096 : 16384;
-      int proc_gps = is_gps ? 1 : 0;
       memset(repli, 0, SIZE * sizeof(c32));
       memset(sums, 0, SIZE * sizeof(float));
       if (is_gps) {
@@ -716,9 +715,9 @@ void read_ors(char* input) {
         first_pass[first_pass_cnt] = (int)interp;
         meas.sats[meas.num_sat].doppler = prn2acq[loop].doppler;
         meas.sats[meas.num_sat].cno = (float)cn0;
-        meas.sats[meas.num_sat].constellation = proc_gps ? SYS_GPS : SYS_GAL;
+        meas.sats[meas.num_sat].constellation = is_gps ? SYS_GPS : SYS_GAL;
         float ratio = (peaks.val1 / peaks.val2);
-        printf("Acquired %s %d Doppler %f Hz Code %f [ms] Chips %f  C/N0 %f dB-Hz ratio=%f\n", (proc_gps == 1) ? "GPS" : "GAL",
+        printf("Acquired %s %d Doppler %f Hz Code %f [ms] Chips %f  C/N0 %f dB-Hz ratio=%f\n", is_gps ? "GPS" : "GAL",
           prn2acq[loop].prn, -prn2acq[loop].doppler, meas.sats[meas.num_sat].code_phase, meas.sats[meas.num_sat].code_phase * 4092.0, meas.sats[meas.num_sat].cno, ratio * ratio);
         meas.num_sat++;
       }
