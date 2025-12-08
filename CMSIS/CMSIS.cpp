@@ -657,6 +657,8 @@ void read_ors(char* input) {
   free(buffer);
   int first_pass[30], first_pass_cnt = 0;
   memset(first_pass, 0, sizeof(int) * 30);
+  // on second pass cyclically advance code phase to before pos in 1st pass
+  // NB: do not cycle past the code phase otherswise errors will occur!
   for (int pass = 0; pass < 2; pass++) {
     memset(&meas, 0, sizeof(bb_meas_t)); first_pass_cnt = 0;
     for (int loop = 0; loop < cnt; loop++) {
@@ -1779,8 +1781,8 @@ int main(int argc,char* argv[])
     char line[256] = {0};
     while (fgets(line, sizeof(line), fp_in)) {
       for (int i = 0; i < strlen(line); i++) {
-        if (line[i] == '\\') { line[i] = '/'; }
-        if (line[i] == '\n') { line[i] = NULL; }
+        if (line[i] == '\\') { line[i] = '/'; } // swap delimiter
+        if (line[i] == '\n') { line[i] = NULL; } // swap terminator 
       }
       //printf("about to process %s\n", line);
       read_ors(line);
