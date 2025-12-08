@@ -16,6 +16,7 @@
 #include "up_sample.h"
 #include "msb_funcs.h"
 
+
 #include <complex> // not to be confused with complex.h
 
 
@@ -654,13 +655,13 @@ void read_ors(char* input) {
   // use iandq as the main buffer (don't modify)
   DecodeOrsIQCplx(&buffer[hdrlen], payload_size / 2, iandq);
   free(buffer);
-  int first_pass[15], first_pass_cnt = 0;
-  memset(first_pass, 0, sizeof(int) * 15);
+  int first_pass[30], first_pass_cnt = 0;
+  memset(first_pass, 0, sizeof(int) * 30);
   for (int pass = 0; pass < 2; pass++) {
     memset(&meas, 0, sizeof(bb_meas_t)); first_pass_cnt = 0;
     for (int loop = 0; loop < cnt; loop++) {
       bool is_gps = (prn2acq[loop].constel == 1) ? true : false;
-      int rep_offset = is_gps ? 0: first_pass[first_pass_cnt];// floor(0.211728852 * 4092) - 200;
+      int rep_offset = first_pass[first_pass_cnt];
       int size = is_gps ? 4092 : 16368; // the samples per epoch
       int fft_size = is_gps ? 4096 : 16384;
       int proc_gps = is_gps ? 1 : 0;
@@ -672,18 +673,17 @@ void read_ors(char* input) {
       else { // Galileo
         synth_e1b_prn(prn2acq[loop].prn, -prn2acq[loop].doppler, size, repli, SPC, 0);
       }
-      if (is_gps == false && rep_offset > 200) {
+      if (rep_offset > 200) {
         rep_offset -= 150;//printf("appling %d \n", rep_offset);
         rotate_fwd_c32(repli, size, rep_offset);
       }
-      else { rep_offset = 0; }
       
       fft_c32(fft_size, repli, true); // F(repli)
       for (int j = 0; j < 3; j++) {
         memset(prod, 0, SIZE * sizeof(c32));
         memset(signl, 0, SIZE * sizeof(c32));
         memcpy(signl, &iandq[j * size], size * sizeof(c32));
-
+       
         fft_c32(fft_size, signl, true); // F(iandq) and prod=F(iandq) * conj(F(repli)) below
         for (int i = 0; i < fft_size; i++) { prod[i] = mult(signl[i], get_conj(repli[i])); }
         fft_c32(fft_size, prod, false); // in-place inv F(prod) 
@@ -712,11 +712,9 @@ void read_ors(char* input) {
      
       if ((peaks.val1 / peaks.val2) > 1.3) {
         meas.sats[meas.num_sat].prn = prn2acq[loop].prn;
-        meas.sats[meas.num_sat].code_phase = float(interp + rep_offset) / 4092.0f; // ie (interp / 4096) * (4096/4092)
-        if (is_gps == false) {
-          first_pass[first_pass_cnt] = (int)interp;
-        }
-        meas.sats[meas.num_sat].doppler = -prn2acq[loop].doppler;
+        meas.sats[meas.num_sat].code_phase = float(interp + rep_offset) / (SPC * 1023.0f); 
+        first_pass[first_pass_cnt] = (int)interp;
+        meas.sats[meas.num_sat].doppler = prn2acq[loop].doppler;
         meas.sats[meas.num_sat].cno = (float)cn0;
         meas.sats[meas.num_sat].constellation = proc_gps ? SYS_GPS : SYS_GAL;
         float ratio = (peaks.val1 / peaks.val2);
@@ -724,9 +722,8 @@ void read_ors(char* input) {
           prn2acq[loop].prn, -prn2acq[loop].doppler, meas.sats[meas.num_sat].code_phase, meas.sats[meas.num_sat].code_phase * 4092.0, meas.sats[meas.num_sat].cno, ratio * ratio);
         meas.num_sat++;
       }
-      if (is_gps == false) {
-        first_pass_cnt++; // must increment here for things to stay in sync
-      }
+      
+      first_pass_cnt++; // must increment here for things to stay in syn
     }
     printf("Done inner loop\n");
   }
@@ -1778,9 +1775,20 @@ int main(int argc,char* argv[])
 
   if (1) {
     // G_2025_09_03_23_04_45.ors G_2025_09_03_23_04_56.ors G_2025_09_03_23_05_33.ors G_2025_09_03_23_04_56.ors G_2025_09_03_23_12_45.ors G_2025_09_03_23_19_10.ors
+    FILE* fp_in = NULL; //output file
+    errno_t er = fopen_s(&fp_in, "C:/work/Baseband/TestData/100ms/bw25/orsFiles.txt", "r");
+    char line[256] = {0};
+    while (fgets(line, sizeof(line), fp_in)) {
+      for (int i = 0; i < strlen(line); i++) {
+        if (line[i] == '\\') { line[i] = '/'; }
+        if (line[i] == '\n') { line[i] = NULL; }
+      }
+      //printf("about to process %s\n", line);
+      read_ors(line);
+    }
+    if (fp_in != NULL) { fclose(fp_in); }
+    //read_ors((char*)"C:/work/Baseband/TestData/100ms/bw25/G_2025_09_03_23_05_33.ors");
     //read_ors((char*)"C:/work/Baseband/TestData/100ms/bw25/G_2025_09_03_23_04_22.ors");
-    read_ors((char*)"C:/work/Baseband/TestData/100ms/bw25/G_2025_09_03_23_04_45.ors");
-    //read_ors((char*)"C:/work/Baseband/TestData/100ms/bw25/G_2025_09_03_23_22_41.ors");
     //read_ors((char*)"C:/work/Baseband/TestData/100ms/bw25/G_2025_09_03_23_04_45.ors");
     //read_ors((char*)"C:/work/Baseband/TestData/G_2025_06_05_22_11_26.ors");
     return 0;
