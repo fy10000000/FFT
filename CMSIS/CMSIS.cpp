@@ -655,7 +655,7 @@ void read_ors(char* input) {
   // use iandq as the main buffer (don't modify)
   DecodeOrsIQCplx(&buffer[hdrlen], payload_size / 2, iandq);
   free(buffer);
-  int first_pass[30], first_pass_cnt = 0;
+  static int first_pass[30] = {0}, first_pass_cnt = 0;
   memset(first_pass, 0, sizeof(int) * 30);
   // on second pass cyclically advance code phase to before pos in 1st pass
   // NB: do not cycle past the code phase otherswise errors will occur!
@@ -668,19 +668,19 @@ void read_ors(char* input) {
       int fft_size = is_gps ? 4096 : 16384;
       memset(repli, 0, SIZE * sizeof(c32));
       memset(sums, 0, SIZE * sizeof(float));
+      if (rep_offset > 200) {
+        rep_offset -= 150;
+      }
+
       if (is_gps) {
-        synth_gps_prn(prn2acq[loop].prn, -prn2acq[loop].doppler, size, repli, SPC, 0);
+        synth_gps_prn(prn2acq[loop].prn, -prn2acq[loop].doppler, size, repli, SPC, rep_offset);
       }
       else { // Galileo
-        synth_e1b_prn(prn2acq[loop].prn, -prn2acq[loop].doppler, size, repli, SPC, 0);
-      }
-      if (rep_offset > 200) {
-        rep_offset -= 150;//printf("appling %d \n", rep_offset);
-        rotate_fwd_c32(repli, size, rep_offset);
+        synth_e1b_prn(prn2acq[loop].prn, -prn2acq[loop].doppler, size, repli, SPC, rep_offset);
       }
       
       fft_c32(fft_size, repli, true); // F(repli)
-      for (int j = 0; j < 3; j++) {
+      for (int j = 0; j < 4; j++) {
         memset(prod, 0, SIZE * sizeof(c32));
         memset(signl, 0, SIZE * sizeof(c32));
         memcpy(signl, &iandq[j * size], size * sizeof(c32));
@@ -710,11 +710,10 @@ void read_ors(char* input) {
       double BW = 3.1623e3; // Hz
       double cn0 = compute_snr_real(sums, size, peaks) + 35;// +10 * log(BW)
       double interp = interpCodePhaseFloat(sums, size, &peaks);
-     
-      if ((peaks.val1 / peaks.val2) > 1.3) {
+      float thresh = (pass == 0) ? 1.001 : 1.3;
+      if ((peaks.val1 / peaks.val2) > thresh) {
         meas.sats[meas.num_sat].prn = prn2acq[loop].prn;
         meas.sats[meas.num_sat].code_phase = float(interp + rep_offset) / (SPC * 1023.0f); 
-        first_pass[first_pass_cnt] = (int)interp;
         meas.sats[meas.num_sat].doppler = prn2acq[loop].doppler;
         meas.sats[meas.num_sat].cno = (float)cn0;
         meas.sats[meas.num_sat].constellation = is_gps ? SYS_GPS : SYS_GAL;
@@ -723,7 +722,7 @@ void read_ors(char* input) {
           prn2acq[loop].prn, -prn2acq[loop].doppler, meas.sats[meas.num_sat].code_phase, meas.sats[meas.num_sat].code_phase * 4092.0, meas.sats[meas.num_sat].cno, ratio * ratio);
         meas.num_sat++;
       }
-      
+      first_pass[first_pass_cnt] = (int)interp;
       first_pass_cnt++; // must increment here for things to stay in syn
     }
     printf("Done inner loop\n");
@@ -1789,7 +1788,7 @@ int main(int argc,char* argv[])
     }
     if (fp_in != NULL) { fclose(fp_in); }
     //read_ors((char*)"C:/work/Baseband/TestData/100ms/bw25/G_2025_09_03_23_05_33.ors");
-    //read_ors((char*)"C:/work/Baseband/TestData/100ms/bw25/G_2025_09_03_23_04_22.ors");
+    //read_ors((char*)"C:/work/Baseband/TestData/100ms/bw25/G_2025_09_03_23_04_56.ors");
     //read_ors((char*)"C:/work/Baseband/TestData/100ms/bw25/G_2025_09_03_23_04_45.ors");
     //read_ors((char*)"C:/work/Baseband/TestData/G_2025_06_05_22_11_26.ors");
     return 0;
