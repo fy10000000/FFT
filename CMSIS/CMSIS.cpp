@@ -711,13 +711,13 @@ void read_ors(char* input) {
       double cn0 = compute_snr_real(sums, size, peaks) + 35;// +10 * log(BW)
       double interp = interpCodePhaseFloat(sums, size, &peaks);
       float thresh = (pass == 0) ? 1.001 : 1.3;
-      if ((peaks.val1 / peaks.val2) > thresh) {
+      float ratio = (peaks.val1 / peaks.val2);
+      if (ratio > thresh) {
         meas.sats[meas.num_sat].prn = prn2acq[loop].prn;
         meas.sats[meas.num_sat].code_phase = float(interp + rep_offset) / (SPC * 1023.0f); 
         meas.sats[meas.num_sat].doppler = prn2acq[loop].doppler;
         meas.sats[meas.num_sat].cno = (float)cn0;
         meas.sats[meas.num_sat].constellation = is_gps ? SYS_GPS : SYS_GAL;
-        float ratio = (peaks.val1 / peaks.val2);
         printf("Acquired %s %d Doppler %f Hz Code %f [ms] Chips %f  C/N0 %f dB-Hz ratio=%f\n", is_gps ? "GPS" : "GAL",
           prn2acq[loop].prn, -prn2acq[loop].doppler, meas.sats[meas.num_sat].code_phase, meas.sats[meas.num_sat].code_phase * 4092.0, meas.sats[meas.num_sat].cno, ratio * ratio);
         meas.num_sat++;
@@ -1733,9 +1733,6 @@ int main(int argc,char* argv[])
 //#define DO_Q31_RADIX2 
 //#define DO_Q31_RADIX4
 
-  //acq_struct acq_results[32] = { 0 };
-  //parse_log((char*)"C:/work/Baseband/TestData/100ms/bw25/replay_bw25.log", (char*)"G_2025_09_03_23_19_10.ors", acq_results);
-  //return 0;
 
   if (0) {
     // set to 1 above if need to recalculate some of the twiddleCoefs

@@ -1527,3 +1527,102 @@ int cnt_monotonic(float val) {
   num_tot++;
   return num_monotone;
 }
+
+
+////////////////////////// utilities for parsing annexes to uint8_t arrays/////////
+/* Convert a single hex character to its 0..15 value, or -1 on error */
+static int hexval(char c) {
+  if (c >= '0' && c <= '9') return c - '0';
+  c = (char)tolower((unsigned char)c);
+  if (c >= 'a' && c <= 'f') return 10 + (c - 'a');
+  return -1;
+}
+
+/* Remove non-hex characters (e.g., spaces, separators) in-place. */
+static void strip_nonhex(char* s) {
+  char* w = s;
+  for (char* r = s; *r; ++r) {
+    int v = hexval(*r);
+    if (v >= 0) *w++ = (char)tolower((unsigned char)*r);
+  }
+  *w = '\0';
+}
+
+bool hex_to_bytes(const char* hex_in, int8_t** out_bytes, size_t* out_len) {
+  if (!hex_in || !out_bytes || !out_len) return false;
+
+  // Make a mutable copy and keep only hex digits
+  char* tmp = _strdup(hex_in);
+  if (!tmp) return false;
+  strip_nonhex(tmp);
+
+  size_t nhex = strlen(tmp);
+  if (nhex == 0) {
+    free(tmp);
+    *out_bytes = NULL;
+    *out_len = 0;
+    return true; // empty input -> empty output
+  }
+
+  size_t nbytes = nhex / 2;
+  size_t extra = 0;
+  if ((nhex & 1U) != 0U) {
+    extra = 1;// add one if odd
+  }
+  int8_t* buf = (int8_t*)malloc((nbytes + extra) * sizeof(int8_t));
+  if (!buf) {
+    free(tmp);
+    return false;
+  }
+
+  for (size_t i = 0; i < nbytes; ++i) {
+    int hi = hexval(tmp[2 * i]);
+    int lo = hexval(tmp[2 * i + 1]);
+    if (hi < 0 || lo < 0) {
+      free(buf);
+      free(tmp);
+      return false;
+    }
+    uint8_t byte = (uint8_t)((hi << 4) | lo);
+    // Store into int8_t; bit pattern preserved, though values >=0x80 appear negative if printed as signed.
+    buf[i] = (int8_t)byte;
+  }
+
+  if (extra == 1) {
+    int hi = hexval(tmp[nhex - 1]);
+    uint8_t byte = (uint8_t)(hi << 4);
+    buf[nbytes] = (int8_t)byte;
+  }
+
+  free(tmp);
+  *out_bytes = buf;
+  *out_len = nbytes + extra;
+  return true;
+}
+
+void print_bytes_c_initializer(const int8_t* bytes, size_t len) {
+  printf("{ ");
+  for (size_t i = 0; i < len; ++i) {
+    // Cast to unsigned for printing the canonical hex
+    unsigned v = (unsigned)(uint8_t)bytes[i];
+    printf("0x%02X", v);
+    if (i + 1 < len) printf(",");
+  }
+  printf(" }");
+}
+
+void printCodeArrays() {
+  FILE* fp_in = NULL; //output file
+  errno_t er = fopen_s(&fp_in, "C:/work/Baseband/HEX_E1C.txt", "r");
+  char line[1048] = { 0 };
+  size_t len = 0;
+
+  while (fgets(line, sizeof(line), fp_in)) {
+    int8_t* bytes = NULL;
+    hex_to_bytes(&line[3], &bytes, &len);
+    print_bytes_c_initializer(bytes, len);
+    printf(",\n");
+    free(bytes);
+  }
+  fclose(fp_in);
+}
