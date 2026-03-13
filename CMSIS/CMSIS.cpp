@@ -390,6 +390,15 @@ bool findMax(double input) {
   return is_max;
 }
 
+bool checkBT(int center, int* locations,int num_bt) {
+  for (int i = 0; i < num_bt; i++) {
+    if (locations[i] == center) {
+      return true;
+    }
+  }
+  return false;
+}
+
 
 double magnitude(int64_t real, int64_t imag) {
   double real_d = (double)real;
@@ -1437,12 +1446,12 @@ void test_quasi_pilot_330(results_s* results) {
   int nci = 1100;
 #define SPC 1 // samples per chip was 3
   int   len = E5_QP_CODE_LEN * SPC * nci; // 4 samples per chip and 100 ms
-  int   c_phase = 100;// 1;// 329; // which chip to set the code phase to
+  int   c_phase = 329;// 1;// 329; // which chip to set the code phase to
   int   prn1 = 14, prn2 = 18;
   float dop1 = 2000, dop2 = 2000;
   float dop_error = 1500;// 10; // full 2*250 Hz error in wipeoff
   float dop_err_rate = 0.6;// 0.6;// 0.6;//Hz per ms
-  float pwr = -128.5;// -128.5;// -128.75;// dBm signal power
+  float pwr = -129.5;// -128.5;// -128.75;// dBm signal power
   float N0 = -174.0 + 2.5;// dBm/Hz thermal noise ktb density + noise figure
   float cn0 = pwr - N0; // dBm/Hz pgae 14 Galileo_OS_SIS_ICD_v2.2
   float sigma = sqrt((1.0 * chipping_rate * SPC) / (2.0f* pow(10.0,cn0/10.0)));
@@ -1469,10 +1478,6 @@ void test_quasi_pilot_330(results_s* results) {
   rotate_fwd(prn_c1, E5_QP_CODE_LEN * SPC, c_phase); // now advance code-phase  
   
   int sign2 = 1; // sign applied a posteriori after finding BTT
-  exp_stat_s exp_s;
-  exp_stat_init(&exp_s);
-  stat_s stat;
-  stat_init(&stat); // moving average of peak values window size = 3
   int num_btts = -1;
   for (int i = 0; i < nci; i++) {
     for (int j = 0; j < 50; j++) {
@@ -1519,7 +1524,7 @@ void test_quasi_pilot_330(results_s* results) {
     for (int windex = center - window / 2; windex < center + window / 2; windex +=1) {
       memset(fft_data, 0, sizeof(c32) * FFT_QP_SIZE);
       memcpy(fft_data, &out[E5_QP_CODE_LEN * SPC * windex], sizeof(c32) * SPC * (E5_QP_CODE_LEN));
-      //memcpy(&fft_data[E5_QP_CODE_LEN * SPC], &out[E5_QP_CODE_LEN * SPC * windex], sizeof(c32) * SPC * (FFT_QP_SIZE - E5_QP_CODE_LEN)); 
+      memcpy(&fft_data[E5_QP_CODE_LEN * SPC], &out[E5_QP_CODE_LEN * SPC * windex], sizeof(c32) * SPC * (FFT_QP_SIZE - E5_QP_CODE_LEN)); 
       fft_c32(FFT_QP_SIZE, fft_data, true); // forward FFT
 
       for (int k = 0; k < FFT_QP_SIZE; k++) { // accumulate pt-wise * with conj of replica
@@ -1562,8 +1567,8 @@ void test_quasi_pilot_330(results_s* results) {
     //  recover_prn_phase_deg_with_doppler(&out[E5_QP_CODE_LEN * SPC * (center )], E5_QP_CODE_LEN * SPC,
     //    prn_c3, peaks.idx1, dop1, chipping_rate * SPC, &best_code, &best_dop, &best_pwr);
     //}
-   
-    if (peaks.idx1 != c_phase) { num_errors++; }
+    bool isBT = checkBT(center, locations, num_btts);
+    if (peaks.idx1 != c_phase && isBT) { num_errors++; printf("code %d \n", peaks.idx1); }
     
     double ang = atan2(fft_sum[peaks.idx1].i, fft_sum[peaks.idx1].r) * 57.2957795;
     
@@ -1582,7 +1587,6 @@ void test_quasi_pilot_330(results_s* results) {
     //  center, peaks.val1, peaks.idx1, best_code, best_pwr, ratio, ang, isMax);
   } // for center
   num_tries++;
-  //int differences[10] = { 0 };
   printf("Found %d btt there are %d btt \n", num_btts, num_btts - missed);
   for (int i = 0; i < num_btts; i++) {
     printf("Diff %d %d %d \n", i, locations[i] , found[i]);
