@@ -775,7 +775,7 @@ extern void synth_e5a_prn(
 
   int8_t code_loc[E5A_CODE_LEN] = { 0 };
   int ret = load_e5a_primary_codes((char*)"C:/work/Baseband/HEX_E5AI.txt", code_loc, prn);
-  if (ret < 0) { printf("Error loading Galileo codes; check path in synth_e5b_prn()\n"); return; }
+  if (ret < 0) { printf("Error loading Galileo codes; check path in synth_e5a_prn()\n"); return; }
 
   if (rotate_offset) {
     //rotate_right_i8_cycles(code_loc, E5A_CODE_LEN, rotate_offset); //still a bug in this
@@ -807,6 +807,79 @@ extern void synth_e5a_prn(
   float phia = phi_rad;
   c32 in[E5A_CODE_LEN];
   int8_t no_quant = 1; // 0 for quantization
+  for (size_t n = 0; n < L; ++n) {
+    // PRN a
+    float frac = chips - floorf(chips);
+    int code = code_chip_at(ca, chips, L);
+    float sca = 1.0;// cboc_e1b_weight(frac);
+    float ampa = (float)code * sca; // data assumed +1
+
+    float sa, ca;
+    sincosf_fast(phia, &sa, &ca);
+    c32 xa = { ampa * ca, ampa * sa };
+
+    out[n].r = no_quant ? xa.r : quantize_pm1(xa.r + noise(1.0));
+    out[n].i = no_quant ? xa.i : quantize_pm1(xa.i + noise(1.0));
+
+    // advance
+    chips += dchips;
+    if (chips >= L) { chips -= L; }
+    else if (chips < 0) { chips += L; }
+
+    phia += dphia;
+    if (phia > 1e9f || phia < -1e9f) {
+      phia = fmodf(phia, 2.0f * PI);
+    }
+
+  }
+}
+
+extern void synth_e5b_prn(
+  int prn, // one based indexing
+  float doppler,
+  size_t N,
+  c32* out,
+  int rotate_offset
+) {
+  float phi_rad = 0.0;
+  float code_phase = 0.0;
+  const float fs_hz = 10.23e6;// Mspc
+  const float code_rate_cps = 10.23e6f;
+
+  int8_t code_loc[E5A_CODE_LEN] = { 0 };
+  int ret = load_e5a_primary_codes((char*)"C:/work/Baseband/HEX_E5BI.txt", code_loc, prn);
+  if (ret < 0) { printf("Error loading Galileo codes; check path in synth_e5b_prn()\n"); return; }
+
+  if (rotate_offset) {
+    //rotate_right_i8_cycles(code_loc, E5A_CODE_LEN, rotate_offset); //still a bug in this
+    int size = E5B_CODE_LEN;
+    int8_t* temp = (int8_t*)malloc(sizeof(int8_t) * size);
+    if (temp == NULL) { printf("rotate_fwd's malloc failed");  return; }
+    for (int i = 0; i < size; i++) {
+      if (i - rotate_offset < 0) { temp[i] = code_loc[size + (i - rotate_offset)]; }
+      else { temp[i] = code_loc[i - rotate_offset]; }
+    }
+    memcpy(code_loc, temp, sizeof(int8_t) * size);
+    free(temp);
+  }
+
+  //FILE* fp_out = NULL; //output file
+  //errno_t er = fopen_s(&fp_out, "C:/Python/prn36.csv", "w");
+  //for (int i = 0; i < E5A_CODE_LEN; i++) {
+  //  fprintf(fp_out, "%d, %d\n",i, -code_loc[i]);
+  //}
+  //fclose(fp_out);
+
+
+  const int L = E5B_CODE_LEN;
+  const int8_t* ca = code_loc;
+
+  float dchips = (code_rate_cps) / fs_hz;
+  float dphia = 2.0f * (float)PI * (doppler) / fs_hz; // phase increment per sample
+  float chips = code_phase;
+  float phia = phi_rad;
+  c32 in[E5A_CODE_LEN];
+  bool no_quant = true; 
   for (size_t n = 0; n < L; ++n) {
     // PRN a
     float frac = chips - floorf(chips);
@@ -1394,7 +1467,7 @@ double compute_snr_real(float* convol, int cov_size, top2_pks peaks) {
 
 int find_top2_peaks_cplx(const c32* data, int data_size, int pk_sep, top2_pks* peaks, FILE* fp_out) {
   if (data_size <= 0 || !data || !peaks) { return -1; }
-  float v1 = -1e10f, v2 = -1e10f;
+  float v1 = -1e36f, v2 = -1e36f;
   int idx1 = -1, idx2 = -1;
 
   for (int m = 0; m < data_size; m++) {

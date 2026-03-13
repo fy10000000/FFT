@@ -21,11 +21,13 @@
 #define E1C_CODE_LEN 4092
 #define E1B_CODE_LEN 4092
 #define E5A_CODE_LEN 10230
+#define E5B_CODE_LEN 10230
 #define L1C_CODE_LEN 1023
 
 #define E1B_HEX_LEN  1023
 #define E1C_HEX_LEN  1023
 #define E5A_HEX_LEN  2558
+#define E5B_HEX_LEN  2558
 
 #define E5_QP_HEX_LEN  83
 #define E5_QP_CODE_LEN 330
@@ -139,6 +141,14 @@ void synth_e1c_prn(
 );
 
 void synth_e5a_prn(
+  int prn, // one based indexing
+  float doppler,
+  size_t N,
+  c32* out,
+  int rotate_offset
+);
+
+void synth_e5b_prn(
   int prn, // one based indexing
   float doppler,
   size_t N,
