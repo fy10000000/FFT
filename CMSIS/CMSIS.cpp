@@ -633,6 +633,37 @@ void read_L1(char* input) {
   }
 }
 
+// copy doppler info from .ast file corresp to input .ors
+int read_assist(char* input, acq_struct* prn2acq) {
+  char filename[256];
+  strcpy_s(filename, input);
+  *strrchr(filename, '.') = 0;
+  strcat_s(filename, ".ast");
+  FILE* fpAssist = NULL;
+  fopen_s(&fpAssist, filename, "r");
+  if (fpAssist == NULL) {
+    fprintf(stderr, "Failed to open assitance file %s\n", filename);
+    return 0;
+  }
+  int cnt = 0;
+  char line[256];
+  while (fgets(line, sizeof(line), fpAssist) != NULL && cnt < 40)
+  {
+    char c = line[0];
+    if (c == 'G')
+      prn2acq[cnt].constel = 1;
+    else if (c == 'E')
+      prn2acq[cnt].constel = 2;
+    else
+      continue;
+    sscanf_s(line + 1, "%d %lf", &prn2acq[cnt].prn, &prn2acq[cnt].doppler);
+    cnt++;
+  }
+  fclose(fpAssist);
+  return cnt;
+}
+
+
 void read_ors(char* input) {
   FILE* fp_msb = NULL;
   fopen_s(&fp_msb, input, "rb");
@@ -1080,15 +1111,12 @@ void read_QP(char* input) {
   float chipping_rate = 5.115e6; // chips per sec
   int window = 70; //  window/2 ms either side of center 
   
-#define SPC 2 // samples per chip was 3
+#define SPC 3 // samples per chip was 3
   int nci = payload_size / (E5_QP_CODE_LEN * SPC);
-  const int num_prns = 2;
-  acq_struct prn2acq[num_prns] = { 0 }; int cnt = 0;
-  double fac = 1176.45 / 1575.42;// values were quoted at L1, need at L5
-  prn2acq[cnt].prn = 13; prn2acq[cnt].doppler = 5400 - 1624 * fac;  prn2acq[cnt].constel = 2; cnt++;
-  prn2acq[cnt].prn = 23; prn2acq[cnt].doppler = 5400 + 154 * fac;  prn2acq[cnt].constel = 2; cnt++;
- 
-
+  acq_struct prn2acq[30] = { 0 }; int cnt = 0;
+  int num_prns = read_assist(input, prn2acq);
+  
+  
   ///////////////////// main prn loop ////////////////////////////////
 
   // Compute circular correlation C_k(τ) = FFT^-1{ FFT[signal] · conj(FFT[replica]) }.
@@ -1098,13 +1126,17 @@ void read_QP(char* input) {
   c32* fft_sum  = (c32*)malloc(sizeof(c32) * FFT_QP_SIZE);
   c32* fft_prod = (c32*)malloc(sizeof(c32) * FFT_QP_SIZE);
   
-
+  double fac = 1176.45 / 1575.42;// values were quoted at L1, need at L5
   for (int cnt = 0; cnt < num_prns; cnt++) {
+    // only GAL=2 right PRNs
+    //if (prn2acq[cnt].constel == 1 || (prn2acq[cnt].prn != 13 && prn2acq[cnt].prn != 23)) { continue; }
+    if (prn2acq[cnt].constel == 1 || (prn2acq[cnt].prn != 25 && prn2acq[cnt].prn != 36)) { continue; }
     memset(fft_repl, 0, sizeof(c32) * FFT_QP_SIZE);
     memset(replica, 0, sizeof(c32) * FFT_QP_SIZE);
     int prn_code[E5_QP_CODE_LEN * SPC];
     getE5_QPCode(E5_QP_CODE_LEN, SPC, prn2acq[cnt].prn, prn_code);
-    make_replica(prn_code, replica, prn2acq[cnt].doppler, E5_QP_CODE_LEN * SPC, chipping_rate * SPC);
+    double doppler = 1e6 + 4100 + (prn2acq[cnt].doppler) * fac;
+    make_replica(prn_code, replica, doppler, E5_QP_CODE_LEN * SPC, chipping_rate * SPC);
     memcpy(fft_repl, replica, sizeof(c32) * E5_QP_CODE_LEN);
     
     fft_c32(FFT_QP_SIZE, fft_repl, true);
@@ -1120,8 +1152,8 @@ void read_QP(char* input) {
         fft_c32(FFT_QP_SIZE, fft_data, true); // forward FFT
 
         for (int k = 0; k < FFT_QP_SIZE; k++) { // accumulate pt-wise * with conj of replica
-          if (windex < center) { // cheaper method
-            fft_sum[k] = add(fft_sum[k], mult(fft_data[k], get_minus_conj(fft_repl[k])));
+          if (windex < center) { // cheaper method     //get_minus_conj
+            fft_sum[k] = add(fft_sum[k], mult(fft_data[k], get_conj(fft_repl[k])));
           }
           else {
             fft_sum[k] = add(fft_sum[k], mult(fft_data[k], get_conj(fft_repl[k])));
@@ -1948,7 +1980,12 @@ int main(int argc,char* argv[])
   }
 
   if (1) {
-    read_QP((char*)"C:/work/Baseband/Utilities/2026-03-31/L5-1_10/G_2026_03_31_20_31_38.547.ors");
+
+    read_QP((char*)"C:/work/Baseband/Utilities/2026-04-01/L5-1_16/G_2026_04_01_16_10_45.285.ors");
+    // don't use read_QP((char*)"C:/work/Baseband/Utilities/2026-04-01/L5_15/G_2026_04_01_16_11_02.457.ors");
+    //read_QP((char*)"C:/work/Baseband/Utilities/2026-04-01/L5-1_10/G_2026_04_01_16_10_39.559.ors");
+    //read_QP((char*)"C:/work/Baseband/Utilities/2026-03-31/L5-1_10/G_2026_03_31_20_31_38.547.ors");
+    //read_QP((char*)"C:/work/Baseband/Utilities/2026-03-31/L5_16a/G_2026_03_31_20_31_50.000.ors");
     return 0;
   }
 

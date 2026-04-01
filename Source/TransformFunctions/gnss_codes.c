@@ -1005,7 +1005,7 @@ extern void synth_L5I_prn(
   }
 }
 
-extern void up_sample_N_to_M(c32* in, int N_in, c32* out, int M_out) {
+extern void up_sample_N_to_M(c32* in, double N_in, c32* out, double M_out) {
   // wrapper around the function doing this
   const int    NTAPS = 12;      // try 8, 12, or 16
   const double CUTOFF = 0.45;
