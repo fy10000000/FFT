@@ -1076,24 +1076,18 @@ void read_QP(char* input) {
   // Test the quasi pilot generation
   int min_idx = 0; int loc_cnt = 0; int missed = 0;
   float min_val = 1e5;
-#define FFT_QP_SIZE 512 * 1 // was 2
+#define FFT_QP_SIZE 512 * 2 // was 2
   float chipping_rate = 5.115e6; // chips per sec
   int window = 70; //  window/2 ms either side of center 
   
-#define SPC 1 // samples per chip was 3
+#define SPC 2 // samples per chip was 3
   int nci = payload_size / (E5_QP_CODE_LEN * SPC);
-  const int num_prns = 9;
+  const int num_prns = 2;
   acq_struct prn2acq[num_prns] = { 0 }; int cnt = 0;
-  prn2acq[cnt].prn = 10; prn2acq[cnt].doppler = -582;  prn2acq[cnt].constel = 1; cnt++;
-  prn2acq[cnt].prn = 32; prn2acq[cnt].doppler = 1232;  prn2acq[cnt].constel = 1; cnt++;
-  prn2acq[cnt].prn = 4;  prn2acq[cnt].doppler = 317;   prn2acq[cnt].constel = 2; cnt++;
-  prn2acq[cnt].prn = 6;  prn2acq[cnt].doppler = 1261;  prn2acq[cnt].constel = 2; cnt++;
-  prn2acq[cnt].prn = 9;  prn2acq[cnt].doppler = 1725;  prn2acq[cnt].constel = 2; cnt++;
-  prn2acq[cnt].prn = 10; prn2acq[cnt].doppler = -1513; prn2acq[cnt].constel = 2; cnt++;
-  prn2acq[cnt].prn = 12; prn2acq[cnt].doppler = -2430; prn2acq[cnt].constel = 2; cnt++;
-  prn2acq[cnt].prn = 19; prn2acq[cnt].doppler = -2828; prn2acq[cnt].constel = 2; cnt++;
-  prn2acq[cnt].prn = 36; prn2acq[cnt].doppler = 1580;  prn2acq[cnt].constel = 2; cnt++;
-
+  double fac = 1176.45 / 1575.42;// values were quoted at L1, need at L5
+  prn2acq[cnt].prn = 13; prn2acq[cnt].doppler = 5400 - 1624 * fac;  prn2acq[cnt].constel = 2; cnt++;
+  prn2acq[cnt].prn = 23; prn2acq[cnt].doppler = 5400 + 154 * fac;  prn2acq[cnt].constel = 2; cnt++;
+ 
 
   ///////////////////// main prn loop ////////////////////////////////
 
@@ -1103,15 +1097,16 @@ void read_QP(char* input) {
   c32* fft_data = (c32*)malloc(sizeof(c32) * FFT_QP_SIZE);
   c32* fft_sum  = (c32*)malloc(sizeof(c32) * FFT_QP_SIZE);
   c32* fft_prod = (c32*)malloc(sizeof(c32) * FFT_QP_SIZE);
-  memset(fft_repl, 0, sizeof(c32) * FFT_QP_SIZE);
+  
 
   for (int cnt = 0; cnt < num_prns; cnt++) {
-    int prn_code[E5_QP_CODE_LEN];
+    memset(fft_repl, 0, sizeof(c32) * FFT_QP_SIZE);
+    memset(replica, 0, sizeof(c32) * FFT_QP_SIZE);
+    int prn_code[E5_QP_CODE_LEN * SPC];
     getE5_QPCode(E5_QP_CODE_LEN, SPC, prn2acq[cnt].prn, prn_code);
     make_replica(prn_code, replica, prn2acq[cnt].doppler, E5_QP_CODE_LEN * SPC, chipping_rate * SPC);
-
     memcpy(fft_repl, replica, sizeof(c32) * E5_QP_CODE_LEN);
-    free(replica);
+    
     fft_c32(FFT_QP_SIZE, fft_repl, true);
 
     int found[50] = { 0 };
@@ -1121,7 +1116,7 @@ void read_QP(char* input) {
       for (int windex = center - window / 2; windex < center + window / 2; windex += 1) {
         memset(fft_data, 0, sizeof(c32) * FFT_QP_SIZE);
         memcpy(fft_data, &samples[E5_QP_CODE_LEN * SPC * windex], sizeof(c32) * SPC * (E5_QP_CODE_LEN));
-        memcpy(&fft_data[E5_QP_CODE_LEN * SPC], &samples[E5_QP_CODE_LEN * SPC * windex], sizeof(c32) * SPC * (FFT_QP_SIZE - E5_QP_CODE_LEN));
+        memcpy(&fft_data[E5_QP_CODE_LEN * SPC], &samples[E5_QP_CODE_LEN * SPC * windex], sizeof(c32) * (FFT_QP_SIZE - SPC * E5_QP_CODE_LEN));
         fft_c32(FFT_QP_SIZE, fft_data, true); // forward FFT
 
         for (int k = 0; k < FFT_QP_SIZE; k++) { // accumulate pt-wise * with conj of replica
@@ -1150,15 +1145,15 @@ void read_QP(char* input) {
         last_location = center - 8;
       }
 
-      //printf("center,%03d, max,%6.1f,pos,%d,bestC,%d,bestPwr,%4.2f,ratio,%4.2f,ang,%4.2f,cnt,%d\n", 
-      //  center, peaks.val1, peaks.idx1, best_code, best_pwr, ratio, ang, isMax);
+      printf("prn, %02d, center,%03d, max,%6.1f,pos,%d,ratio,%4.2f,ang,%4.2f,cnt,%d\n", 
+        prn2acq[cnt].prn, center, peaks.val1, peaks.idx1, ratio, ang, isMax);
     } // for center
   }
 
   //for (int i = 0; i < loc_cnt; i++) { printf("Bit transition at %d ms \n", found[i]); }
   //printf("BTs: %d \n", loc_cnt);
-  free(samples);
-  free(fft_data); free(fft_sum); free(fft_repl); free(fft_prod); free(replica);
+  free(samples); free(replica);
+  free(fft_data); free(fft_sum); free(fft_repl); free(fft_prod);
    
 }
 
@@ -1577,19 +1572,19 @@ void test_quasi_pilot_330(results_s* results) {
   // Test the quasi pilot generation
   int min_idx = 0; int loc_cnt = 0; int missed = 0;
   float min_val = 1e5;
-#define FFT_QP_SIZE 512 * 1 // was 2
+#define FFT_QP_SIZE 512 * 2 // was 2
   float chipping_rate = 5.115e6; // chips per sec
   // note can do code-phase error stats or BTT detection stats but not both at once!!!! use {-1} for no BTTs
   int locations[50] = { 100, 200, 300, 400, 500, 600, 700, 800, 900, 1000 };// { 20, 40, 60, 80, 100, 120, 140, 160, 180, 200, 220, 240, 260, 280 };
   int found[50] = { 0 };
   int window = 70; //  window/2 ms either side of center 
   int nci = 1100;
-#define SPC 1 // samples per chip was 3
+#define SPC 2 // samples per chip was 3
   int   len = E5_QP_CODE_LEN * SPC * nci; // 4 samples per chip and 100 ms
-  int   c_phase = 329;// 1;// 329; // which chip to set the code phase to
+  int   c_phase = 300;// 1;// 329; // which chip to set the code phase to
   int   prn1 = 14, prn2 = 18;
-  float dop1 = 2000, dop2 = 2000;
-  float dop_error = 1500;// 10; // full 2*250 Hz error in wipeoff
+  float dop1 = 2000, dop2 = -2000;
+  float dop_error = 500;// 10; // full 2*250 Hz error in wipeoff
   float dop_err_rate = 0.6;// 0.6;// 0.6;//Hz per ms
   float pwr = -128.5;// -129.5;// -128.5;// -128.75;// dBm signal power
   float N0 = -174.0 + 2.5;// dBm/Hz thermal noise ktb density + noise figure
@@ -1644,10 +1639,10 @@ void test_quasi_pilot_330(results_s* results) {
   int last_location = 0;
   int cptr = 0;
   for (int center = window / 2; center <= nci - window / 2 - 2; center++) {
-    if (center == window / 2) { // priming
+    if (center == window / 2) { // priming cache speeds things up 4x
       for (int windex = center - window / 2; windex < center + window / 2; windex += 1) {
         memcpy(&cache[cptr * FFT_QP_SIZE], &out[E5_QP_CODE_LEN * SPC * windex], sizeof(c32) * SPC * (E5_QP_CODE_LEN));
-        memcpy(&cache[cptr * FFT_QP_SIZE + E5_QP_CODE_LEN * SPC], &out[E5_QP_CODE_LEN * SPC * windex], sizeof(c32) * SPC * (FFT_QP_SIZE - E5_QP_CODE_LEN));
+        memcpy(&cache[cptr * FFT_QP_SIZE + E5_QP_CODE_LEN * SPC], &out[E5_QP_CODE_LEN * SPC * windex], sizeof(c32) * (FFT_QP_SIZE - SPC * E5_QP_CODE_LEN));
         fft_c32(FFT_QP_SIZE, &cache[cptr * FFT_QP_SIZE], true); // forward FFT
         cptr = (cptr+1) % window;
       }
@@ -1663,7 +1658,7 @@ void test_quasi_pilot_330(results_s* results) {
       shiftDown(cache, FFT_QP_SIZE, FFT_QP_SIZE * window);
       //printf("A %f %f %f %f %f %f %f %f \n", cache[0 * FFT_QP_SIZE].r, cache[1 * FFT_QP_SIZE].r, cache[64 * FFT_QP_SIZE].r, cache[65 * FFT_QP_SIZE].r, cache[66 * FFT_QP_SIZE].r, cache[67 * FFT_QP_SIZE].r, cache[68 * FFT_QP_SIZE].r, cache[69 * FFT_QP_SIZE].r);
       memcpy(&cache[indx * FFT_QP_SIZE], &out[E5_QP_CODE_LEN * SPC * indx2], sizeof(c32) * SPC * (E5_QP_CODE_LEN));
-      memcpy(&cache[indx * FFT_QP_SIZE + E5_QP_CODE_LEN * SPC], &out[E5_QP_CODE_LEN * SPC * indx2], sizeof(c32) * SPC * (FFT_QP_SIZE - E5_QP_CODE_LEN));
+      memcpy(&cache[indx * FFT_QP_SIZE + E5_QP_CODE_LEN * SPC], &out[E5_QP_CODE_LEN * SPC * indx2], sizeof(c32) * (FFT_QP_SIZE - SPC * E5_QP_CODE_LEN));
       fft_c32(FFT_QP_SIZE, &cache[indx * FFT_QP_SIZE], true); // forward FFT
     }
  
@@ -1672,7 +1667,7 @@ void test_quasi_pilot_330(results_s* results) {
     for (int windex = center - window / 2; windex < center + window / 2; windex +=1) {
       //memset(fft_data, 0, sizeof(c32) * FFT_QP_SIZE);
       //memcpy(fft_data, &out[E5_QP_CODE_LEN * SPC * windex], sizeof(c32) * SPC * (E5_QP_CODE_LEN));
-      //memcpy(&fft_data[E5_QP_CODE_LEN * SPC], &out[E5_QP_CODE_LEN * SPC * windex], sizeof(c32) * SPC * (FFT_QP_SIZE - E5_QP_CODE_LEN)); 
+      //memcpy(&fft_data[E5_QP_CODE_LEN * SPC], &out[E5_QP_CODE_LEN * SPC * windex], sizeof(c32) * (FFT_QP_SIZE - SPC * E5_QP_CODE_LEN)); 
       //fft_c32(FFT_QP_SIZE, fft_data, true); // forward FFT
 
       //for (int lp = 0; lp < FFT_QP_SIZE; lp++) { 
@@ -1952,8 +1947,8 @@ int main(int argc,char* argv[])
     return 0;
   }
 
-  if (0) {
-    read_QP((char*)"C:/work/Baseband/TestData/100ms/bw25/G_2025_09_03_23_05_33.ors");
+  if (1) {
+    read_QP((char*)"C:/work/Baseband/Utilities/2026-03-31/L5-1_10/G_2026_03_31_20_31_38.547.ors");
     return 0;
   }
 
