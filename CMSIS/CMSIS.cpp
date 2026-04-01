@@ -509,7 +509,7 @@ float signalf(float x, float F1, float F2, float F3, float F4) {
   return ans;
 }
 
-void read_L1(char* input) {
+void read_L1_CSV(char* input) {
   FILE* fp_msb = NULL;
   fopen_s(&fp_msb, input, "r");
   if (fp_msb == NULL) {
@@ -1062,7 +1062,7 @@ void read_E5A(char* input) {
   free(sampl); free(repli); free(up_samp); free(up_repli); free(up_prod); free(nci_sum); free(sum_prod);
 }
 
-void read_QP(char* input) {
+void read_L1(char* input) {
   FILE* fp_qp = NULL;
   fopen_s(&fp_qp, input, "r");
   if (fp_qp == NULL) {
@@ -1100,6 +1100,136 @@ void read_QP(char* input) {
   printf("size (total bytes - hdrs) %d \n", payload_size);
   printf("Working on %s\n", input);
 
+
+  c32* samples = (c32*)malloc(payload_size * sizeof(c32));
+  DecodeOrsIQCplx(&buffer[hdrlen], payload_size / 2, samples);
+  free(buffer);
+
+  // Test the quasi pilot generation
+  int min_idx = 0; int loc_cnt = 0; int missed = 0;
+  float min_val = 1e5;
+#define FFT_QP_SIZE 4096 // was 2
+  float chipping_rate = 1.023e6; // chips per sec
+  int window = 4; //  window/2 ms either side of center 
+#define SPC 4 // samples per chip was 3
+  int nci = payload_size / (L1C_CODE_LEN * SPC);
+  double IF_OFFSET = 0;// 1e6 + 4100;
+  printf("Using %d len FFT and %d SPC and window size %d (with %d NCI avail) IF_OFFSET=%d\n", FFT_QP_SIZE, SPC, window, nci, (int)IF_OFFSET);
+  acq_struct prn2acq[30] = { 0 }; int cnt = 0;
+  int num_prns = read_assist(input, prn2acq);
+
+
+  ///////////////////// main prn loop ////////////////////////////////
+
+  // Compute circular correlation C_k(τ) = FFT^-1{ FFT[signal] · conj(FFT[replica]) }.
+  c32* replica = (c32*)malloc(sizeof(c32) * FFT_QP_SIZE);
+  c32* fft_repl = (c32*)malloc(sizeof(c32) * FFT_QP_SIZE);
+  c32* fft_data = (c32*)malloc(sizeof(c32) * FFT_QP_SIZE);
+  c32* fft_sum = (c32*)malloc(sizeof(c32) * FFT_QP_SIZE);
+  c32* fft_prod = (c32*)malloc(sizeof(c32) * FFT_QP_SIZE);
+
+  for (int cnt = 0; cnt < num_prns; cnt++) {
+    // only GAL=2 right PRNs
+    //if (prn2acq[cnt].constel == 2) { continue; }
+    //if (prn2acq[cnt].constel == 1 || (prn2acq[cnt].prn != 13 && prn2acq[cnt].prn != 23)) { continue; }
+    //if (prn2acq[cnt].constel == 1 || (prn2acq[cnt].prn != 25 && prn2acq[cnt].prn != 36)) { continue; }
+    memset(fft_repl, 0, sizeof(c32) * FFT_QP_SIZE);
+    memset(replica, 0, sizeof(c32) * FFT_QP_SIZE);
+    int prn_code[L1C_CODE_LEN * SPC];
+    getCode(L1C_CODE_LEN, SPC, prn2acq[cnt].prn, prn_code);
+    double doppler = IF_OFFSET + (prn2acq[cnt].doppler);
+    make_replica(prn_code, replica, doppler, L1C_CODE_LEN * SPC, chipping_rate * SPC);
+    memcpy(fft_repl, replica, sizeof(c32) * L1C_CODE_LEN);
+
+    fft_c32(FFT_QP_SIZE, fft_repl, true);
+
+    int found[50] = { 0 };
+    int last_location = 0;
+    for (int center = window / 2; center <= nci - window / 2 - 2; center++) {
+      memset(fft_sum, 0, sizeof(c32) * FFT_QP_SIZE);
+      for (int windex = center - window / 2; windex < center + window / 2; windex += 1) {
+        memset(fft_data, 0, sizeof(c32) * FFT_QP_SIZE);
+        memcpy(fft_data, &samples[L1C_CODE_LEN * SPC * windex], sizeof(c32) * SPC * (L1C_CODE_LEN));
+        memcpy(&fft_data[L1C_CODE_LEN * SPC], &samples[L1C_CODE_LEN * SPC * windex], sizeof(c32) * (FFT_QP_SIZE - SPC * L1C_CODE_LEN));
+        fft_c32(FFT_QP_SIZE, fft_data, true); // forward FFT
+
+        for (int k = 0; k < FFT_QP_SIZE; k++) { // accumulate pt-wise * with conj of replica
+          if (windex < center) { // cheaper method     //get_minus_conj
+            fft_sum[k] = add(fft_sum[k], mult(fft_data[k], get_conj(fft_repl[k])));
+          }
+          else {
+            fft_sum[k] = add(fft_sum[k], mult(fft_data[k], get_conj(fft_repl[k])));
+          }
+        }
+      } // for windex 
+
+      // used to have the IFFT here
+      fft_c32(FFT_QP_SIZE, fft_sum, false); // IFFT // cheaper method
+
+      FILE* fp_out = NULL;
+      if (false) {} //center == 50) {  errno_t er = fopen_s(&fp_out, "C:/Python/nci_sum4.csv", "w"); }
+      top2_pks peaks;
+      find_top2_peaks_cplx(fft_sum, L1C_CODE_LEN* SPC, 4, &peaks, fp_out);
+      bool isMax = findMax(peaks.val1);
+      double ang = atan2(fft_sum[peaks.idx1].i, fft_sum[peaks.idx1].r) * 57.2957795;
+      float ratio = peaks.val1 / peaks.val2;
+      // nix if last max was less than 20 points ago 
+      if (isMax && fabs(last_location - center + 8) > 20) {
+        found[loc_cnt++] = center - 8;
+        last_location = center - 8;
+      }
+
+      printf("prn, %02d, center,%03d, max,%6.1f,pos,%d,ratio,%4.2f,ang,%4.2f,cnt,%d\n",
+        prn2acq[cnt].prn, center, peaks.val1, peaks.idx1, ratio, ang, isMax);
+    } // for center
+  }
+
+  //for (int i = 0; i < loc_cnt; i++) { printf("Bit transition at %d ms \n", found[i]); }
+  //printf("BTs: %d \n", loc_cnt);
+  free(samples); free(replica);
+  free(fft_data); free(fft_sum); free(fft_repl); free(fft_prod);
+
+}
+
+void read_QP(char* input) {
+  FILE* fp_qp = NULL;
+  fopen_s(&fp_qp, input, "r");
+  if (fp_qp == NULL) {
+    fprintf(stderr, "Failed to open msb file %s\n", input);
+    return;
+  }
+  fseek(fp_qp, 0L, SEEK_END);
+  size_t bytes_to_read = ftell(fp_qp);
+  rewind(fp_qp);
+
+  uint8_t* buffer = (uint8_t*)malloc(bytes_to_read);
+  size_t bytesRead;
+  bytesRead = fread(buffer, 1, bytes_to_read, fp_qp);
+  if (bytesRead != bytes_to_read) { printf("Error parsiing data\n"); }
+  fclose(fp_qp);
+
+  // 2 for res 1
+  uint16_t hdrlen = U2(&buffer[2]); // 2 for header length
+  // 6 for res2
+  uint16_t yr = U2(&buffer[10]) + 1900; // 12
+  uint16_t mon = buffer[12] + 1; // 13
+  uint16_t day = buffer[13]; // 14
+  double tods = U4(&buffer[14]) / 1000.0; // 18
+  int hr = (int)floor(tods / 3600.0);
+  int min = (int)floor((tods / 3600.0 - floor(tods / 3600.0)) * 60);
+  int sec = (int)floor((tods / 60.0 - floor(tods / 60.0)) * 60);
+  // map back to GPS time
+  double dtime = compute_gps_time(yr, mon, day, hr, min, sec);
+  dtime -= 18; // leap seconds
+  printf("week %d tow %f \n", (int)floor(dtime / 604800.0), dtime - floor(dtime / 604800.0) * 604800.0);
+  int msec = (int)round((sec - floor(sec)) * 1000);
+  uint32_t nanos = U3(&buffer[18]); // 21
+  printf("%4d-%02d-%02d-%02d-%02d-%02d msec=%d nanos=%d \n", yr, mon, day, hr, min, sec, msec, nanos);
+  int payload_size = bytes_to_read - hdrlen;
+  printf("size (total bytes - hdrs) %d \n", payload_size);
+  printf("Working on %s\n", input);
+  
+
   c32* samples = (c32*)malloc(payload_size * sizeof(c32));
   DecodeOrsIQCplx(&buffer[hdrlen], payload_size / 2, samples);
   free(buffer);
@@ -1110,9 +1240,10 @@ void read_QP(char* input) {
 #define FFT_QP_SIZE 512 * 2 // was 2
   float chipping_rate = 5.115e6; // chips per sec
   int window = 70; //  window/2 ms either side of center 
-  
-#define SPC 3 // samples per chip was 3
+#define SPC 2 // samples per chip was 3
   int nci = payload_size / (E5_QP_CODE_LEN * SPC);
+  double IF_OFFSET = 1e6 + 4100;
+  printf("Using %d len FFT and %d SPC and window size %d (with %d NCI avail) IF_OFFSET=%d\n", FFT_QP_SIZE, SPC, window, nci, (int)IF_OFFSET);
   acq_struct prn2acq[30] = { 0 }; int cnt = 0;
   int num_prns = read_assist(input, prn2acq);
   
@@ -1135,7 +1266,7 @@ void read_QP(char* input) {
     memset(replica, 0, sizeof(c32) * FFT_QP_SIZE);
     int prn_code[E5_QP_CODE_LEN * SPC];
     getE5_QPCode(E5_QP_CODE_LEN, SPC, prn2acq[cnt].prn, prn_code);
-    double doppler = 1e6 + 4100 + (prn2acq[cnt].doppler) * fac;
+    double doppler = IF_OFFSET + (prn2acq[cnt].doppler) * fac;
     make_replica(prn_code, replica, doppler, E5_QP_CODE_LEN * SPC, chipping_rate * SPC);
     memcpy(fft_repl, replica, sizeof(c32) * E5_QP_CODE_LEN);
     
@@ -1153,7 +1284,7 @@ void read_QP(char* input) {
 
         for (int k = 0; k < FFT_QP_SIZE; k++) { // accumulate pt-wise * with conj of replica
           if (windex < center) { // cheaper method     //get_minus_conj
-            fft_sum[k] = add(fft_sum[k], mult(fft_data[k], get_conj(fft_repl[k])));
+            fft_sum[k] = add(fft_sum[k], mult(fft_data[k], get_minus_conj(fft_repl[k])));
           }
           else {
             fft_sum[k] = add(fft_sum[k], mult(fft_data[k], get_conj(fft_repl[k])));
@@ -1980,10 +2111,15 @@ int main(int argc,char* argv[])
   }
 
   if (1) {
+    read_L1((char*)"C:/work/Baseband/Utilities/2026-04-01/L1_04/G_2026_04_01_16_10_28.098.ors");
+    return 0;
+  }
 
-    read_QP((char*)"C:/work/Baseband/Utilities/2026-04-01/L5-1_16/G_2026_04_01_16_10_45.285.ors");
+  if (1) {
+
+    //read_QP((char*)"C:/work/Baseband/Utilities/2026-04-01/L5-1_16/G_2026_04_01_16_10_45.285.ors");
     // don't use read_QP((char*)"C:/work/Baseband/Utilities/2026-04-01/L5_15/G_2026_04_01_16_11_02.457.ors");
-    //read_QP((char*)"C:/work/Baseband/Utilities/2026-04-01/L5-1_10/G_2026_04_01_16_10_39.559.ors");
+    read_QP((char*)"C:/work/Baseband/Utilities/2026-04-01/L5-1_10/G_2026_04_01_16_10_39.559.ors");
     //read_QP((char*)"C:/work/Baseband/Utilities/2026-03-31/L5-1_10/G_2026_03_31_20_31_38.547.ors");
     //read_QP((char*)"C:/work/Baseband/Utilities/2026-03-31/L5_16a/G_2026_03_31_20_31_50.000.ors");
     return 0;
@@ -1997,7 +2133,7 @@ int main(int argc,char* argv[])
   }
 
   if (0) {
-    read_L1((char*)"C:/Python/out-1bit_1spc_1bit.csv");// "C:/work/Baseband/TestData/E5/t14/G_2024_10_21_22_29_43.047.csv");
+    read_L1_CSV((char*)"C:/Python/out-1bit_1spc_1bit.csv");// "C:/work/Baseband/TestData/E5/t14/G_2024_10_21_22_29_43.047.csv");
     return 0;
   }
 
