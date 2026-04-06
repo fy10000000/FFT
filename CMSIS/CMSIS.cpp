@@ -10,6 +10,7 @@
  */
 
 #include <iostream>
+#include <string>
 #include <chrono> // for profiling
 #include "transform_functions.h"
 #include "gnss_codes.h"
@@ -1108,12 +1109,12 @@ void read_L1(char* input) {
   // Test the quasi pilot generation
   int min_idx = 0; int loc_cnt = 0; int missed = 0;
   float min_val = 1e5;
-#define FFT_QP_SIZE 4096 // was 2
+#define FFT_QP_SIZE 4096 * 1 // was 2
   float chipping_rate = 1.023e6; // chips per sec
-  int window = 2; //  window/2 ms either side of center 
+  int window = 16; //  window/2 ms either side of center 
 #define SPC 4 // samples per chip was 3
   int nci = payload_size / (L1C_CODE_LEN * SPC);
-  double IF_OFFSET = 0;// 5400;// 1e6 + 4100;
+  double IF_OFFSET = 5400;// 1e6 + 4100; // March 31 540 April 1st 4100
   printf("Using %d len FFT and %d SPC and window size %d (with %d NCI avail) IF_OFFSET=%d\n", FFT_QP_SIZE, SPC, window, nci, (int)IF_OFFSET);
   acq_struct prn2acq[30] = { 0 }; int cnt = 0;
   int num_prns = read_assist(input, prn2acq);
@@ -1251,7 +1252,7 @@ void read_QP(char* input) {
   int window = 20; //  window/2 ms either side of center 
 #define SPC 2 // samples per chip was 3
   int nci = payload_size / (E5_QP_CODE_LEN * SPC);
-  double IF_OFFSET = 1e6 + 4100;
+  double IF_OFFSET = 1e6 + 5400;// 1e6 + 4100;
   printf("Using %d len FFT and %d SPC and window size %d (with %d NCI avail) IF_OFFSET=%d\n", FFT_QP_SIZE, SPC, window, nci, (int)IF_OFFSET);
   acq_struct prn2acq[30] = { 0 }; int cnt = 0;
   int num_prns = read_assist(input, prn2acq);
@@ -1269,8 +1270,8 @@ void read_QP(char* input) {
   double fac = 1176.45 / 1575.42;// values were quoted at L1, need at L5
   for (int cnt = 0; cnt < num_prns; cnt++) {
     // only GAL=2 right PRNs
-    if (prn2acq[cnt].constel == 1 || (prn2acq[cnt].prn != 13 && prn2acq[cnt].prn != 23)) { continue; }
-    //if (prn2acq[cnt].constel == 1 || (prn2acq[cnt].prn != 25 && prn2acq[cnt].prn != 36)) { continue; }
+    //if (prn2acq[cnt].constel == 1 || (prn2acq[cnt].prn != 13 && prn2acq[cnt].prn != 23)) { continue; }
+    if (prn2acq[cnt].constel == 1 || (prn2acq[cnt].prn != 25 && prn2acq[cnt].prn != 36)) { continue; }
     memset(fft_repl, 0, sizeof(c32) * FFT_QP_SIZE);
     memset(replica, 0, sizeof(c32) * FFT_QP_SIZE);
     int prn_code[E5_QP_CODE_LEN * SPC];
@@ -2147,11 +2148,22 @@ int main(int argc,char* argv[])
       "G_2026_03_31_20_37_11.059.ors","G_2026_03_31_20_37_45.453.ors",
       "G_2026_03_31_20_38_19.859.ors","G_2026_03_31_20_38_54.266.ors",
       "G_2026_03_31_20_39_28.672.ors"  };
-
-    for (int i = 0; i < 17; i++) {
+    const char* list3[] =
+    {
+      "G_2026_03_31_20_31_27.098.ors","G_2026_03_31_20_32_01.488.ors",
+      "G_2026_03_31_20_32_35.887.ors","G_2026_03_31_20_33_10.281.ors",
+      "G_2026_03_31_20_33_44.676.ors","G_2026_03_31_20_34_19.078.ors",
+      "G_2026_03_31_20_34_53.480.ors","G_2026_03_31_20_35_27.875.ors",
+      "G_2026_03_31_20_36_02.273.ors","G_2026_03_31_20_36_36.664.ors",
+      "G_2026_03_31_20_37_11.059.ors","G_2026_03_31_20_37_45.453.ors",
+      "G_2026_03_31_20_38_19.859.ors","G_2026_03_31_20_38_54.266.ors",
+      "G_2026_03_31_20_39_28.672.ors",
+    };
+    for (int i = 0; i < 16; i++) {
       //char path[256] = "C:/work/Baseband/Utilities/2026-04-01/L1_04/";
+      //char path[256] = "C:/work/Baseband/Utilities/2026-03-31/L1_16/";
       char path[256] = "C:/work/Baseband/Utilities/2026-03-31/L1_04/";
-      strcat_s(path, list2[i]);
+      strcat_s(path, list3[i]);
       read_L1(path);
     }
     return 0;
@@ -2177,13 +2189,37 @@ int main(int argc,char* argv[])
       "G_2026_03_31_20_37_22.512.ors","G_2026_03_31_20_37_56.906.ors",
       "G_2026_03_31_20_38_31.312.ors","G_2026_03_31_20_39_05.723.ors"
     };
+    const char* list3[] =
+    {
+      "G_2026_04_01_16_10_56.734.ors","G_2026_04_01_16_11_36.859.ors",
+      "G_2026_04_01_16_12_16.980.ors","G_2026_04_01_16_13_37.227.ors",
+      "G_2026_04_01_16_14_17.352.ors","G_2026_04_01_16_14_57.469.ors",
+      "G_2026_04_01_16_15_37.594.ors","G_2026_04_01_16_16_17.719.ors",
+      "G_2026_04_01_16_16_57.848.ors","G_2026_04_01_16_17_37.961.ors",
+      "G_2026_04_01_16_18_18.074.ors","G_2026_04_01_16_18_58.180.ors",
+      "G_2026_04_01_16_19_38.297.ors","G_2026_04_01_16_20_18.410.ors",
+      "G_2026_04_01_16_20_58.527.ors","G_2026_04_01_16_21_38.652.ors",
+    };
+    const char* list4[] =
+    {
+      "G_2026_04_01_16_10_51.012.ors","G_2026_04_01_16_11_31.137.ors",
+      "G_2026_04_01_16_12_11.258.ors","G_2026_04_01_16_12_51.375.ors",
+      "G_2026_04_01_16_14_11.633.ors","G_2026_04_01_16_14_51.750.ors",
+      "G_2026_04_01_16_16_11.996.ors","G_2026_04_01_16_16_52.125.ors",
+      "G_2026_04_01_16_17_32.238.ors","G_2026_04_01_16_18_12.352.ors",
+      "G_2026_04_01_16_18_52.457.ors","G_2026_04_01_16_20_12.684.ors",
+      "G_2026_04_01_16_20_52.809.ors","G_2026_04_01_16_21_32.930.ors",
+      "G_2026_04_01_16_22_13.059.ors",
+    };
 
     // make sure num file is right, and inside read_QP the 
     // two correct sats to find are selected
-    for (int i = 0; i < 14; i++) {
-      //char path[256] = "C:/work/Baseband/Utilities/2026-04-01/L5-1_10/";
-      char path[256] = "C:/work/Baseband/Utilities/2026-03-31/L5-1_10/";
-      strcat_s(path, list2[i]);
+    for (int i = 0; i < 15; i++) {
+      char path[256] = "C:/work/Baseband/Utilities/2026-04-01/L5-1_10/";
+      //char path[256] = "C:/work/Baseband/Utilities/2026-03-31/L5-1_10/";
+      //char path[256] = "C:/work/Baseband/Utilities/2026-04-01/L5_16/";
+      //char path[256] = "C:/work/Baseband/Utilities/2026-04-01/L5-1_15/";
+      strcat_s(path, list[i]);
       read_QP(path);
     }
     return 0;
