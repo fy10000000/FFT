@@ -1280,7 +1280,7 @@ void read_QP(char* input, TestCase test_case) {
     if (!proceed) { continue; }
     //if (prn2acq[cnt].constel == 1 || (prn2acq[cnt].prn != 13 && prn2acq[cnt].prn != 23)) { continue; }
     //if (prn2acq[cnt].constel == 1 || (prn2acq[cnt].prn != 25 && prn2acq[cnt].prn != 36)) { continue; }
-    if (prn2acq[cnt].constel == 1 || (prn2acq[cnt].prn != 15 && prn2acq[cnt].prn != 34)) { continue; }
+    //if (prn2acq[cnt].constel == 1 || (prn2acq[cnt].prn != 15 && prn2acq[cnt].prn != 34)) { continue; }
     memset(fft_repl, 0, sizeof(c32) * FFT_QP_SIZE);
     memset(replica, 0, sizeof(c32) * FFT_QP_SIZE);
     
@@ -2190,78 +2190,15 @@ int main(int argc,char* argv[])
   }
 
   if (true) { // read_QP data .ors with .ast
-    const char* list[] =
-    {"G_2026_04_01_16_10_39.559.ors","G_2026_04_01_16_11_19.688.ors",
-     "G_2026_04_01_16_11_59.805.ors","G_2026_04_01_16_12_39.926.ors",
-     "G_2026_04_01_16_13_20.051.ors","G_2026_04_01_16_14_00.184.ors",
-     "G_2026_04_01_16_14_40.301.ors","G_2026_04_01_16_15_20.418.ors",
-     "G_2026_04_01_16_16_00.547.ors","G_2026_04_01_16_16_40.672.ors",
-     "G_2026_04_01_16_17_20.793.ors","G_2026_04_01_16_18_41.016.ors",
-     "G_2026_04_01_16_20_41.359.ors","G_2026_04_01_16_21_21.480.ors",
-     "G_2026_04_01_16_22_01.609.ors"};
-    const char* list2[] =
-    {
-      "G_2026_03_31_20_31_38.547.ors","G_2026_03_31_20_32_12.941.ors",
-      "G_2026_03_31_20_32_47.336.ors","G_2026_03_31_20_33_21.730.ors",
-      "G_2026_03_31_20_33_56.129.ors","G_2026_03_31_20_34_30.531.ors",
-      "G_2026_03_31_20_35_04.938.ors","G_2026_03_31_20_35_39.328.ors",
-      "G_2026_03_31_20_36_13.723.ors","G_2026_03_31_20_36_48.117.ors",
-      "G_2026_03_31_20_37_22.512.ors","G_2026_03_31_20_37_56.906.ors",
-      "G_2026_03_31_20_38_31.312.ors","G_2026_03_31_20_39_05.723.ors"
-    };
-    const char* list3[] =
-    {
-      "G_2026_04_01_16_10_56.734.ors","G_2026_04_01_16_11_36.859.ors",
-      "G_2026_04_01_16_12_16.980.ors","G_2026_04_01_16_13_37.227.ors",
-      "G_2026_04_01_16_14_17.352.ors","G_2026_04_01_16_14_57.469.ors",
-      "G_2026_04_01_16_15_37.594.ors","G_2026_04_01_16_16_17.719.ors",
-      "G_2026_04_01_16_16_57.848.ors","G_2026_04_01_16_17_37.961.ors",
-      "G_2026_04_01_16_18_18.074.ors","G_2026_04_01_16_18_58.180.ors",
-      "G_2026_04_01_16_19_38.297.ors","G_2026_04_01_16_20_18.410.ors",
-      "G_2026_04_01_16_20_58.527.ors","G_2026_04_01_16_21_38.652.ors",
-    };
-    const char* list4[] =
-    {
-      "G_2026_04_01_16_10_51.012.ors","G_2026_04_01_16_11_31.137.ors",
-      "G_2026_04_01_16_12_11.258.ors","G_2026_04_01_16_12_51.375.ors",
-      "G_2026_04_01_16_14_11.633.ors","G_2026_04_01_16_14_51.750.ors",
-      "G_2026_04_01_16_16_11.996.ors","G_2026_04_01_16_16_52.125.ors",
-      "G_2026_04_01_16_17_32.238.ors","G_2026_04_01_16_18_12.352.ors",
-      "G_2026_04_01_16_18_52.457.ors","G_2026_04_01_16_20_12.684.ors",
-      "G_2026_04_01_16_20_52.809.ors","G_2026_04_01_16_21_32.930.ors",
-      "G_2026_04_01_16_22_13.059.ors",
-    };
-    const char* list5[] =
-    {
-      "G_2026_04_07_17_07_05.820.ors","G_2026_04_07_17_07_51.758.ors",
-      "G_2026_04_07_17_08_37.691.ors","G_2026_04_07_17_09_23.637.ors",
-      "G_2026_04_07_17_10_09.566.ors","G_2026_04_07_17_10_55.496.ors",
-      "G_2026_04_07_17_11_41.410.ors","G_2026_04_07_17_12_27.324.ors",
-      "G_2026_04_07_17_13_13.234.ors","G_2026_04_07_17_13_59.152.ors",
-      "G_2026_04_07_17_14_45.070.ors","G_2026_04_07_17_15_30.984.ors",
-      "G_2026_04_07_17_16_16.898.ors","G_2026_04_07_17_17_02.809.ors",
-      "G_2026_04_07_17_17_48.734.ors","G_2026_04_07_17_18_34.664.ors",
-    };
-    // make sure num file is right, and inside read_QP the 
    
-
-    for (int i = 0; i < 0; i++) { // fixme use the new structs
-      //char path[256] = "C:/work/Baseband/Utilities/2026-04-01/L5-1_10/";// list
-      //char path[256] = "C:/work/Baseband/Utilities/2026-03-31/L5-1_10/";// list2
-      //char path[256] = "C:/work/Baseband/Utilities/2026-04-01/L5_16/";// list3
-      //char path[256] = "C:/work/Baseband/Utilities/2026-04-01/L5-1_15/";// list4
-      char path[256] = "C:/work/Baseband/Utilities/2026-04-07/L5-1_10/"; // list5
-      strcat_s(path, list5[i]);
-      //read_QP(path);
-    }
-
-    //April 7th
-    for (int j = 0; j < 7; j++) {
-      for (int i = 0; i < test_cases[j].num_files; i++) {
-        char buff[256] = { 0 };
-        strcpy_s(buff, test_cases[j].name);
-        strcat_s(buff, test_cases[j].files[i]);
-        read_QP(buff, test_cases[j]);
+    TestName day = MARCH31;
+    // choices are march31_cases april1_cases april7_cases
+    for (int j = 0; j < test_wrappers[day].num_folders; j++) {
+      for (int i = 0; i < test_wrappers[day].tests[j].num_files; i++) {
+        char buff[256] = "C:/work/Baseband/Utilities/";
+        strcat_s(buff, test_wrappers[day].tests[j].name);
+        strcat_s(buff, test_wrappers[day].tests[j].files[i]);
+        read_QP(buff, test_wrappers[day].tests[j]);
       }
       printf("==========================================================\n");
     }
