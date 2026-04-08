@@ -17,9 +17,9 @@
 #include "up_sample.h"
 #include "msb_funcs.h"
 
+#include "string_helpers.h"
 
 #include <complex> // not to be confused with complex.h
-
 
 #define Q31_MIN   ((int32_t)0x80000000)  // -2147483648
 #define Q31_MAX   ((int32_t)0x7FFFFFFF)  //  2147483647
@@ -1111,10 +1111,10 @@ void read_L1(char* input) {
   float min_val = 1e5;
 #define FFT_QP_SIZE 4096 * 1 // was 2
   float chipping_rate = 1.023e6; // chips per sec
-  int window = 16; //  window/2 ms either side of center 
+  int window = 4; //  window/2 ms either side of center 
 #define SPC 4 // samples per chip was 3
   int nci = payload_size / (L1C_CODE_LEN * SPC);
-  double IF_OFFSET = 5400;// 1e6 + 4100; // March 31 540 April 1st 4100
+  double IF_OFFSET = 0;// 5400;// 5400;// 1e6 + 4100; // March 31 540 April 1st 4100
   printf("Using %d len FFT and %d SPC and window size %d (with %d NCI avail) IF_OFFSET=%d\n", FFT_QP_SIZE, SPC, window, nci, (int)IF_OFFSET);
   acq_struct prn2acq[30] = { 0 }; int cnt = 0;
   int num_prns = read_assist(input, prn2acq);
@@ -1131,7 +1131,7 @@ void read_L1(char* input) {
   float* nci_sum = (float*)malloc(sizeof(float) * FFT_QP_SIZE);
   for (int cnt = 0; cnt < num_prns; cnt++) {
     // only GAL=2 right PRNs
-    //if (prn2acq[cnt].constel == 2) { continue; }
+    if (prn2acq[cnt].constel == 2) { continue; }
     //if (prn2acq[cnt].constel == 1 || (prn2acq[cnt].prn != 13 && prn2acq[cnt].prn != 23)) { continue; }
     //if (prn2acq[cnt].constel == 1 || (prn2acq[cnt].prn != 25 && prn2acq[cnt].prn != 36)) { continue; }
     memset(fft_repl, 0, sizeof(c32) * FFT_QP_SIZE);
@@ -1188,8 +1188,8 @@ void read_L1(char* input) {
         last_location = center - 8;
       }
       char constel = (prn2acq[cnt].constel == 1) ? 'G' : 'E';
-      printf("prn, %c%02d, center,%03d, max,%6.1f,p1:,%4d,p2:,%4d,r1,%4.2f,r2,%4.2f,ang,%4.2f,cnt,%d\n",
-        constel,prn2acq[cnt].prn, center, peaks.val1, peaks.idx1, peaks2.idx1, ratio, nci_ratio, ang, isMax);
+      printf("prn, %c%02d, center,%03d, max,%6.1f,p1:,%4d,p2:,%4d,r1,%4.2f,r2,%4.2f,ang,%4.2f,dop,%6.1f\n",
+        constel,prn2acq[cnt].prn, center, peaks.val1, peaks.idx1, peaks2.idx1, ratio, nci_ratio, ang, doppler);
     } // for center
   }
 
@@ -1201,7 +1201,7 @@ void read_L1(char* input) {
 
 // make sure to edit the line if (prn2acq[cnt].constel == 1 to allow the
 // right prns are used or use all
-void read_QP(char* input) {
+void read_QP(char* input, TestCase test_case) {
   FILE* fp_qp = NULL;
   fopen_s(&fp_qp, input, "r");
   if (fp_qp == NULL) {
@@ -1250,10 +1250,11 @@ void read_QP(char* input) {
 #define FFT_QP_SIZE 512 * 2 // was 2
   float chipping_rate = 5.115e6; // chips per sec
   int window = 20; //  window/2 ms either side of center 
-#define SPC 2 // samples per chip was 3
-  int nci = payload_size / (E5_QP_CODE_LEN * SPC);
-  double IF_OFFSET = 1e6 + 5400;// 1e6 + 4100;
-  printf("Using %d len FFT and %d SPC and window size %d (with %d NCI avail) IF_OFFSET=%d\n", FFT_QP_SIZE, SPC, window, nci, (int)IF_OFFSET);
+  int spc = test_case.spc; // samples per chip was 3
+  int nci = payload_size / (E5_QP_CODE_LEN * spc);
+  double IF_OFFSET = test_case.IF;// +5400;// 1e6 + 4100;
+  printf("Using %d len FFT and %d SPC and window size %d (with %d NCI avail) IF_OFFSET=%d spc=%d\n", 
+    FFT_QP_SIZE, SPC, window, nci, (int)IF_OFFSET, spc);
   acq_struct prn2acq[30] = { 0 }; int cnt = 0;
   int num_prns = read_assist(input, prn2acq);
   
@@ -1267,17 +1268,25 @@ void read_QP(char* input) {
   c32* fft_sum  = (c32*)malloc(sizeof(c32) * FFT_QP_SIZE);
   c32* fft_prod = (c32*)malloc(sizeof(c32) * FFT_QP_SIZE);
   float* nci_sum = (float*)malloc(sizeof(float) * FFT_QP_SIZE);
+  int* prn_code = (int*)malloc(sizeof(int) * E5_QP_CODE_LEN * spc);
   double fac = 1176.45 / 1575.42;// values were quoted at L1, need at L5
   for (int cnt = 0; cnt < num_prns; cnt++) {
     // only GAL=2 right PRNs
+    if (prn2acq[cnt].constel == 1) { continue; } // only do Gal
+    bool proceed = false;
+    for (int i = 0; i < 9; i++) {
+      if (prn2acq[cnt].prn == test_case.good_svs[i]) { proceed = true; break; }
+    }
+    if (!proceed) { continue; }
     //if (prn2acq[cnt].constel == 1 || (prn2acq[cnt].prn != 13 && prn2acq[cnt].prn != 23)) { continue; }
-    if (prn2acq[cnt].constel == 1 || (prn2acq[cnt].prn != 25 && prn2acq[cnt].prn != 36)) { continue; }
+    //if (prn2acq[cnt].constel == 1 || (prn2acq[cnt].prn != 25 && prn2acq[cnt].prn != 36)) { continue; }
+    if (prn2acq[cnt].constel == 1 || (prn2acq[cnt].prn != 15 && prn2acq[cnt].prn != 34)) { continue; }
     memset(fft_repl, 0, sizeof(c32) * FFT_QP_SIZE);
     memset(replica, 0, sizeof(c32) * FFT_QP_SIZE);
-    int prn_code[E5_QP_CODE_LEN * SPC];
-    getE5_QPCode(E5_QP_CODE_LEN, SPC, prn2acq[cnt].prn, prn_code);
+    
+    getE5_QPCode(E5_QP_CODE_LEN, spc, prn2acq[cnt].prn, prn_code);
     double doppler = IF_OFFSET + (prn2acq[cnt].doppler) * fac;
-    make_replica(prn_code, replica, doppler, E5_QP_CODE_LEN * SPC, chipping_rate * SPC);
+    make_replica(prn_code, replica, doppler, E5_QP_CODE_LEN * spc, chipping_rate * SPC);
     memcpy(fft_repl, replica, sizeof(c32) * E5_QP_CODE_LEN);
     
     fft_c32(FFT_QP_SIZE, fft_repl, true);
@@ -1289,8 +1298,8 @@ void read_QP(char* input) {
       memset(nci_sum, 0, sizeof(float) * FFT_QP_SIZE);
       for (int windex = center - window / 2; windex < center + window / 2; windex += 1) {
         memset(fft_data, 0, sizeof(c32) * FFT_QP_SIZE);
-        memcpy(fft_data, &samples[E5_QP_CODE_LEN * SPC * windex], sizeof(c32) * SPC * (E5_QP_CODE_LEN));
-        memcpy(&fft_data[E5_QP_CODE_LEN * SPC], &samples[E5_QP_CODE_LEN * SPC * windex], sizeof(c32) * (FFT_QP_SIZE - SPC * E5_QP_CODE_LEN));
+        memcpy(fft_data, &samples[E5_QP_CODE_LEN * spc * windex], sizeof(c32) * spc * (E5_QP_CODE_LEN));
+        memcpy(&fft_data[E5_QP_CODE_LEN * spc], &samples[E5_QP_CODE_LEN * spc * windex], sizeof(c32) * (FFT_QP_SIZE - spc * E5_QP_CODE_LEN));
         fft_c32(FFT_QP_SIZE, fft_data, true); // forward FFT
 
         for (int k = 0; k < FFT_QP_SIZE; k++) { // accumulate pt-wise * with conj of replica
@@ -1313,9 +1322,9 @@ void read_QP(char* input) {
       FILE* fp_out = NULL;
       if (false) {} //center == 50) {  errno_t er = fopen_s(&fp_out, "C:/Python/nci_sum4.csv", "w"); }
       top2_pks peaks;
-      find_top2_peaks_cplx(fft_sum, E5_QP_CODE_LEN * SPC, 10, &peaks, fp_out);
+      find_top2_peaks_cplx(fft_sum, E5_QP_CODE_LEN * spc, 10, &peaks, fp_out);
       top2_pks peaks2;
-      find_top2_peaks_real(nci_sum, E5_QP_CODE_LEN * SPC, 10, &peaks2, fp_out);
+      find_top2_peaks_real(nci_sum, E5_QP_CODE_LEN * spc, 10, &peaks2, fp_out);
       bool isMax = findMax(peaks.val1);
       double ang = atan2(fft_sum[peaks.idx1].i, fft_sum[peaks.idx1].r) * 57.2957795;
       float ratio = peaks.val1 / peaks.val2;
@@ -1326,16 +1335,15 @@ void read_QP(char* input) {
         last_location = center - 8;
       }
       char constel = (prn2acq[cnt].constel == 1) ? 'G' : 'E';
-      printf("prn,%c%02d, center, %03d,max,%5.1f, p1,%4d,p2,%4d,r1,%4.2f,r2,%4.2f,ang,%4.2f,cnt,%d\n", 
-        constel, prn2acq[cnt].prn, center, peaks.val1, peaks.idx1, peaks2.idx1, ratio, ratio2, ang, isMax);
+      printf("prn,%c%02d, center, %03d,max,%5.1f, p1,%4d,p2,%4d,r1,%4.2f,r2,%4.2f,ang,%4.2f,dop,%6.1f\n", 
+        constel, prn2acq[cnt].prn, center, peaks.val1, peaks.idx1, peaks2.idx1, ratio, ratio2, ang, doppler);
     } // for center
   }
 
   //for (int i = 0; i < loc_cnt; i++) { printf("Bit transition at %d ms \n", found[i]); }
   //printf("BTs: %d \n", loc_cnt);
-  free(samples); free(replica); free(nci_sum);
+  free(samples); free(replica); free(nci_sum); free(prn_code);
   free(fft_data); free(fft_sum); free(fft_repl); free(fft_prod);
-   
 }
 
 // try differential coherent integration. Insensitive to bit transitions
@@ -2128,7 +2136,7 @@ int main(int argc,char* argv[])
     return 0;
   }
 
-  if (1) { // read_L1 data .ors with .ast 
+  if (false) { // read_L1 data .ors with .ast 
     const char* list[] = 
      {"G_2026_04_01_16_11_48.352.ors","G_2026_04_01_16_11_08.230.ors",
       "G_2026_04_01_16_10_28.098.ors","G_2026_04_01_16_13_08.594.ors",
@@ -2159,17 +2167,29 @@ int main(int argc,char* argv[])
       "G_2026_03_31_20_38_19.859.ors","G_2026_03_31_20_38_54.266.ors",
       "G_2026_03_31_20_39_28.672.ors",
     };
+    const char* list4[] =
+    {
+      "G_2026_04_07_17_07_00.098.ors","G_2026_04_07_17_07_46.035.ors",
+      "G_2026_04_07_17_08_31.965.ors","G_2026_04_07_17_10_03.844.ors",
+      "G_2026_04_07_17_10_49.773.ors","G_2026_04_07_17_11_35.691.ors",
+      "G_2026_04_07_17_12_21.602.ors","G_2026_04_07_17_13_07.512.ors",
+      "G_2026_04_07_17_13_53.430.ors","G_2026_04_07_17_14_39.348.ors",
+      "G_2026_04_07_17_15_25.262.ors","G_2026_04_07_17_16_11.176.ors",
+      "G_2026_04_07_17_16_57.086.ors","G_2026_04_07_17_17_43.012.ors",
+      "G_2026_04_07_17_18_28.941.ors","G_2026_04_07_17_19_14.863.ors",
+    };
     for (int i = 0; i < 16; i++) {
       //char path[256] = "C:/work/Baseband/Utilities/2026-04-01/L1_04/";
       //char path[256] = "C:/work/Baseband/Utilities/2026-03-31/L1_16/";
-      char path[256] = "C:/work/Baseband/Utilities/2026-03-31/L1_04/";
-      strcat_s(path, list3[i]);
+      //char path[256] = "C:/work/Baseband/Utilities/2026-03-31/L1_04/";
+      char path[256] = "C:/work/Baseband/Utilities/2026-04-07/L1_04/";
+      strcat_s(path, list4[i]);
       read_L1(path);
     }
     return 0;
   }
 
-  if (1) { // read_QP data .ors with .ast
+  if (true) { // read_QP data .ors with .ast
     const char* list[] =
     {"G_2026_04_01_16_10_39.559.ors","G_2026_04_01_16_11_19.688.ors",
      "G_2026_04_01_16_11_59.805.ors","G_2026_04_01_16_12_39.926.ors",
@@ -2211,17 +2231,41 @@ int main(int argc,char* argv[])
       "G_2026_04_01_16_20_52.809.ors","G_2026_04_01_16_21_32.930.ors",
       "G_2026_04_01_16_22_13.059.ors",
     };
-
+    const char* list5[] =
+    {
+      "G_2026_04_07_17_07_05.820.ors","G_2026_04_07_17_07_51.758.ors",
+      "G_2026_04_07_17_08_37.691.ors","G_2026_04_07_17_09_23.637.ors",
+      "G_2026_04_07_17_10_09.566.ors","G_2026_04_07_17_10_55.496.ors",
+      "G_2026_04_07_17_11_41.410.ors","G_2026_04_07_17_12_27.324.ors",
+      "G_2026_04_07_17_13_13.234.ors","G_2026_04_07_17_13_59.152.ors",
+      "G_2026_04_07_17_14_45.070.ors","G_2026_04_07_17_15_30.984.ors",
+      "G_2026_04_07_17_16_16.898.ors","G_2026_04_07_17_17_02.809.ors",
+      "G_2026_04_07_17_17_48.734.ors","G_2026_04_07_17_18_34.664.ors",
+    };
     // make sure num file is right, and inside read_QP the 
-    // two correct sats to find are selected
-    for (int i = 0; i < 15; i++) {
-      char path[256] = "C:/work/Baseband/Utilities/2026-04-01/L5-1_10/";
-      //char path[256] = "C:/work/Baseband/Utilities/2026-03-31/L5-1_10/";
-      //char path[256] = "C:/work/Baseband/Utilities/2026-04-01/L5_16/";
-      //char path[256] = "C:/work/Baseband/Utilities/2026-04-01/L5-1_15/";
-      strcat_s(path, list[i]);
-      read_QP(path);
+   
+
+    for (int i = 0; i < 0; i++) { // fixme use the new structs
+      //char path[256] = "C:/work/Baseband/Utilities/2026-04-01/L5-1_10/";// list
+      //char path[256] = "C:/work/Baseband/Utilities/2026-03-31/L5-1_10/";// list2
+      //char path[256] = "C:/work/Baseband/Utilities/2026-04-01/L5_16/";// list3
+      //char path[256] = "C:/work/Baseband/Utilities/2026-04-01/L5-1_15/";// list4
+      char path[256] = "C:/work/Baseband/Utilities/2026-04-07/L5-1_10/"; // list5
+      strcat_s(path, list5[i]);
+      //read_QP(path);
     }
+
+    //April 7th
+    for (int j = 0; j < 7; j++) {
+      for (int i = 0; i < test_cases[j].num_files; i++) {
+        char buff[256] = { 0 };
+        strcpy_s(buff, test_cases[j].name);
+        strcat_s(buff, test_cases[j].files[i]);
+        read_QP(buff, test_cases[j]);
+      }
+      printf("==========================================================\n");
+    }
+
     return 0;
   }
 

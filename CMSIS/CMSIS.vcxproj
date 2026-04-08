@@ -123,6 +123,7 @@
       <PreprocessorDefinitions>NDEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
       <AdditionalIncludeDirectories>C:\work\CMSIS-DSP\CMSIS-DSP-main-mod\Include;C:\work\CMSIS-DSP\CMSIS-DSP-main-mod\Include\dsp;</AdditionalIncludeDirectories>
+      <CompileAs>Default</CompileAs>
     </ClCompile>
     <Link>
       <SubSystem>Console</SubSystem>
@@ -433,6 +434,7 @@
     <ClInclude Include="..\Include\dsp\window_functions.h" />
     <ClInclude Include="..\Include\gnss_codes.h" />
     <ClInclude Include="..\Include\msb_funcs.h" />
+    <ClInclude Include="..\Include\string_helpers.h" />
     <ClInclude Include="..\Include\up_sample.h" />
     <ClInclude Include="..\PrivateInclude\arm_neon_private.h" />
     <ClInclude Include="..\PrivateInclude\arm_sorting.h" />

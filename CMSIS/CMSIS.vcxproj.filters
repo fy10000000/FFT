@@ -926,6 +926,9 @@
     <ClInclude Include="..\Include\msb_funcs.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="..\Include\string_helpers.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <None Include="..\Source\TransformFunctions\Config.cmake">
