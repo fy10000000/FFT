@@ -496,7 +496,7 @@ TestCase M31_L5_16b_Test = {
   "2026-03-31/L5_16b/",
    M31_L5_16b_files,
   sizeof(M31_L5_16b_files) / sizeof(M31_L5_16b_files[0]),
-  1000000,
+  0,
   {13,23},
     3,
   1024
@@ -522,7 +522,7 @@ TestCase M31_L5_16a_Test = {
   "2026-03-31/L5_16a/",
    M31_L5_16a_files,
   sizeof(M31_L5_16a_files) / sizeof(M31_L5_16a_files[0]),
-  1000000,
+  0,
   {13,23},
     3,
   1024
