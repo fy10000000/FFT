@@ -565,7 +565,7 @@ TestCase M31_L1_04_Test = {
   "2026-03-31/L1_04/",
    M31_L1_04_files,
   sizeof(M31_L1_04_files) / sizeof(M31_L1_04_files[0]),
-  0,
+  5400,
   {0,0},
     4,
   4096
@@ -591,7 +591,7 @@ TestCase M31_L1_16_Test = {
   "2026-03-31/L1_16/",
    M31_L1_16_files,
   sizeof(M31_L1_16_files) / sizeof(M31_L1_16_files[0]),
-  0,
+  5400,
   {0,0},
     16,
   16384

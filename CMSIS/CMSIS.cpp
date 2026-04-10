@@ -1116,7 +1116,7 @@ void read_L1(char* input, TestCase test_case) {
 //#define SPC 4 // samples per chip was 3
   int spc = test_case.spc;
   int nci = payload_size / (L1C_CODE_LEN * spc);
-  double IF_OFFSET = 0;// 5400;// 5400;// 1e6 + 4100; // March 31 540 April 1st 4100
+  double IF_OFFSET = test_case.IF;// 5400;// 5400;// 1e6 + 4100; // March 31 540 April 1st 4100
   printf("Using %d len FFT and %d SPC and window size %d (with %d NCI avail) IF_OFFSET=%d\n", fft_size, spc, window, nci, (int)IF_OFFSET);
   acq_struct prn2acq[30] = { 0 }; int cnt = 0;
   int num_prns = read_assist(input, prn2acq);
@@ -1176,7 +1176,6 @@ void read_L1(char* input, TestCase test_case) {
       fft_c32(fft_size, fft_sum, false); // IFFT // cheaper method
 
       FILE* fp_out = NULL;
-      if (center == 15 && prn2acq[cnt].prn == 25) {  errno_t er = fopen_s(&fp_out, "C:/Python/nci_sum4.csv", "w"); }
       top2_pks peaks;
       find_top2_peaks_cplx(fft_sum, L1C_CODE_LEN * spc, 10, &peaks, NULL);
       top2_pks peaks2;
@@ -2139,7 +2138,7 @@ int main(int argc,char* argv[])
     return 0;
   }
 
-  if (false) { // read_L1 data .ors with .ast 
+  if (true) { // read_L1 data .ors with .ast 
     TestName day = MARCH31;
     // choices are march31_cases april1_cases april7_cases
     for (int j = 0; j < l1_test_wrappers[day].num_folders; j++) {
