@@ -620,7 +620,7 @@ TestCase A1_L1_04_Test = {
   "2026-04-01/L1_04/",
    A1_L1_04_files,
   sizeof(A1_L1_04_files) / sizeof(A1_L1_04_files[0]),
-  0,
+  5400,
   {0,0},
     4,
   4096
@@ -650,7 +650,7 @@ TestCase A1_L1_16_Test = {
   "2026-04-01/L1_16/",
    A1_L1_16_files,
   sizeof(A1_L1_16_files) / sizeof(A1_L1_16_files[0]),
-  0,
+  5400,
   {0,0},
     16,
   16384

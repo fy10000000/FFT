@@ -1251,7 +1251,7 @@ void read_QP(char* input, TestCase test_case) {
   float min_val = 1e5;
 #define FFT_QP_SIZE 512 * 2 // was 2
   float chipping_rate = 5.115e6; // chips per sec
-  int window = 20; //  window/2 ms either side of center 
+  int window = 40; //  window/2 ms either side of center 
   int spc = test_case.spc; // samples per chip was 3
   int nci = payload_size / (E5_QP_CODE_LEN * spc);
   double IF_OFFSET = test_case.IF;// +5400;// 1e6 + 4100;
@@ -1337,8 +1337,8 @@ void read_QP(char* input, TestCase test_case) {
         last_location = center - 8;
       }
       char constel = (prn2acq[cnt].constel == 1) ? 'G' : 'E';
-      printf("prn,%c%02d, center, %03d,max,%5.1f, p1,%4d,p2,%4d,r1,%4.2f,r2,%4.2f,ang,%4.2f,dop,%6.1f\n", 
-        constel, prn2acq[cnt].prn, center, peaks.val1, peaks.idx1, peaks2.idx1, ratio, ratio2, ang, doppler);
+      printf("prn,%c%02d, center, %03d,m1,%5.1f,m2,%5.1f, p1,%4d,p2,%4d,r1,%4.2f,r2,%4.2f,ang,%4.2f,dop,%6.1f\n", 
+        constel, prn2acq[cnt].prn, center, peaks.val1, peaks.val2, peaks.idx1, peaks2.idx1, ratio, ratio2, ang, doppler);
     } // for center
   }
 
@@ -1763,14 +1763,14 @@ void test_quasi_pilot_330(results_s* results) {
   // Test the quasi pilot generation
   int min_idx = 0; int loc_cnt = 0; int missed = 0;
   float min_val = 1e5;
-#define FFT_QP_SIZE 512 * 2 // was 2
+#define FFT_QP_SIZE 512 * 1 // was 2
   float chipping_rate = 5.115e6; // chips per sec
   // note can do code-phase error stats or BTT detection stats but not both at once!!!! use {-1} for no BTTs
   int locations[50] = { 100, 200, 300, 400, 500, 600, 700, 800, 900, 1000 };// { 20, 40, 60, 80, 100, 120, 140, 160, 180, 200, 220, 240, 260, 280 };
   int found[50] = { 0 };
   int window = 70; //  window/2 ms either side of center 
   int nci = 1100;
-#define SPC 2 // samples per chip was 3
+#define SPC 1 // samples per chip was 3
   int   len = E5_QP_CODE_LEN * SPC * nci; // 4 samples per chip and 100 ms
   int   c_phase = 300;// 1;// 329; // which chip to set the code phase to
   int   prn1 = 14, prn2 = 18;
@@ -1792,6 +1792,7 @@ void test_quasi_pilot_330(results_s* results) {
   int* prn_c2  = (int*)malloc(sizeof(int) * E5_QP_CODE_LEN * SPC);
   int* prn_c3  = (int*)malloc(sizeof(int) * E5_QP_CODE_LEN * SPC);
   c32* replica = (c32*)malloc(sizeof(c32) * E5_QP_CODE_LEN * SPC);
+  //float* nci_sum = (float*)malloc(sizeof(float) * FFT_QP_SIZE);
   memset(prn_c1 , 0, sizeof(int) * E5_QP_CODE_LEN * SPC);
   memset(prn_c2 , 0, sizeof(int) * E5_QP_CODE_LEN * SPC);
   memset(replica, 0, sizeof(c32) * E5_QP_CODE_LEN * SPC);
@@ -1853,7 +1854,8 @@ void test_quasi_pilot_330(results_s* results) {
       fft_c32(FFT_QP_SIZE, &cache[indx * FFT_QP_SIZE], true); // forward FFT
     }
  
-    memset(fft_sum , 0, sizeof(c32) * FFT_QP_SIZE);
+    //memset(nci_sum, 0, sizeof(float) * FFT_QP_SIZE);
+    memset(fft_sum, 0, sizeof(c32) * FFT_QP_SIZE);
     int tmp_idx = 0;
     for (int windex = center - window / 2; windex < center + window / 2; windex +=1) {
       //memset(fft_data, 0, sizeof(c32) * FFT_QP_SIZE);
@@ -1874,7 +1876,13 @@ void test_quasi_pilot_330(results_s* results) {
         } else {
           fft_sum[k] = add(fft_sum[k], mult(fft_data_ins, get_conj(fft_repl[k])));
         }
+        //fft_prod[k] = mult(fft_data_ins, get_conj(fft_repl[k]));
       }
+
+      // parallel track prod and IFFT then square and sum
+      //fft_c32(FFT_QP_SIZE, fft_prod, false);
+      //for (int k = 0; k < FFT_QP_SIZE; k++) { nci_sum[k] += mag(fft_prod[k]); }
+
       tmp_idx = (tmp_idx + 1) % window;
     } // for windex 
 
@@ -1885,6 +1893,9 @@ void test_quasi_pilot_330(results_s* results) {
     if (false) {} //center == 50) {  errno_t er = fopen_s(&fp_out, "C:/Python/nci_sum4.csv", "w"); }
     top2_pks peaks;
     find_top2_peaks_cplx(fft_sum, E5_QP_CODE_LEN * SPC, 4, &peaks, fp_out);
+    top2_pks peaks2 = {0};
+    //find_top2_peaks_real(nci_sum, E5_QP_CODE_LEN * SPC, 4, &peaks2, fp_out);
+
  
     bool isMax = findMax(peaks.val1);
     int best_code = 0; float best_pwr = 0; float best_dop = 0; double phase_deg = 0;
@@ -1894,10 +1905,12 @@ void test_quasi_pilot_330(results_s* results) {
     }
     bool isBT = checkBT(center, locations, num_btts);
     if (peaks.idx1 != c_phase && isBT) { num_errors++; printf("code %d \n", peaks.idx1); }
+    //if (peaks2.idx1 != c_phase && isBT) { num_errors++; printf("code2 %d \n", peaks2.idx1); }
     
     double ang = atan2(fft_sum[peaks.idx1].i, fft_sum[peaks.idx1].r) * 57.2957795;
     
     float ratio = peaks.val1 / peaks.val2;
+    float ratio2 = peaks2.val1 / peaks2.val2;
     // nix if last max was less than 20 points ago 
     if (isMax && fabs(last_location - center + 8) > 20) {
       found[loc_cnt++] = center - 8;
@@ -1908,8 +1921,8 @@ void test_quasi_pilot_330(results_s* results) {
       missed++;
       //printf("padd %d\n", last_location);
     }
-    //printf("center,%03d, max,%6.1f,pos,%d,bestC,%d,bestPwr,%4.2f,ratio,%4.2f,ang,%4.2f,cnt,%d,phase,%f\n", 
-    //  center, peaks.val1, peaks.idx1, best_code, best_pwr, ratio, ang, isMax, phase_deg);
+    //printf("center,%03d, max,%6.1f,p1,%d,p2,%d,bestPwr,%4.2f,ratio,%4.2f,ratio2,%4.2f,ang,%4.2f,cnt,%d,phase,%f\n", 
+    //  center, peaks.val1, peaks.idx1, peaks2.idx1, best_pwr, ratio, ratio2, ang, isMax, phase_deg);
   } // for center
   num_tries++;
   printf("Found %d btt there are %d btt \n", num_btts, num_btts - missed);
@@ -1926,7 +1939,7 @@ void test_quasi_pilot_330(results_s* results) {
   if ((loc_cnt - num_btts) > 0) { results->btt_false_alarms+= (loc_cnt - num_btts); }
   if (missed) { results->btt_missed_detects += missed; }
   
-  free(prn_c3); free(cache);
+  free(prn_c3); free(cache); //free(nci_sum);
   free(out); free(fft_data); free(fft_sum); free(fft_repl); free(fft_prod);// free(fft_prev); //free(mag_sum);
 }
 
@@ -2138,8 +2151,8 @@ int main(int argc,char* argv[])
     return 0;
   }
 
-  if (true) { // read_L1 data .ors with .ast 
-    TestName day = MARCH31;
+  if (false) { // read_L1 data .ors with .ast 
+    TestName day = APRIL1;
     // choices are march31_cases april1_cases april7_cases
     for (int j = 0; j < l1_test_wrappers[day].num_folders; j++) {
       for (int i = 0; i < l1_test_wrappers[day].tests[j].num_files; i++) {
@@ -2153,8 +2166,8 @@ int main(int argc,char* argv[])
     return 0;
   }
 
-  if (true) { // read_QP data .ors with .ast
-    TestName day = MARCH31;
+  if (false) { // read_QP data .ors with .ast
+    TestName day = APRIL7;
     // choices are march31_cases april1_cases april7_cases
     for (int j = 0; j < test_wrappers[day].num_folders; j++) {
       for (int i = 0; i < test_wrappers[day].tests[j].num_files; i++) {
@@ -2229,7 +2242,7 @@ int main(int argc,char* argv[])
       if (results.differences[i] == 0) { continue; }
       printf("Num with diff %d is %d \n", i, results.differences[i]);
     }
-    //test_quasi_pilot2();
+ 
     return 0;
   }
 
