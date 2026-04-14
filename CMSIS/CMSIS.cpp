@@ -1893,7 +1893,7 @@ void test_quasi_pilot_330(results_s* results) {
     if (false) {} //center == 50) {  errno_t er = fopen_s(&fp_out, "C:/Python/nci_sum4.csv", "w"); }
     top2_pks peaks;
     find_top2_peaks_cplx(fft_sum, E5_QP_CODE_LEN * SPC, 4, &peaks, fp_out);
-    top2_pks peaks2 = {0};
+    top2_pks peaks2 = {0,0,1,0};
     //find_top2_peaks_real(nci_sum, E5_QP_CODE_LEN * SPC, 4, &peaks2, fp_out);
 
  
