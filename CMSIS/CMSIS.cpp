@@ -1280,9 +1280,6 @@ void read_QP(char* input, TestCase test_case) {
       if (prn2acq[cnt].prn == test_case.good_svs[i]) { proceed = true; break; }
     }
     if (!proceed) { continue; }
-    //if (prn2acq[cnt].constel == 1 || (prn2acq[cnt].prn != 13 && prn2acq[cnt].prn != 23)) { continue; }
-    //if (prn2acq[cnt].constel == 1 || (prn2acq[cnt].prn != 25 && prn2acq[cnt].prn != 36)) { continue; }
-    //if (prn2acq[cnt].constel == 1 || (prn2acq[cnt].prn != 15 && prn2acq[cnt].prn != 34)) { continue; }
     memset(fft_repl, 0, sizeof(c32) * FFT_QP_SIZE);
     memset(replica, 0, sizeof(c32) * FFT_QP_SIZE);
     
