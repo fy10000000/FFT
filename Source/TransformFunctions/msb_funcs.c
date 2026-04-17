@@ -79,6 +79,7 @@ void bit_writer(buff_str* bs, uint64_t val, int num_bits)
 extern int write_msb(const bb_meas_t* measurements, char* file_path) {
   uint8_t buff[2048];
   memset(buff, 0, sizeof(buff));
+  printf("Writing output %s\n", file_path);
   int num_written = write_bb_msb(measurements, buff, sizeof(buff));
   FILE* fp_out2 = NULL; //output file
   errno_t er2 = fopen_s(&fp_out2, file_path, "wb");
@@ -103,14 +104,20 @@ extern int write_bb_msb(const bb_meas_t* measurements, uint8_t* bin_buff, int bu
   }
   bit_writer(&buff, prn_mask, 32);
   // write per prn data
-  for (int i = 0; i < measurements->num_sat; i++) {
-    if (measurements->sats[i].constellation == SYS_GPS) {
-      int64_t code_phase = (int64_t)round(measurements->sats[i].code_phase / 9.54e-7f);
-      int64_t doppler = (int64_t)round(measurements->sats[i].doppler / 2.0f);
-      int64_t cno = (int64_t)round((round(measurements->sats[i].cno) - 28) / 2.0f);
-      bit_writer(&buff, code_phase, 20);
-      bit_writer(&buff, doppler, 13);
-      bit_writer(&buff, cno, 4);
+  for( int prn = 1; prn <= 32; prn++ )
+  {
+    if ( prn_mask & (0x1LL << (prn - 1)))
+    {
+      for (int i = 0; i < measurements->num_sat; i++) {
+        if (measurements->sats[i].constellation == SYS_GPS && measurements->sats[i].prn == prn) {
+          int64_t code_phase = (int64_t)round(measurements->sats[i].code_phase / 9.54e-7f);
+          int64_t doppler = (int64_t)round(measurements->sats[i].doppler / 2.0f);
+          int64_t cno = (int64_t)round((round(measurements->sats[i].cno) - 28) / 2.0f);
+          bit_writer(&buff, code_phase, 20);
+          bit_writer(&buff, doppler, 13);
+          bit_writer(&buff, cno, 4);
+        }
+      }
     }
   }
   // write Galileo presence
@@ -131,14 +138,20 @@ extern int write_bb_msb(const bb_meas_t* measurements, uint8_t* bin_buff, int bu
     }
     bit_writer(&buff, gal_prn_mask, 50);
     // write per prn data
-    for (int i = 0; i < measurements->num_sat; i++) {
-      if (measurements->sats[i].constellation == SYS_GAL) {
-        int64_t code_phase = (int64_t)round(measurements->sats[i].code_phase / 9.54e-7f);
-        int64_t doppler = (int64_t)round(measurements->sats[i].doppler / 2.0f);
-        int64_t cno = (int64_t)round((round(measurements->sats[i].cno) - 28) / 2.0f);
-        bit_writer(&buff, code_phase, 22);
-        bit_writer(&buff, doppler, 13);
-        bit_writer(&buff, cno, 4);
+    for (int prn = 1; prn <= 50; prn++)
+    {
+      if (gal_prn_mask & (0x1LL << (prn - 1)))
+      {
+        for (int i = 0; i < measurements->num_sat; i++) {
+          if (measurements->sats[i].constellation == SYS_GAL && measurements->sats[i].prn == prn) {
+            int64_t code_phase = (int64_t)round(measurements->sats[i].code_phase / 9.54e-7f);
+            int64_t doppler = (int64_t)round(measurements->sats[i].doppler / 2.0f);
+            int64_t cno = (int64_t)round((round(measurements->sats[i].cno) - 28) / 2.0f);
+            bit_writer(&buff, code_phase, 22);
+            bit_writer(&buff, doppler, 13);
+            bit_writer(&buff, cno, 4);
+          }
+        }
       }
     }
   }

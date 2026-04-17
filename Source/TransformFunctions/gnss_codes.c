@@ -566,7 +566,6 @@ extern void getE5_QPCode(int num, int samplesPerChip, const int prn, int* out) {
   else {
     memcpy(out, e5a_qp_int, num * sizeof(int));
   }
-
   free(e5a_qp_int);
 }
 
@@ -774,8 +773,10 @@ extern void synth_e5a_prn(
   const float code_rate_cps = 10.23e6f;
 
   int8_t code_loc[E5A_CODE_LEN] = { 0 };
-  int ret = load_e5a_primary_codes((char*)"C:/work/Baseband/HEX_E5AI.txt", code_loc, prn);
-  if (ret < 0) { printf("Error loading Galileo codes; check path in synth_e5a_prn()\n"); return; }
+  //int ret = load_e5a_primary_codes((char*)"C:/work/Baseband/HEX_E5AI.txt", code_loc, prn);
+  //if (ret < 0) { printf("Error loading Galileo codes; check path in synth_e5b_prn()\n"); return; }
+  GetE5AICode(prn, 1, code_loc);
+
 
   if (rotate_offset) {
     //rotate_right_i8_cycles(code_loc, E5A_CODE_LEN, rotate_offset); //still a bug in this
@@ -832,6 +833,102 @@ extern void synth_e5a_prn(
     }
 
   }
+}
+
+//   prn              : PRN number
+//   doppler          : carrier Doppler (Hz) per PRN
+//   phi   _rad       : initial carrier phase (rad) at sample 0
+//   code_phase       : initial code phase (chips) in [0,4092)
+//   fs_hz            : sample rate
+//   code_rate_cps    : nominal code chip rate (1.023e6 for E1), set per-PRN Doppler via scaling if desired
+//   N                : number of samples
+//   out              : output buffer of c32 length N
+extern void synth_e5qp_prn(
+  int prn, // one based indexing
+  float doppler,
+  size_t msps,
+  c32* out,
+  int rotate_offset
+) {
+  float phi_rad = 0.0;
+  float code_phase = 0.0;
+  const float fs_hz = msps*1000.0f;// Mspc
+  const float code_rate_cps = 5.115e6f;
+
+  int spc = round(fs_hz / code_rate_cps);
+  int* code_loc = malloc(E5_QP_CODE_LEN*spc * sizeof(int));
+  memset(code_loc, 0, E5_QP_CODE_LEN * spc * sizeof(int));
+  //int ret = load_e5a_primary_codes((char*)"C:/work/Baseband/HEX_E5AI.txt", code_loc, prn);
+  //if (ret < 0) { printf("Error loading Galileo codes; check path in synth_e5b_prn()\n"); return; }
+  getE5_QPCode(E5_QP_CODE_LEN, spc, prn, code_loc);
+//make_replica(prn_code, replica, doppler, E5_QP_CODE_LEN * spc, chipping_rate * SPC);
+//memcpy(fft_repl, replica, sizeof(c32) * E5_QP_CODE_LEN);
+  /*
+  // test code against generated
+  uint8_t code15[15] = { 0,1,1,1,1,0,0,0,1,1,1,1,1,0,1 };
+  uint8_t code11[11] = { 0,1,1,1,0,1,0,0,1,1,1 };
+  uint8_t code10[10] = { 0,1,1,0,1,1,1,0,0,0 };
+  int8_t tempcode[E5_QP_CODE_LEN] = { 0 };
+  for (int tcode = 0; tcode < E5_QP_CODE_LEN; tcode++)
+    tempcode[tcode] = (code15[tcode % 15] ^ code11[tcode % 11] ^ code10[tcode % 10]) ? -1 : 1;
+    */
+
+  if (rotate_offset) {
+    //rotate_right_i8_cycles(code_loc, E5A_CODE_LEN, rotate_offset); //still a bug in this
+    int size = E5_QP_CODE_LEN;
+    int8_t* temp = (int8_t*)malloc(sizeof(int8_t) * size);
+    if (temp == NULL) { printf("rotate_fwd's malloc failed");  return; }
+    for (int i = 0; i < size; i++) {
+      if (i - rotate_offset < 0) { temp[i] = code_loc[size + (i - rotate_offset)]; }
+      else { temp[i] = code_loc[i - rotate_offset]; }
+    }
+    memcpy(code_loc, temp, sizeof(int8_t) * size);
+    free(temp);
+  }
+
+  //FILE* fp_out = NULL; //output file
+  //errno_t er = fopen_s(&fp_out, "C:/Python/prn36.csv", "w");
+  //for (int i = 0; i < E5A_CODE_LEN; i++) {
+  //  fprintf(fp_out, "%d, %d\n",i, -code_loc[i]);
+  //}
+  //fclose(fp_out);
+
+
+  const int L = E5_QP_CODE_LEN;
+  const int* ca = code_loc;
+
+  float dchips = (code_rate_cps) / fs_hz;
+  float dphia = 2.0f * (float)PI * (doppler) / fs_hz; // phase increment per sample
+  float chips = code_phase;
+  float phia = phi_rad;
+  c32 in[E5_QP_CODE_LEN];
+  int8_t no_quant = 1; // 0 for quantization
+  for (size_t n = 0; n < L; ++n) {
+    // PRN a
+    float frac = chips - floorf(chips);
+    int code = code_chip_at(ca, chips, L);
+    float sca = 1.0;// cboc_e1b_weight(frac);
+    float ampa = (float)code * sca; // data assumed +1
+
+    float sa, ca;
+    sincosf_fast(phia, &sa, &ca);
+    c32 xa = { ampa * ca, ampa * sa };
+
+    out[n].r = no_quant ? xa.r : quantize_pm1(xa.r + noise(1.0));
+    out[n].i = no_quant ? xa.i : quantize_pm1(xa.i + noise(1.0));
+
+    // advance
+    chips += dchips;
+    if (chips >= L) { chips -= L; }
+    else if (chips < 0) { chips += L; }
+
+    phia += dphia;
+    if (phia > 1e9f || phia < -1e9f) {
+      phia = fmodf(phia, 2.0f * PI);
+    }
+
+  }
+  free(code_loc);
 }
 
 extern void synth_e5b_prn(
@@ -935,6 +1032,56 @@ void readL5Icode(int prn, int8_t* out) {
   fclose(f);
 }
 
+bool HasGPSL5(int prn)
+{
+  switch (prn)
+  {
+  default:
+    return false;
+  case 1:
+  case 3:
+  case 4:
+  case 6:
+  case 8:
+  case 9:
+  case 10:
+  case 11:
+  case 14:
+  case 18:
+  case 20:
+  case 21:
+  case 23:
+  case 24:
+  case 25:
+  case 26:
+  case 27:
+  case 28:
+  case 30:
+  case 32:
+    return true;
+  }
+
+}
+
+bool HasE5QP(int prn)
+{
+  switch (prn)
+  {
+  default:
+    return false;
+  case 13:
+  case 15:
+  case 23:
+  case 25:
+  case 29:
+  case 33:
+  case 34:
+  case 36:
+    return true;
+  }
+
+}
+
 extern void synth_L5I_prn(
   int prn, // one based indexing
   float doppler,
@@ -1005,18 +1152,26 @@ extern void synth_L5I_prn(
   }
 }
 
-extern void up_sample_N_to_M(c32* in, double N_in, c32* out, double M_out) {
+extern void up_sample_N_to_M(c32* in, int N_in, c32* out, int M_out) {
+  if (M_out == N_in)
+  {
+    memcpy(out, in, sizeof(c32) * M_out);
+    return;
+  }
+
   // wrapper around the function doing this
+  const double Fin = N_in*1000.0;
+  const double Fout = M_out*1000.0;
   const int    NTAPS = 12;      // try 8, 12, or 16
   const double CUTOFF = 0.45;
 
-  iq_resamp_zp_t* rs = iq_resamp_zp_init(N_in, M_out, NTAPS, CUTOFF);
+  iq_resamp_zp_t* rs = iq_resamp_zp_init(Fin, Fout, NTAPS, CUTOFF);
   if (!rs) { fprintf(stderr, "init failed\n"); return; }
 
   size_t Nin = N_in; 
 
 
-  size_t Nout_cap = (size_t)llround(Nin * (M_out / N_in));
+  size_t Nout_cap = (size_t)llround(Fin * (Fout / Fin));
 
   size_t Nout = iq_resamp_process_zero_phase(rs, in, Nin, out, Nout_cap);
 
@@ -1058,6 +1213,26 @@ void GetE1BCode(const int prn,int spc, int8_t Code[])
     {
       // apply the sub-code
       *cp = (j < 2) ? val : -val;
+      cp++;
+    }
+  }
+}
+
+void GetE5AICode(const int prn, int spc, int8_t Code[])
+{
+  int i;
+
+  int8_t* cp = &Code[0];
+  const int8_t* codebits = E5AICodes[prn - 1];
+
+  for (i = 0; i < E5A_CODE_LEN; i++)
+  {
+    int8_t val = ((codebits[i / 8] >> (7 - i % 8)) & 0x01) ? 1 : -1;
+    //int8_t val = (codebits[i / 8] & (0x80 >> (i % 8))) ? 1 : -1;
+    int j = spc;
+    while (j--)
+    {
+      *cp = val;
       cp++;
     }
   }
@@ -1494,6 +1669,7 @@ int find_top2_peaks_real(const float* data, int data_size, int pk_sep, top2_pks*
   float v1 = -1e10f, v2 = -1e10f;
   int idx1 = -1, idx2 = -1;
 
+  /*
   for (int m = 0; m < data_size; m++) {
     float magn = data[m];
     if (fp_out != NULL) { fprintf(fp_out, "%d, %f \n", m, magn); }
@@ -1505,11 +1681,40 @@ int find_top2_peaks_real(const float* data, int data_size, int pk_sep, top2_pks*
       if ((magn != v1) && (abs(m - idx1) > pk_sep)) { v2 = magn;  idx2 = m; } // Update second best if it doesn't collide with best
     }
   }
+  */
+  float min = 1e100;
+  for (int m = 0; m < data_size; m++) {
+    float magn = data[m];
+    //if (fp_out != NULL) { fprintf(fp_out, "%d, %f \n", m, magn); }
+    if (magn >= v1)
+    {
+      v1 = magn;
+      idx1 = m;
+    }
+    if (magn < min) min = magn;
+  }
 
+  float avg = 0;
+  for (int m = pk_sep; m < data_size - pk_sep; m++) {
+    int thisidx = (m + idx1) % data_size;
+    float magn = data[thisidx];
+    avg += magn;
+    if (magn >= v2)
+    {
+      v2 = magn;
+      idx2 = thisidx;
+    }
+  }
+  avg /= (data_size-2*pk_sep);
   peaks->val1 = v1;
   peaks->idx1 = idx1;
   peaks->val2 = v2;
   peaks->idx2 = idx2;
+  //peaks->ratio = v1/v2;
+  peaks->ratio = (v1 - avg) / (v2 - avg);
+  //peaks->ratio = (v1 - min) / (v2 - min);
+  //printf("v1=%f, v2= %f, avg=%f, rat1=%f, rat2=%f ", v1, v2, avg, v1 / v2, peaks->ratio);
+
   return 0; // Success
 }
 
