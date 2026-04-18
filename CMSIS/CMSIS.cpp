@@ -1262,7 +1262,7 @@ void read_QP(char* input, TestCase test_case) {
   
   
   ///////////////////// main prn loop ////////////////////////////////
-
+  c32 ctmp[FFT_QP_SIZE];
   // Compute circular correlation C_k(τ) = FFT^-1{ FFT[signal] · conj(FFT[replica]) }.
   c32* replica  = (c32*)malloc(sizeof(c32) * FFT_QP_SIZE);
   c32* fft_repl = (c32*)malloc(sizeof(c32) * FFT_QP_SIZE);
@@ -1284,21 +1284,37 @@ void read_QP(char* input, TestCase test_case) {
     memset(replica, 0, sizeof(c32) * FFT_QP_SIZE);
     
     getE5_QPCode(E5_QP_CODE_LEN, spc, prn2acq[cnt].prn, prn_code);
-    double doppler = IF_OFFSET + (prn2acq[cnt].doppler) * fac;
+    double doppler = -(IF_OFFSET + (prn2acq[cnt].doppler) * fac);
     make_replica(prn_code, replica, doppler, E5_QP_CODE_LEN * spc, chipping_rate * SPC);
     memcpy(fft_repl, replica, sizeof(c32) * E5_QP_CODE_LEN);
+
+    double upsampSecs = 1.0 / (chipping_rate * (spc * E5_QP_CODE_LEN) / (FFT_QP_SIZE));
+    double dphi = 2.0 * PI * doppler * upsampSecs;
+    if (dphi < 0) dphi += 2.0 * PI;
     
     fft_c32(FFT_QP_SIZE, fft_repl, true);
 
     int found[50] = { 0 };
     int last_location = 0;
+    c32 phase;
     for (int center = window / 2; center <= nci - window / 2 - 2; center++) {
       memset(fft_sum, 0, sizeof(c32) * FFT_QP_SIZE);
       memset(nci_sum, 0, sizeof(float) * FFT_QP_SIZE);
+      int totalSampleCount = 0;
       for (int windex = center - window / 2; windex < center + window / 2; windex += 1) {
         memset(fft_data, 0, sizeof(c32) * FFT_QP_SIZE);
-        memcpy(fft_data, &samples[E5_QP_CODE_LEN * spc * windex], sizeof(c32) * spc * (E5_QP_CODE_LEN));
-        memcpy(&fft_data[E5_QP_CODE_LEN * spc], &samples[E5_QP_CODE_LEN * spc * windex], sizeof(c32) * (FFT_QP_SIZE - spc * E5_QP_CODE_LEN));
+
+        for (int sampi = 0; sampi < FFT_QP_SIZE; sampi++) {
+          double phi = fmod(dphi * totalSampleCount, 2 * PI);
+          phase.r = cos(phi); phase.i = sin(phi);
+          c32 tempsamp1 = mult(samples[E5_QP_CODE_LEN * spc * windex + sampi], phase); 
+          ctmp[sampi] = tempsamp1;
+          totalSampleCount++;
+        }
+        memcpy(fft_data, ctmp, sizeof(c32) * FFT_QP_SIZE);
+
+        //memcpy(fft_data, &samples[E5_QP_CODE_LEN * spc * windex], sizeof(c32) * spc * (E5_QP_CODE_LEN));
+        //memcpy(&fft_data[E5_QP_CODE_LEN * spc], &samples[E5_QP_CODE_LEN * spc * windex], sizeof(c32) * (FFT_QP_SIZE - spc * E5_QP_CODE_LEN));
         fft_c32(FFT_QP_SIZE, fft_data, true); // forward FFT
 
         for (int k = 0; k < FFT_QP_SIZE; k++) { // accumulate pt-wise * with conj of replica
@@ -1335,7 +1351,7 @@ void read_QP(char* input, TestCase test_case) {
       }
       char constel = (prn2acq[cnt].constel == 1) ? 'G' : 'E';
       printf("prn,%c%02d, center, %03d,m1,%5.1f,m2,%5.1f, p1,%4d,p2,%4d,r1,%4.2f,r2,%4.2f,ang,%4.2f,dop,%6.1f\n", 
-        constel, prn2acq[cnt].prn, center, peaks.val1, peaks.val2, peaks.idx1, peaks2.idx1, ratio, ratio2, ang, doppler);
+        constel, prn2acq[cnt].prn, center, peaks.val1, peaks.val2, peaks.idx1, peaks2.idx1, ratio, peaks2.ratio, ang, doppler);
     } // for center
   }
 
@@ -2163,7 +2179,7 @@ int main(int argc,char* argv[])
     return 0;
   }
 
-  if (false) { // read_QP data .ors with .ast
+  if (true) { // read_QP data .ors with .ast
     TestName day = APRIL7;
     // choices are march31_cases april1_cases april7_cases
     for (int j = 0; j < test_wrappers[day].num_folders; j++) {

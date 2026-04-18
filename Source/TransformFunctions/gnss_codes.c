@@ -1494,6 +1494,7 @@ int find_top2_peaks_real(const float* data, int data_size, int pk_sep, top2_pks*
   float v1 = -1e10f, v2 = -1e10f;
   int idx1 = -1, idx2 = -1;
 
+  /*
   for (int m = 0; m < data_size; m++) {
     float magn = data[m];
     if (fp_out != NULL) { fprintf(fp_out, "%d, %f \n", m, magn); }
@@ -1505,11 +1506,40 @@ int find_top2_peaks_real(const float* data, int data_size, int pk_sep, top2_pks*
       if ((magn != v1) && (abs(m - idx1) > pk_sep)) { v2 = magn;  idx2 = m; } // Update second best if it doesn't collide with best
     }
   }
+  */
+  float min = 1e100;
+  for (int m = 0; m < data_size; m++) {
+    float magn = data[m];
+    //if (fp_out != NULL) { fprintf(fp_out, "%d, %f \n", m, magn); }
+    if (magn >= v1)
+    {
+      v1 = magn;
+      idx1 = m;
+    }
+    if (magn < min) min = magn;
+  }
 
+  float avg = 0;
+  for (int m = pk_sep; m < data_size - pk_sep; m++) {
+    int thisidx = (m + idx1) % data_size;
+    float magn = data[thisidx];
+    avg += magn;
+    if (magn >= v2)
+    {
+      v2 = magn;
+      idx2 = thisidx;
+    }
+  }
+  avg /= (data_size - 2 * pk_sep);
   peaks->val1 = v1;
   peaks->idx1 = idx1;
   peaks->val2 = v2;
   peaks->idx2 = idx2;
+  //peaks->ratio = v1/v2;
+  peaks->ratio = (v1 - avg) / (v2 - avg);
+  //peaks->ratio = (v1 - min) / (v2 - min);
+  //printf("v1=%f, v2= %f, avg=%f, rat1=%f, rat2=%f ", v1, v2, avg, v1 / v2, peaks->ratio);
+
   return 0; // Success
 }
 

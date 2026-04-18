@@ -53,6 +53,7 @@ typedef struct {
   float  val1;   /* value of highest peak */
   size_t idx2;   /* index of second-highest peak */
   float  val2;   /* value of second-highest peak */
+  float ratio;   /* (val1 - avg) / (val2 - avg) */
 } top2_pks;
 
 typedef struct {
