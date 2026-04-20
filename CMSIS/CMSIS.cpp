@@ -1273,6 +1273,8 @@ void read_L5E5AE5QP(char* input) {
   for (int prn_loop = 0; prn_loop < cnt; prn_loop++) {
     int prn = prn2acq[prn_loop].prn;
     int gal_proc = (prn2acq[prn_loop].constel == 2) ? 1 : 0;
+    //EDif (gal_proc == 0 || hasQp == false) { continue; }
+    //EDif ( (prn2acq[prn_loop].prn == 15 || prn2acq[prn_loop].prn == 34) == false) { continue; }
     //printf("Processing PRN %d Doppler %f constel %d \n", prn, doppler, prn2acq[prn_loop].constel);
     int msps = SAMP;
     int codeLength = (hasQp) ? E5_QP_CODE_LEN : E5A_CODE_LEN;
