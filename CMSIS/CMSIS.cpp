@@ -1288,7 +1288,7 @@ void read_QP(char* input, TestCase test_case) {
     make_replica(prn_code, replica, doppler, E5_QP_CODE_LEN * spc, chipping_rate * SPC);
     memcpy(fft_repl, replica, sizeof(c32) * E5_QP_CODE_LEN);
 
-    double upsampSecs = 1.0 / (chipping_rate * (spc * E5_QP_CODE_LEN) / (FFT_QP_SIZE));
+    double upsampSecs = 1.0 / (chipping_rate * spc);
     double dphi = 2.0 * PI * doppler * upsampSecs;
     if (dphi < 0) dphi += 2.0 * PI;
     
