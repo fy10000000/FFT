@@ -1251,7 +1251,7 @@ void read_QP(char* input, TestCase test_case) {
   float min_val = 1e5;
 #define FFT_QP_SIZE 512 * 2 // was 2
   float chipping_rate = 5.115e6; // chips per sec
-  int window = 40; //  window/2 ms either side of center 
+  int window = 72; //  window/2 ms either side of center 
   int spc = test_case.spc; // samples per chip was 3
   int nci = payload_size / (E5_QP_CODE_LEN * spc);
   double IF_OFFSET = test_case.IF;// +5400;// 1e6 + 4100;
@@ -1340,8 +1340,9 @@ void read_QP(char* input, TestCase test_case) {
       find_top2_peaks_cplx(fft_sum, E5_QP_CODE_LEN * spc, 10, &peaks, fp_out);
       top2_pks peaks2;
       find_top2_peaks_real(nci_sum, E5_QP_CODE_LEN * spc, 10, &peaks2, fp_out);
+      double cn0 = compute_snr_real(nci_sum, FFT_QP_SIZE, peaks) + 35.0;
       bool isMax = findMax(peaks.val1);
-      double ang = atan2(fft_sum[peaks.idx1].i, fft_sum[peaks.idx1].r) * 57.2957795;
+      //double ang = atan2(fft_sum[peaks.idx1].i, fft_sum[peaks.idx1].r) * 57.2957795;
       float ratio = peaks.val1 / peaks.val2;
       float ratio2 = peaks2.val1 / peaks2.val2;
       // nix if last max was less than 20 points ago 
@@ -1350,8 +1351,8 @@ void read_QP(char* input, TestCase test_case) {
         last_location = center - 8;
       }
       char constel = (prn2acq[cnt].constel == 1) ? 'G' : 'E';
-      printf("prn,%c%02d, center, %03d,m1,%5.1f,m2,%5.1f, p1,%4d,p2,%4d,r1,%4.2f,r2,%4.2f,ang,%4.2f,dop,%6.1f\n", 
-        constel, prn2acq[cnt].prn, center, peaks.val1, peaks.val2, peaks.idx1, peaks2.idx1, ratio, peaks2.ratio, ang, doppler);
+      printf("prn,%c%02d, center, %03d,m1,%5.1f,m2,%5.1f, p1,%4d,p2,%4d,r1,%4.2f,r2,%4.2f,CN0,%4.2f,dop,%6.1f\n", 
+        constel, prn2acq[cnt].prn, center, peaks.val1, peaks.val2, peaks.idx1, peaks2.idx1, ratio, peaks2.ratio, cn0, doppler);
     } // for center
   }
 
