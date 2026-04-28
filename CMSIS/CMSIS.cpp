@@ -1236,7 +1236,7 @@ void read_L5E5AE5QP(char* input) {
     if (c == 'G' && !HasGPSL5(prn2acq[cnt].prn)) continue; // won't be able to get these
     if (c == 'E') hasQp = HasE5QP(prn2acq[cnt].prn);
     if (!hasQp && SAMP < 10230) continue; // won't work
-    //if (!hasQp) continue; // only do QP
+    if (!hasQp) continue; // only do QP
 
     prn2acq[cnt].doppler *= 1176.45 / 1575.42; // adjust to L5
 
@@ -1269,6 +1269,7 @@ void read_L5E5AE5QP(char* input) {
     if (er != 0 || fp_out == NULL) { fprintf(stderr, "Failed to open output file\n"); return; }
   }
 
+  hasQp = true; // force this only if QP forced above line. 1239
   ///////////////////// main prn loop ////////////////////////////////
   for (int prn_loop = 0; prn_loop < cnt; prn_loop++) {
     int prn = prn2acq[prn_loop].prn;
@@ -1291,9 +1292,6 @@ void read_L5E5AE5QP(char* input) {
         ;
       //printf("fftSize = %d\n", corrLength);
     }
-
-
-    
 
     memset(sampl   , 0, sizeof(c32) * sampLength);
     memset(repli   , 0, sizeof(c32) * sampLength);
