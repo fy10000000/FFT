@@ -1820,8 +1820,7 @@ void test_quasi_pilot_330(results_s* results) {
     double phi = fmod(dphi * i, 2 * PI_F64);
     phase.r = cos(phi);
     phase.i = sin(phi);
-    c32 tempsamp1 = mult(out[i], phase);
-    out[i] = tempsamp1;
+    out[i] = mult(out[i], phase);
   }
 
   // Compute circular correlation C_k(τ) = FFT^-1{ FFT[signal] · conj(FFT[replica]) }.
@@ -1855,7 +1854,7 @@ void test_quasi_pilot_330(results_s* results) {
       //cptr = (cptr + 1) % window;
 
       //printf("B %f %f %f %f %f %f %f %f \n", cache[0 * FFT_QP_SIZE].r, cache[1 * FFT_QP_SIZE].r, cache[64 * FFT_QP_SIZE].r, cache[65 * FFT_QP_SIZE].r, cache[66 * FFT_QP_SIZE].r, cache[67 * FFT_QP_SIZE].r, cache[68 * FFT_QP_SIZE].r, cache[69 * FFT_QP_SIZE].r);
-      shiftDown(cache, FFT_QP_SIZE, FFT_QP_SIZE * window);
+      shiftDown(cache, FFT_QP_SIZE, FFT_QP_SIZE * (window - 1));
       //printf("A %f %f %f %f %f %f %f %f \n", cache[0 * FFT_QP_SIZE].r, cache[1 * FFT_QP_SIZE].r, cache[64 * FFT_QP_SIZE].r, cache[65 * FFT_QP_SIZE].r, cache[66 * FFT_QP_SIZE].r, cache[67 * FFT_QP_SIZE].r, cache[68 * FFT_QP_SIZE].r, cache[69 * FFT_QP_SIZE].r);
       memcpy(&cache[indx * FFT_QP_SIZE], &out[E5_QP_CODE_LEN * SPC * indx2], sizeof(c32) * SPC * (E5_QP_CODE_LEN));
       memcpy(&cache[indx * FFT_QP_SIZE + E5_QP_CODE_LEN * SPC], &out[E5_QP_CODE_LEN * SPC * indx2], sizeof(c32) * (FFT_QP_SIZE - SPC * E5_QP_CODE_LEN));
