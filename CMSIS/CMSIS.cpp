@@ -1773,7 +1773,7 @@ void test_quasi_pilot_330(results_s* results) {
   int   prn1 = 14, prn2 = 18;
   float dop1 = 2000, dop2 = -2000;
   float dop_error = 500;// 10; // full 2*250 Hz error in wipeoff
-  float dop_err_rate = 0.6;// 0.6;// 0.6;//Hz per ms
+  float dop_err_rate = 0.0;// 0.6;// 0.6;//Hz per ms
   float pwr = -128.5;// -129.5;// -128.5;// -128.75;// dBm signal power
   float N0 = -174.0 + 2.5;// dBm/Hz thermal noise ktb density + noise figure
   float cn0 = pwr - N0; // dBm/Hz pgae 14 Galileo_OS_SIS_ICD_v2.2
@@ -1798,7 +1798,7 @@ void test_quasi_pilot_330(results_s* results) {
 
   memcpy(prn_c3, prn_c1, sizeof(int) * E5_QP_CODE_LEN * SPC); // unshifted version for later
 
-  make_replica(prn_c3, replica, dop1 + dop_error, E5_QP_CODE_LEN * SPC, chipping_rate * SPC);
+  make_replica(prn_c3, replica, 0.0, E5_QP_CODE_LEN * SPC, chipping_rate * SPC);
   rotate_fwd(prn_c1, E5_QP_CODE_LEN * SPC, c_phase); // now advance code-phase  
   
   int sign2 = 1; // sign applied a posteriori after finding BTT
@@ -1812,6 +1812,17 @@ void test_quasi_pilot_330(results_s* results) {
       PI / 2, 0,&out[E5_QP_CODE_LEN * SPC * i], E5_QP_CODE_LEN * SPC, chipping_rate * SPC, sigma, sign2); // was 2.31 for -128.5 dBm 3.1 for -131.5
   }
   free(prn_c1); free(prn_c2);
+
+  // subtract the Doppler from the samples
+  c32 phase;
+  double dphi = 2.0 * PI_F64 * -dop1 / (chipping_rate * SPC); //  radians per sample
+  for (int i = 0; i < len; i++) {
+    double phi = fmod(dphi * i, 2 * PI_F64);
+    phase.r = cos(phi);
+    phase.i = sin(phi);
+    c32 tempsamp1 = mult(out[i], phase);
+    out[i] = tempsamp1;
+  }
 
   // Compute circular correlation C_k(τ) = FFT^-1{ FFT[signal] · conj(FFT[replica]) }.
   c32* fft_repl = (c32*)malloc(sizeof(c32) * FFT_QP_SIZE);

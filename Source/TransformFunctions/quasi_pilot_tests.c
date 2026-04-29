@@ -80,12 +80,85 @@ static inline int code_chip_at(const int8_t *code, float code_phase_chips, int L
     return code[idx];
 }
 
+// Mix two PRN-modulated complex carriers with independent Dopplers and phases.
+// Persistent NCO state is kept internally and reused on subsequent calls for coherency across calls
+// Thread-safety: not thread-safe due to static state 
+void mix_two_prns_oversampled_per_prn(
+  const int32_t* prn_a, const int32_t* prn_b,
+  double doppler_a_hz, double doppler_b_hz,
+  double phase_a_deg, double phase_b_deg,
+  c32* out_iandq, int size, float samp_rate, float sigma, int sign)
+{
+  if (!out_iandq || !prn_a || !prn_b || size <= 0 || samp_rate <= 0.0f) return;
 
-// Per-PRN Doppler mixer:
+  // Persistent NCO state (cos,sin) for each signal
+  static int initialized = 0;
+  static double ca = 1.0, sa = 0.0; // rot_a = ca + j*sa
+  static double cb = 1.0, sb = 0.0; // rot_b = cb + j*sb
+
+  if (!initialized) {
+    // Zero initial phase on first use
+    ca = (double)cos(phase_a_deg * (double)M_PI / 180.0f);
+    cb = (double)cos(phase_b_deg * (double)M_PI / 180.0f);
+    sa = (double)sin(phase_a_deg * (double)M_PI / 180.0f);;
+    sb = (double)sin(phase_b_deg * (double)M_PI / 180.0f);
+    initialized = 1;
+  }
+
+  // Per-sample rotation increments for each Doppler
+  const double dphi_a = 2.0 * M_PI * (double)doppler_a_hz / (double)samp_rate;
+  const double dphi_b = 2.0 * M_PI * (double)doppler_b_hz / (double)samp_rate;
+
+  const double c_inca = cos(dphi_a);
+  const double s_inca = sin(dphi_a);
+  const double c_incb = cos(dphi_b);
+  const double s_incb = sin(dphi_b);
+
+  // Renormalize occasionally to limit numeric drift
+  const int renorm_interval = 256;
+  int rn = renorm_interval;
+
+  for (int n = 0; n < size; ++n) {
+
+    // PRN-modulated carriers (unit amplitude)
+    const float are = prn_a[n] * (float)ca;
+    const float aim = prn_a[n] * (float)sa;
+    const float bre = prn_b[n] * (float)cb;
+    const float bim = prn_b[n] * (float)sb;
+
+    // Sum the two complex signals
+    int quant = 0;
+    out_iandq[n].r = quant ? quantize_pm13((are + bre + noise(sigma)) * sign) / sigma : (((are + bre) + noise(sigma)) * sign);
+    out_iandq[n].i = quant ? quantize_pm13((aim + bim + noise(sigma)) * sign) / sigma : (((aim + bim) + noise(sigma)) * sign);
+
+    // Advance NCO A: rot_a *= inc_a
+    const double ca_next = ca * c_inca - sa * s_inca;
+    const double sa_next = ca * s_inca + sa * c_inca;
+    ca = ca_next; sa = sa_next;
+
+    // Advance NCO B: rot_b *= inc_b
+    const double cb_next = cb * c_incb - sb * s_incb;
+    const double sb_next = cb * s_incb + sb * c_incb;
+    cb = cb_next; sb = sb_next;
+
+    // Periodic renormalization
+    if (--rn == 0) {
+      const double ra = 1.0 / sqrt(ca * ca + sa * sa);
+      ca *= ra; sa *= ra;
+      const double rb = 1.0 / sqrt(cb * cb + sb * sb);
+      cb *= rb; sb *= rb;
+      rn = renorm_interval;
+    }
+  }
+  // The final (ca,sa) and (cb,sb) are preserved for the next call.
+}
+
+
+// Per-PRN Doppler mixer: (no coherence between calls; pls see mix_two_prns_oversampled_per_prn)
 // - Each PRN has its own Doppler (Hz) and initial carrier phase (deg).
 // - The PRN chip value (+1/-1) scales that PRN's complex phasor.
 // - Outputs NSAMP complex samples.
-extern void mix_two_prns_oversampled_per_prn(const int32_t* prn_a,
+void mix_two_prns_oversampled_per_prn_no_co(const int32_t* prn_a,
   const int32_t* prn_b,
   double doppler_a_hz, double doppler_b_hz,
   double phase_a_deg, double phase_b_deg,
@@ -190,8 +263,16 @@ extern void make_replica(const int32_t* prn_a, c32* out_iandq,float doppler, int
   const double dth_a = 2.0 * M_PI * (double)doppler / (double)samp_freq;
   const double ca_inc = (double)cos(dth_a);
   const double sa_inc = (double)sin(dth_a);
-  double pca = (double)cos(phase_deg * (double)M_PI / 180.0f);
-  double psa = (double)sin(phase_deg * (double)M_PI / 180.0f);
+  // Persistent NCO state (cos,sin) for each signal
+  static int initialized = 0;
+  static double pca = 1.0, psa = 0.0; // rot_a = ca + j*sa
+
+  if (!initialized) {
+    // Zero initial phase on first use
+    pca = (double)cos(phase_deg * (double)M_PI / 180.0f);
+    psa = (double)sin(phase_deg * (double)M_PI / 180.0f);
+    initialized = 1;
+  }
 
   for (int samp = 0; samp < size; ++samp) {
     double a = (double)prn_a[samp];  // +/- 1

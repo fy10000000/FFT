@@ -184,6 +184,13 @@ void mix_two_prns_oversampled_per_prn(const int32_t* prn_a, const int32_t* prn_b
   double phase_a_deg, double phase_b_deg,
   c32* out_iandq, int size, float samp_rate, float sigma, int sign);
 
+// old scheme that did NOT retain coherency across calls
+void mix_two_prns_oversampled_per_prn_noco(const int32_t* prn_a,
+  const int32_t* prn_b,
+  double doppler_a_hz, double doppler_b_hz,
+  double phase_a_deg, double phase_b_deg,
+  c32* out_iandq, int size, float samp_rate, float sigma, int sign);
+
 void make_replica(const int32_t* prn_a, c32* out_iandq, float doppler, int size, float samp_freq);
 void rotate_fwd(int array[], int size, int offset);
 void rotate_fwd_int8(int8_t array[], int size, int offset);
