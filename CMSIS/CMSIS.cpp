@@ -2189,9 +2189,31 @@ int main(int argc,char* argv[])
   }
 
   if (0) {
-    read_E5A((char*)"C:/work/Baseband/TestData/E5/t14/G_2024_10_21_22_29_43.047.csv");
-    //read_E5A((char*)"C:/work/Baseband/TestData/E5/t14/G_2024_10_21_22_32_30.500_resampled_16368Hz.csv");
-    //read_E5A((char*)"C:/work/Baseband/TestData/E5/t14/G_2024_10_21_22_29_43.047_resampled_16368Hz.csv");
+    char line[256] = { 0 };
+    char path[256] = { 0 };
+    // choices are march31_cases april1_cases april7_cases
+    TestName day = APRIL7;
+    for (int j = 0; j < test_wrappers[day].num_folders; j++) {
+      for (int i = 0; i < test_wrappers[day].tests[j].num_files; i++) {
+        char buff[256] = "C:/work/Baseband/Utilities/"; // path to folder containing folders containing the .ors and .ast files
+        strcat_s(buff, test_wrappers[day].tests[j].name);
+        std::string work_dir(buff);
+        // change dir into folder remove old file and make new file with list of .smp files to read
+        std::string call = "cd /d " + work_dir + " && del csvFiles.txt && dir /b *.smp >> csvFiles.txt";
+        system(call.c_str());
+        std::string files = work_dir + "/csvFiles.txt";
+        FILE* fp_in = NULL; //output file
+        errno_t er = fopen_s(&fp_in, files.c_str(), "r");
+        while (fgets(line, sizeof(line), fp_in)) {
+          *strchr(line, '\n') = 0;
+          sprintf_s(path, 256, "%s/%s", work_dir.c_str(), line);
+          printf("Processing %s\n", path);
+          read_E5A(path);
+        }
+        if (fp_in != NULL) { fclose(fp_in); }
+      }
+      printf("==========================================================\n");
+    }
     return 0;
   }
 
