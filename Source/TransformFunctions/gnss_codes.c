@@ -547,7 +547,11 @@ int load_e1c_primary_codes(char* path, int prn_out, int8_t out[E1C_CODE_LEN]) {
 
 extern void getE5_QPCode(int num, int samplesPerChip, const int prn, int* out) {
   int8_t e5a_qp[E5_QP_CODE_LEN];
+#if IS_ERIC
   load_e5_qp_codes((char*)"C:/work/Baseband/HEX_E5aQP.txt", e5a_qp, prn);
+#else
+  load_e5_qp_codes((char*)"C:/work/support/esa/qp/HEX_E5aQP.txt", e5a_qp, prn);
+#endif  
 
   int* e5a_qp_int = (int*)malloc(num * sizeof(int));
   int i, j, k;
@@ -1006,7 +1010,11 @@ extern void synth_e5b_prn(
 
 void readL5Icode(int prn, int8_t* out) {
   FILE* f = NULL;
+#if IS_ERIC
   errno_t er = fopen_s(&f, "C:/work/Baseband/codes_L5I.csv", "r");
+#else
+  errno_t er = fopen_s(&f, "C:/work/support/esa/fft/FFT-master/codes_L5I.csv", "r");
+#endif  
   if (er != 0 || f == NULL) {
     printf("Error opening L5I code file\n");
     return;
@@ -1069,10 +1077,13 @@ bool HasE5QP(int prn)
   {
   default:
     return false;
+  case 5:
   case 13:
   case 15:
+  case 21:
   case 23:
   case 25:
+  case 27:
   case 29:
   case 33:
   case 34:

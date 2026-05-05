@@ -1234,9 +1234,9 @@ void read_L5E5AE5QP(char* input) {
       continue;
     sscanf_s(line + 1, "%d %lf", &prn2acq[cnt].prn, &prn2acq[cnt].doppler);
     if (c == 'G' && !HasGPSL5(prn2acq[cnt].prn)) continue; // won't be able to get these
-    if (c == 'E') hasQp = HasE5QP(prn2acq[cnt].prn);
+    hasQp = (c == 'E') && HasE5QP(prn2acq[cnt].prn);
     if (!hasQp && SAMP < 10230) continue; // won't work
-    if (!hasQp) continue; // only do QP
+    //if (!hasQp) continue; // only do QP
 
     prn2acq[cnt].doppler *= 1176.45 / 1575.42; // adjust to L5
 
@@ -1269,14 +1269,15 @@ void read_L5E5AE5QP(char* input) {
     if (er != 0 || fp_out == NULL) { fprintf(stderr, "Failed to open output file\n"); return; }
   }
 
-  hasQp = true; // force this only if QP forced above line. 1239
   ///////////////////// main prn loop ////////////////////////////////
   for (int prn_loop = 0; prn_loop < cnt; prn_loop++) {
     int prn = prn2acq[prn_loop].prn;
     int gal_proc = (prn2acq[prn_loop].constel == 2) ? 1 : 0;
+    hasQp = gal_proc && HasE5QP(prn);
     //EDif (gal_proc == 0 || hasQp == false) { continue; }
     //EDif ( (prn2acq[prn_loop].prn == 15 || prn2acq[prn_loop].prn == 34) == false) { continue; }
     //printf("Processing PRN %d Doppler %f constel %d \n", prn, doppler, prn2acq[prn_loop].constel);
+    printf("Processing %c%02d%c around %.1lf Hz\n", gal_proc ? 'E' : 'G', prn, gal_proc ? (hasQp ? 'q' : 'a') : ' ', prn2acq[prn_loop].doppler);
     int msps = SAMP;
     int codeLength = (hasQp) ? E5_QP_CODE_LEN : E5A_CODE_LEN;
     int codeRate = (hasQp) ? 5115 : 10230;
@@ -1293,6 +1294,20 @@ void read_L5E5AE5QP(char* input) {
       //printf("fftSize = %d\n", corrLength);
     }
 
+    int LEN = sampLength;
+    int msSkip = 0; // skip this many ms worth of samples
+    int msUse = 20; // use this many ms of samples
+    int tc = 1; // number of code periods to use for coherent integration (same as number of ms for L5/E5a)
+
+    int dopplerStep = 500 / tc;
+    if (hasQp)
+    {
+      tc = 2 * 31 / 2; // n*31/2 for n ms
+      dopplerStep = 500 / (tc * 2.0/ 31);
+    }
+    //dopplerStep = 200;
+    
+
     memset(sampl   , 0, sizeof(c32) * sampLength);
     memset(repli   , 0, sizeof(c32) * sampLength);
     memset(up_samp, 0, sizeof(c32)* corrLength);
@@ -1301,16 +1316,16 @@ void read_L5E5AE5QP(char* input) {
     memset(sum_prod, 0, sizeof(c32) * corrLength);
     
     int dopplerOffset;
-    const int dopplerUncertainty = 200;
+    int dopplerUncertainty = 3 * dopplerStep;
     double ratio = 0.0;
     double bestRatio = 0.0;
-    for (dopplerOffset = -dopplerUncertainty; dopplerOffset <= dopplerUncertainty; dopplerOffset += 100)
+    for (dopplerOffset = -dopplerUncertainty; dopplerOffset <= dopplerUncertainty; dopplerOffset += dopplerStep)
     {
-      double doppler = -1 * (prn2acq[prn_loop].doppler + 1e6 + 4100 + dopplerOffset);
-      //double doppler = -1 * (prn2acq[prn_loop].doppler + 4100 + dopplerOffset);
+      //double doppler = -1 * (prn2acq[prn_loop].doppler + 1e6 + 4100 + dopplerOffset);
+      double doppler = -1 * (prn2acq[prn_loop].doppler + 4100 + dopplerOffset);
 
       int codeoff=0;
-      for (codeoff = 0; codeoff < sampLength; codeoff += sampLength/3) // try different code offsets
+      for (codeoff = 0; codeoff < sampLength; codeoff += sampLength/2) // try different code offsets
       {
         if (gal_proc) {
           if (hasQp)
@@ -1323,7 +1338,7 @@ void read_L5E5AE5QP(char* input) {
             int* prn_code = (int*)malloc(E5_QP_CODE_LEN * spc * sizeof(int));
             getE5_QPCode(E5_QP_CODE_LEN, spc, prn, prn_code);
             memset(repli, 0, sizeof(c32)* sampLength);
-            for (int sampi = 0; sampi < E5_QP_CODE_LEN; sampi++)
+            for (int sampi = 0; sampi < sampLength; sampi++)
               repli[sampi].r = prn_code[sampi];
             free(prn_code);
 
@@ -1349,15 +1364,9 @@ void read_L5E5AE5QP(char* input) {
         char* context = nullptr;
         // read in the csv data
         //char line[256];
-        int LEN = sampLength;
-        int msSkip = 0; // skip this many ms worth of samples
-        int msUse = 20; // use this many ms of samples
-        int tc = 1; // number of code periods to use for coherent integration (same as number of ms for L5/E5a)
         int NCI = msUse / tc;
-
         if (hasQp)
         {
-          tc = 2 * 31 / 2; // n*31/2 for n ms
           NCI = msUse / (tc * 2.0 / 31);
         }
 
@@ -1494,6 +1503,7 @@ void read_L5E5AE5QP(char* input) {
   strcpy_s(filename, pc);
   *strrchr(filename, '.') = 0;
   strcat_s(filename, ".msb");
+  printf("Writing %s\n", filename);
   int num_bytes = write_msb(&meas, (char*)filename);
   bb_meas_t check = { 0 };
   FILE* test = NULL;
@@ -2607,11 +2617,12 @@ int main(int argc,char* argv[])
     //const char* folder = "C:/work/support/eric/E5/t14";
     //const char* folder = "C:/work/support/esa/qp/data/t11/2026-04-01/L5-1_16";
     //const char* folder = "C:/work/support/esa/qp/data/t11/2026-04-01/L5-1_10";
-    const char* folder = "C:/work/baseband/utilities/2026-04-07/L5-1_10";
+    //const char* folder = "C:/work/baseband/utilities/2026-04-07/L5-1_10";
     //const char* folder = "C:/work/support/esa/qp/data/t12/2026-04-07/L5-5_05_42";
     //const char* folder = "C:/work/support/esa/qp/data/t12/2026-04-07/L5_05_42";
     //const char* folder = "C:/work/support/esa/qp/data/t12/2026-04-07/L5_05_87";
     //const char* folder = "C:/work/support/esa/qp/data/t12/2026-04-07/L5-1_05_87";
+    const char* folder = ".";
     sprintf_s(path, 256, "%s/csvFiles.txt", folder);
     FILE* fp_in = NULL; //output file
     errno_t er = fopen_s(&fp_in, path, "r");

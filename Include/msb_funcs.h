@@ -37,7 +37,7 @@ typedef struct {
   uint64_t time;          /* time (s) expressed by standard time_t */
   double sec;             /* fraction of second under 1 s */
   int num_sat;            /* number of satellites collected */
-  bb_meas_sat_t sats[20]; /* satellite measurements */
+  bb_meas_sat_t sats[32]; /* satellite measurements */
 } bb_meas_t;
 
 #ifdef __cplusplus
