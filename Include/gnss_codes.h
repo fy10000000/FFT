@@ -189,6 +189,8 @@ void up_sample_N_to_M(c32* in, int N_in, c32* out, int M_out);
 
 void up_sample_10k_to_16k(c32* in, c32* out);
 
+void upsample_linear_c32(const c32* in, size_t N_in, c32* out, size_t M_out, int periodic);
+
 void getGalCode(int prn, int* out, int size);
 
 void synth_gps_prn(int prn, float doppler, size_t size, c32* replica, int spc, int c_phase);

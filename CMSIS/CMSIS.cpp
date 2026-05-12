@@ -1196,7 +1196,7 @@ void read_L5E5AE5QP(char* input) {
   rewind(fp_1bitcsv);
   FILE* fp_out = NULL; //output file
 
-#define SPC 1
+#define SPC 2
 #define FFT_SIZE 16384 
 #define SAMP 10230 // for 1 ms at 10.23 MHz
 //#define SAMP 5115 // for 1 ms at 10.23 MHz
@@ -1236,7 +1236,7 @@ void read_L5E5AE5QP(char* input) {
     if (c == 'G' && !HasGPSL5(prn2acq[cnt].prn)) continue; // won't be able to get these
     hasQp = (c == 'E') && HasE5QP(prn2acq[cnt].prn);
     if (!hasQp && SAMP < 10230) continue; // won't work
-    //if (!hasQp) continue; // only do QP
+    if (!hasQp) continue; // only do QP
 
     prn2acq[cnt].doppler *= 1176.45 / 1575.42; // adjust to L5
 
@@ -1319,13 +1319,16 @@ void read_L5E5AE5QP(char* input) {
     int dopplerUncertainty = 3 * dopplerStep;
     double ratio = 0.0;
     double bestRatio = 0.0;
+    int bestCodeOffset = 0.0;
+    int bestDoppOffset = 0.0;
+    int codeoff = 0;
+    double div = 1;
     for (dopplerOffset = -dopplerUncertainty; dopplerOffset <= dopplerUncertainty; dopplerOffset += dopplerStep)
     {
       //double doppler = -1 * (prn2acq[prn_loop].doppler + 1e6 + 4100 + dopplerOffset);
-      double doppler = -1 * (prn2acq[prn_loop].doppler + 4100 + dopplerOffset);
+      double doppler = -1 * (prn2acq[prn_loop].doppler + /*4100 +*/ dopplerOffset);
 
-      int codeoff=0;
-      for (codeoff = 0; codeoff < sampLength; codeoff += sampLength/2) // try different code offsets
+      for (codeoff = bestCodeOffset - (sampLength/div); codeoff <= (sampLength/div); codeoff += (sampLength/(2*div))) // try different code offsets
       {
         if (gal_proc) {
           if (hasQp)
@@ -1356,7 +1359,10 @@ void read_L5E5AE5QP(char* input) {
         {
           //up_sample_10k_to_16k(repli, up_repli);
           //memcpy(repli, up_repli, sizeof(c32)* SAMP);
-          up_sample_N_to_M(repli, sampLength, up_repli, corrLength);
+          memset(up_repli, 0, sizeof(c32) * corrLength);
+          //memcpy(up_repli, repli, sampLength);
+          //up_sample_N_to_M(repli, sampLength, up_repli, corrLength);
+          upsample_linear_c32(repli, sampLength, up_repli, corrLength, 0);
 
           fft_c32(corrLength, up_repli, true); // forward FFT 
         }
@@ -1369,6 +1375,7 @@ void read_L5E5AE5QP(char* input) {
         {
           NCI = msUse / (tc * 2.0 / 31);
         }
+        //NCI = 1;//fixme
 
         if (msSkip > 0)
         {
@@ -1412,9 +1419,12 @@ void read_L5E5AE5QP(char* input) {
               }
             }
             // upsample
-            c32* temp_up_samp = (c32*)malloc(maxCorrLength * sizeof(c32));
-            //memset(temp_up_samp, 0, sizeof(c32) * corrLength);
-            up_sample_N_to_M(sampl, sampLength, temp_up_samp, corrLength);
+            //c32* temp_up_samp = (c32*)malloc(maxCorrLength * sizeof(c32));
+            memset(up_samp, 0, sizeof(c32) * corrLength);
+            //memcpy(up_samp, sampl, sampLength);
+            //up_sample_N_to_M(sampl, sampLength, up_samp, corrLength);
+            upsample_linear_c32(sampl, sampLength, up_samp, corrLength, 0);
+
             // wipe Doppler
             for (int sampi = 0; sampi < corrLength; sampi++)
             {
@@ -1422,12 +1432,12 @@ void read_L5E5AE5QP(char* input) {
               double phi = fmod(dphi * totalSampleCount,2*PI_F64);
               phase.r = cos(phi);
               phase.i = sin(phi);
-              c32 tempsamp1 = mult(temp_up_samp[sampi], phase);
+              c32 tempsamp1 = mult(up_samp[sampi], phase);
               c32 tempsamp2 = add(up_samp[sampi], tempsamp1);
               up_samp[sampi] = tempsamp2;
               totalSampleCount++;
             }
-            free(temp_up_samp);
+            //free(temp_up_samp);
           }
           if (USE_FFT)
           {
@@ -1440,7 +1450,7 @@ void read_L5E5AE5QP(char* input) {
           }
           else
           {
-            TimeDomainCorrelate(sampLength, sampl, repli, nci_sum);
+            //TimeDomainCorrelate(sampLength, sampl, repli, nci_sum);
           }
           if (0)
           {
@@ -1470,7 +1480,8 @@ void read_L5E5AE5QP(char* input) {
           interp -= sampLength;
 
         ratio = peaks.ratio;
-        printf("Avail PRN %c%02d doppler %6.0f ratio %5.2f loc %5d interp %10.4f CN0 %5.2f %5d %5d %c\n", (gal_proc == 1) ? 'E' : 'G', prn2acq[prn_loop].prn, prn2acq[prn_loop].doppler + dopplerOffset, ratio, (int)peaks.idx1, interp, cn0, dopplerOffset, codeoff, (ratio > bestRatio) ? '*' : ' ');
+        //printf("Avail PRN %c%02d doppler %6.0f ratio %5.2f loc %5d interp %10.4f CN0 %5.2f %5d %5d %c\n", 
+        // (gal_proc == 1) ? 'E' : 'G', prn2acq[prn_loop].prn, prn2acq[prn_loop].doppler + dopplerOffset, ratio, (int)peaks.idx1, interp, cn0, dopplerOffset, codeoff, (ratio > bestRatio) ? '*' : ' ');
 
         if (ratio > bestRatio) {
           meas.sats[meas.num_sat].prn = prn2acq[prn_loop].prn;
@@ -1478,7 +1489,8 @@ void read_L5E5AE5QP(char* input) {
           meas.sats[meas.num_sat].doppler = -(prn2acq[prn_loop].doppler + dopplerOffset);
           meas.sats[meas.num_sat].cno = (float)cn0;
           meas.sats[meas.num_sat].constellation = gal_proc ? SYS_GAL : SYS_GPS;
-
+          bestDoppOffset = dopplerOffset;
+          bestCodeOffset = codeoff;
           if (fp_out != NULL)
           {
             fprintf(fp_out, "PRN %c%02d, doppler %6.0f, ratio %5.2f, loc %5d, interp %10.4f, CN0 %5.2f, %5d, %5d\n", (gal_proc == 1) ? 'E' : 'G', prn2acq[prn_loop].prn, prn2acq[prn_loop].doppler + dopplerOffset, ratio, (int)peaks.idx1, interp, cn0, dopplerOffset, codeoff);
@@ -1489,13 +1501,17 @@ void read_L5E5AE5QP(char* input) {
           bestRatio = ratio;
           //printf("Acquired %s %d Doppler %f Hz CodePhase %f [ms] C/N0 %f dB-Hz ratio=%f\n", (gal_proc == 1) ? "GAL" : "GPS",
           //  prn2acq[prn_loop].prn, -prn2acq[prn_loop].doppler, meas.sats[meas.num_sat].code_phase, meas.sats[meas.num_sat].cno, ratio * ratio);
-        }
+        } 
         rewind(fp_1bitcsv);
-      }
+      } // for codeoff
+      //div *= 2;
       rewind(fp_1bitcsv);
-    }
-    if (bestRatio > 1.29)
+    } // for doppler
+    printf("Avail PRN %c%02d doppler %6.0f ratio %5.2f loc %5d CN0 %5.2f  %5d %5d \n", (gal_proc == 1) ? 'E' : 'G', 
+      meas.sats[meas.num_sat].prn, meas.sats[meas.num_sat].doppler, bestRatio,(int) (meas.sats[meas.num_sat].code_phase *msps), meas.sats[meas.num_sat].cno, bestDoppOffset, bestCodeOffset);
+    if (bestRatio > 1.29) {
       meas.num_sat++;
+    }
   } // end for prn_loop
   if (fp_out != NULL) fclose(fp_out);
 
@@ -2617,12 +2633,13 @@ int main(int argc,char* argv[])
     //const char* folder = "C:/work/support/eric/E5/t14";
     //const char* folder = "C:/work/support/esa/qp/data/t11/2026-04-01/L5-1_16";
     //const char* folder = "C:/work/support/esa/qp/data/t11/2026-04-01/L5-1_10";
-    //const char* folder = "C:/work/baseband/utilities/2026-04-07/L5-1_10";
+    //const char* folder = "C:/work/baseband/utilities/2026-04-07/L5-1_10"; //old
+    const char* folder = "C:/work/Baseband/Utilities/2026-04-20/L5_10_87";  
     //const char* folder = "C:/work/support/esa/qp/data/t12/2026-04-07/L5-5_05_42";
     //const char* folder = "C:/work/support/esa/qp/data/t12/2026-04-07/L5_05_42";
     //const char* folder = "C:/work/support/esa/qp/data/t12/2026-04-07/L5_05_87";
     //const char* folder = "C:/work/support/esa/qp/data/t12/2026-04-07/L5-1_05_87";
-    const char* folder = ".";
+    //const char* folder = ".";
     sprintf_s(path, 256, "%s/csvFiles.txt", folder);
     FILE* fp_in = NULL; //output file
     errno_t er = fopen_s(&fp_in, path, "r");
@@ -2634,6 +2651,7 @@ int main(int argc,char* argv[])
       read_L5E5AE5QP(path);
     }
     if (fp_in != NULL) { fclose(fp_in); }
+
     //read_ors((char*)"C:/work/Baseband/TestData/100ms/bw25/G_2025_09_03_23_05_33.ors");
     //read_ors((char*)"C:/work/Baseband/TestData/100ms/bw25/G_2025_09_03_23_04_56.ors");
     //read_ors((char*)"C:/work/Baseband/TestData/100ms/bw25/G_2025_09_03_23_04_45.ors");

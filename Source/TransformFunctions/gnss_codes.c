@@ -1209,6 +1209,59 @@ void up_sample_10k_to_16k(c32* in , c32* out) {
   iq_resamp_zp_free(rs);
 }
 
+static inline c32 c32_lerp(c32 a, c32 b, float t) {
+  c32 y;
+  y.r = a.r + (b.r - a.r) * t;
+  y.i = a.i + (b.i - a.i) * t;
+  return y;
+}
+
+
+/*
+  Upsample in[0..M-1] to out[0..N-1] by linear interpolation.
+  - If periodic == 0: interpolate between in[0] … in[M-1]; endpoints map exactly:
+        k = 0   -> in[0]
+        k = N-1 -> in[M-1]
+  - If periodic != 0: treat the sequence as circular; interpolate over a ring so
+    out[N-1] approaches in[0] smoothly (good for FFT of periodic frames).
+
+  Requirements: N >= 1, M >= 1, out != NULL.
+*/
+void upsample_linear_c32(const c32* in, size_t N_in, c32* out, size_t M_out, int periodic)
+{
+  if (!in || !out || N_in == 0 || M_out == 0) return;
+
+  if (N_in == 1) {  // only one input sample: replicate
+    for (size_t k = 0; k < M_out; ++k) out[k] = in[0];
+    return;
+  }
+
+  if (!periodic) {
+    if (M_out == 1) { out[0] = in[0]; return; }
+    // Map k in [0, N-1] to t in [0, M-1]
+    const float scale = (float)(N_in - 1) / (float)(M_out - 1);
+    for (size_t k = 0; k < M_out; ++k) {
+      float t = k * scale;
+      size_t i = (size_t)t;              // floor
+      if (i >= N_in - 1) { out[k] = in[N_in - 1]; continue; }
+      float frac = t - (float)i;
+      out[k] = c32_lerp(in[i], in[i + 1], frac);
+    }
+  }
+  else {
+    // Circular interpolation over [0, M), wrapping M -> 0
+    // Map k in [0, N-1] to t in [0, M)
+    const float scale = (float)N_in / (float)M_out;
+    for (size_t k = 0; k < M_out; ++k) {
+      float t = k * scale;               // 0 <= t < M
+      size_t i = (size_t)t;              // 0 .. M-1
+      float frac = t - (float)i;
+      size_t j = (i + 1 < N_in) ? (i + 1) : 0;
+      out[k] = c32_lerp(in[i], in[j], frac);
+    }
+  }
+}
+
 void GetE1BCode(const int prn,int spc, int8_t Code[])
 {
   int i;
