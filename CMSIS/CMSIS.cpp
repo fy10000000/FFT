@@ -1326,7 +1326,7 @@ void read_L5E5AE5QP(char* input) {
     for (dopplerOffset = -dopplerUncertainty; dopplerOffset <= dopplerUncertainty; dopplerOffset += dopplerStep)
     {
       //double doppler = -1 * (prn2acq[prn_loop].doppler + 1e6 + 4100 + dopplerOffset);
-      double doppler = -1 * (prn2acq[prn_loop].doppler + /*4100 +*/ dopplerOffset);
+      double doppler = -1 * (prn2acq[prn_loop].doppler + 4100 + dopplerOffset);
 
       for (codeoff = bestCodeOffset - (sampLength/div); codeoff <= (sampLength/div); codeoff += (sampLength/(2*div))) // try different code offsets
       {
@@ -1375,7 +1375,6 @@ void read_L5E5AE5QP(char* input) {
         {
           NCI = msUse / (tc * 2.0 / 31);
         }
-        //NCI = 1;//fixme
 
         if (msSkip > 0)
         {
@@ -1419,11 +1418,11 @@ void read_L5E5AE5QP(char* input) {
               }
             }
             // upsample
-            //c32* temp_up_samp = (c32*)malloc(maxCorrLength * sizeof(c32));
-            memset(up_samp, 0, sizeof(c32) * corrLength);
+            c32* temp_up_samp = (c32*)malloc(maxCorrLength * sizeof(c32));
+            memset(temp_up_samp, 0, sizeof(c32) * corrLength);
             //memcpy(up_samp, sampl, sampLength);
             //up_sample_N_to_M(sampl, sampLength, up_samp, corrLength);
-            upsample_linear_c32(sampl, sampLength, up_samp, corrLength, false);
+            upsample_linear_c32(sampl, sampLength, temp_up_samp, corrLength, false);
 
             // wipe Doppler
             for (int sampi = 0; sampi < corrLength; sampi++)
@@ -1432,12 +1431,12 @@ void read_L5E5AE5QP(char* input) {
               double phi = fmod(dphi * totalSampleCount,2*PI_F64);
               phase.r = cos(phi);
               phase.i = sin(phi);
-              c32 tempsamp1 = mult(up_samp[sampi], phase);
+              c32 tempsamp1 = mult(temp_up_samp[sampi], phase);
               c32 tempsamp2 = add(up_samp[sampi], tempsamp1);
               up_samp[sampi] = tempsamp2;
               totalSampleCount++;
             }
-            //free(temp_up_samp);
+            free(temp_up_samp);
           }
           if (USE_FFT)
           {
