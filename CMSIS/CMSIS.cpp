@@ -1362,7 +1362,7 @@ void read_L5E5AE5QP(char* input) {
           memset(up_repli, 0, sizeof(c32) * corrLength);
           //memcpy(up_repli, repli, sampLength);
           //up_sample_N_to_M(repli, sampLength, up_repli, corrLength);
-          upsample_linear_c32(repli, sampLength, up_repli, corrLength, 0);
+          upsample_linear_c32(repli, sampLength, up_repli, corrLength, false);
 
           fft_c32(corrLength, up_repli, true); // forward FFT 
         }
@@ -1423,7 +1423,7 @@ void read_L5E5AE5QP(char* input) {
             memset(up_samp, 0, sizeof(c32) * corrLength);
             //memcpy(up_samp, sampl, sampLength);
             //up_sample_N_to_M(sampl, sampLength, up_samp, corrLength);
-            upsample_linear_c32(sampl, sampLength, up_samp, corrLength, 0);
+            upsample_linear_c32(sampl, sampLength, up_samp, corrLength, false);
 
             // wipe Doppler
             for (int sampi = 0; sampi < corrLength; sampi++)

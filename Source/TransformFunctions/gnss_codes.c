@@ -1227,7 +1227,7 @@ static inline c32 c32_lerp(c32 a, c32 b, float t) {
 
   Requirements: N >= 1, M >= 1, out != NULL.
 */
-void upsample_linear_c32(const c32* in, size_t N_in, c32* out, size_t M_out, int periodic)
+void upsample_linear_c32(const c32* in, size_t N_in, c32* out, size_t M_out, bool periodic)
 {
   if (!in || !out || N_in == 0 || M_out == 0) return;
 
@@ -1247,8 +1247,7 @@ void upsample_linear_c32(const c32* in, size_t N_in, c32* out, size_t M_out, int
       float frac = t - (float)i;
       out[k] = c32_lerp(in[i], in[i + 1], frac);
     }
-  }
-  else {
+  } else {
     // Circular interpolation over [0, M), wrapping M -> 0
     // Map k in [0, N-1] to t in [0, M)
     const float scale = (float)N_in / (float)M_out;
