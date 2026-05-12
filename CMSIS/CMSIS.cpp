@@ -1322,13 +1322,13 @@ void read_L5E5AE5QP(char* input) {
     int bestCodeOffset = 0.0;
     int bestDoppOffset = 0.0;
     int codeoff = 0;
-    double div = 1;
+    double div = 4;
     for (dopplerOffset = -dopplerUncertainty; dopplerOffset <= dopplerUncertainty; dopplerOffset += dopplerStep)
     {
       //double doppler = -1 * (prn2acq[prn_loop].doppler + 1e6 + 4100 + dopplerOffset);
       double doppler = -1 * (prn2acq[prn_loop].doppler + 4100 + dopplerOffset);
 
-      for (codeoff = bestCodeOffset - (sampLength/div); codeoff <= (sampLength/div); codeoff += (sampLength/(2*div))) // try different code offsets
+      for (codeoff = 0; codeoff < sampLength; codeoff += (sampLength/(div))) // try different code offsets
       {
         if (gal_proc) {
           if (hasQp)
