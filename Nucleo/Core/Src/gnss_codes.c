@@ -1,0 +1,1918 @@
+
+#include "dsp/gnss_codes.h"
+#include "dsp/up_sample.h"
+//#include "dsp/up_sample.h"
+#include <stdbool.h>
+#include <complex.h>
+//#include "C:/ST/FFT/FFT-Bench/Core/Inc/transform_functions.h"
+#include "dsp/transform_functions.h"
+c32 get_conj(const c32 x) {
+  c32 y;
+  y.r = x.r;
+  y.i = -x.i;
+  return y;
+}
+
+c32 mult(const c32 a, const c32 b) {
+  c32 prod;
+  prod.r = a.r * b.r - a.i * b.i; //(a.r +j a.i) * (b.r +j b.i)
+  prod.i = a.r * b.i + a.i * b.r;
+  return prod;
+}
+
+c32 add(const c32 a, const c32 b) {
+  c32 sum = { a.r + b.r,a.i + b.i };
+  return sum;
+}
+
+float mag(const c32 in) {
+  return sqrtf(in.r * in.r + in.i * in.i);
+}
+
+float pow_c32(const c32 in) {
+  return (in.r * in.r + in.i * in.i);
+}
+
+
+//#include "transform_functions.h"
+//void fft_simple2(int size, complex float* w, bool fwd) {
+//  // interleaved real, imagmalloc(size * sizeof(float);
+//  float* fft_data = (float*)malloc(sizeof(float) * 2 * size);
+//  for (int i = 0; i < size; i++) {
+//    fft_data[2 * i] = crealf(w[i]);
+//    fft_data[2 * i + 1] = cimagf(w[i]);
+//  }
+//  arm_cfft_radix2_instance_f32 s;
+//  arm_cfft_radix2_init_f32(&s, size, fwd ? 0 : 1, 1);
+//  arm_cfft_radix2_f32(&s, fft_data);
+//  for (int i = 0; i < size; i++) {
+//    w[i] = fft_data[2 * i] + I * fft_data[2 * i + 1];
+//  }
+//  free(fft_data);
+//}
+
+
+
+
+//  GPS L5 I-channel spreading code generator.
+//
+//  References:
+//    - IS-GPS-705 (L5), publicly available ICD.
+//    - Chip rate: 10.23 MHz, code length: 10,230 chips (1 ms).
+//    - Two 13-stage LFSRs, G1 and G2, with all-ones initialization.
+//    - Output chip c[n] = g1[n] XOR g2[s1[n]] XOR g2[s2[n]] where s1,s2 are PRN-specific taps.
+//      Here we implement as XOR of two selected G2 tap outputs (Gold-like with phase selectors).
+//    - This implementation returns chips as +1/-1 (bipolar) or 0/1 depending on flag.
+//
+//  Conventions:
+//    - LFSR state bits: bit 0 = stage 1 (rightmost), bit 12 = stage 13 (leftmost).
+//    - At each step, output is the bit of stage 13 (leftmost) OR as per ICD definition; the
+//      XOR tap positions below are defined accordingly so that generated sequence matches ICD.
+//    - Initialization: all stages = 1.
+//
+//  WARNING:
+//    Different sources label stages left-to-right differently. The taps below are defined for
+//    the shift/update implemented here. If you use a different shifting convention, adjust.
+
+
+
+// Choose output mapping: bipolar (+1/-1) or binary (0/1)
+//typedef enum { L5_OUT_BINARY = 0, L5_OUT_BIPOLAR = 1 } l5_out_t;
+
+// LFSR polynomials (tap masks) for 13-stage registers.
+//   We implement right-shift with new bit injected at bit 12 (MSB), output taken from bit 0 (LSB).
+//   Feedback bit = XOR of tapped bits of current state.
+//   Taps chosen to realize: c.f. p 14 IS-GPS-705J.pdf
+//   XA: 1+ x9 + x10 + x12 + x13
+//   XBIi or XBQi: 1 + x + x3 + x4 + x6 + x7 + x8 + x12 + x13
+//     G1: x^13 + x^12 + x^10 + x^9 + 1
+//     G2: x^13 + x^12 + x^8 + x^7 + x^6 + x^4 + x^3 + x^1 + 1
+//
+//   With LSB as stage 1, MSB as stage 13, the feedback mask marks stages that are XORed.
+//   Mask bit i corresponds to stage (i+1).
+static inline uint16_t g1_feedback(uint16_t s) {
+  // taps at stages: 13,12,10,9,1 => bits 12,11,9,8,0
+  unsigned b = ((s >> 12) ^ (s >> 11) ^ (s >> 9) ^ (s >> 8) ^ (s >> 0)) & 1u;
+  return (uint16_t)b;
+}
+static inline uint16_t g2_feedback(uint16_t s) {
+  // taps at stages: 13,12,8,7,6,4,3,1 => bits 12,11,7,6,5,3,2,0
+  unsigned b = ((s >> 12) ^ (s >> 11) ^ (s >> 7) ^ (s >> 6) ^ (s >> 5) ^ (s >> 3) ^ (s >> 2) ^ (s >> 0)) & 1u;
+  return (uint16_t)b;
+}
+
+// One LFSR step: right shift, inject new bit at MSB (bit 12), output old LSB (bit 0)
+static inline unsigned lfsr_step(uint16_t* state, uint16_t (*fb)(uint16_t)) {
+  unsigned out = *state & 1u;                 // output = stage 1 (LSB)
+  unsigned f = fb(*state);
+  *state = (uint16_t)((*state >> 1) | (f << 12));
+  return out;
+}
+
+// PRN-specific G2 tap selector pairs for L5 I-channel.
+//   Each PRN uses XOR of two delayed taps from G2. Values are 1..13 (stage numbers).
+//   Note: Below is an example table for a subset of PRNs. Fill as per ICD annex for full set.
+//   For demonstration, we include PRNs 1..10. Extend to all satellites as needed.
+//
+typedef struct { uint8_t tap1; uint8_t tap2; } L5TapPair;
+
+// Example subset; replace/extend with full ICD mapping for operational use
+static const L5TapPair L5I_TAPS[] = {
+  // index 0 unused to make PRN index 1-based
+  {0,0}, // 1-37
+  {1, 5}, {2, 6}, {3, 7}, {4, 8}, {0, 8}, {1, 9}, {0, 7}, {1, 8}, {2, 9}, {1, 2},
+  {2, 3}, {4, 5}, {5, 6}, {6, 7}, {7, 8}, {8, 9}, {0, 3}, {1, 4}, {2, 5}, {3, 6},
+  {4, 7}, {5, 8}, {0, 2}, {3, 5}, {4, 6}, {5, 7}, {6, 8}, {7, 9}, {0, 5}, {1, 6},
+  {2, 7}, {3, 8}, {4, 9}, {3, 9}, {0, 6}, {1, 7}, {3, 9},
+  // ... fill out to PRN as needed
+};
+
+// Number of PRNs implemented in table (max index)
+#define L5I_MAX_PRN ((int)(sizeof(L5I_TAPS)/sizeof(L5I_TAPS[0])) - 1)
+
+// Extract stage k (1..13) bit from LFSR state with LSB as stage 1
+static inline unsigned stage_bit(uint16_t s, unsigned k) {
+  return (s >> (k - 1u)) & 1u;
+}
+
+// Generate N chips of L5 I-channel code for a given PRN.
+//   - prn: 1..L5I_MAX_PRN (extend table for full constellation)
+//   - out: destination buffer of length N
+//   - start_at_epoch: if true, start from code phase 0 (all ones initial state)
+//   - init_state optional: if start_at_epoch is false and init_state provided, use it to resume.
+//
+//   Returns false if PRN unsupported.
+typedef struct {
+  uint16_t g1; // 13-bit state, LSB=stage1, initialize to 0x1FFF (13 ones)
+  uint16_t g2;
+  uint32_t chip_index; // modulo 10230 if desired
+} L5State;
+
+static void l5_reset(L5State* st) {
+  st->g1 = 0x1FFFu; // 13 ones
+  st->g2 = 0x1FFFu;
+  st->chip_index = 0;
+}
+
+bool l5_generate_I(int prn, int8_t* out, size_t N, bool start_at_epoch, L5State* state_io)
+{
+  if (prn <= 0 || prn > L5I_MAX_PRN) return false;
+
+  L5State st_local;
+  L5State* st = &st_local;
+
+  if (!start_at_epoch && state_io && state_io->g1 && state_io->g2) {
+    *st = *state_io;
+  }
+  else {
+    l5_reset(st);
+  }
+
+  const L5TapPair tp = L5I_TAPS[prn];
+
+  for (size_t i = 0; i < N; ++i) {
+    // Output taps from current states BEFORE stepping
+    unsigned g1_out = stage_bit(st->g1, 13); // Some conventions use stage 13; adjust if needed
+    // For robustness, use the same output definition for both:
+    // Alternatively use LSB as output; then adjust taps accordingly.
+
+    // G2 selector outputs: tap1 XOR tap2 (stage indices 1..13)
+    unsigned g2_t1 = stage_bit(st->g2, tp.tap1);
+    unsigned g2_t2 = stage_bit(st->g2, tp.tap2);
+    unsigned g2_sel = g2_t1 ^ g2_t2;
+
+    unsigned chip = g1_out ^ g2_sel;
+
+    if (1) {
+      out[i] = chip ? -1 : +1; // map 0->+1, 1->-1
+    }
+    else {
+      out[i] = (int8_t)chip;
+    }
+
+    // Advance both LFSRs one chip
+    (void)lfsr_step(&st->g1, g1_feedback);
+    (void)lfsr_step(&st->g2, g2_feedback);
+
+    st->chip_index++;
+    if (st->chip_index == L5_CODE_LEN) {
+      st->chip_index = 0;
+      // Optionally, reinitialize at each ms if desired: l5_reset(st);
+    }
+  }
+
+  if (state_io) {
+    *state_io = *st;
+  }
+  return true;
+}
+
+// Helper to generate one full 1 ms epoch for a PRN (10,230 chips)
+bool l5_generate_I_epoch(int prn, int8_t* out)
+{
+  L5State st; l5_reset(&st);
+  return l5_generate_I(prn, out, L5_CODE_LEN, true, &st);
+}
+
+/* Demo main: generate first 64 chips of PRN 1, print as +1/-1 */
+#ifdef L5_DEMO
+int main(void) {
+  const int PRN = 1;
+  int8_t chips[64];
+
+  //if (!l5_generate_I(PRN, chips, 64, L5_OUT_BIPOLAR, true, NULL)) {
+  if (!l5_generate_I(PRN, chips, 64, true, NULL)) {
+    fprintf(stderr, "Unsupported PRN\n");
+    return 1;
+  }
+  for (int i = 0; i < 64; ++i) {
+    printf("%d%s", (int)chips[i], (i % 32 == 31) ? "\n" : " ");
+  }
+  return 0;
+}
+#endif
+
+///--------------------------------------------------------
+
+/* Convert one hex digit to value 0..15, or -1 on error. */
+static int hex_nibble(int c) {
+  if (c >= '0' && c <= '9') { return c - '0'; }
+  if (c >= 'A' && c <= 'F') { return 10 + (c - 'A'); }
+  if (c >= 'a' && c <= 'f') { return 10 + (c - 'a'); }
+  return -1;
+}
+
+/* Map logic bit to signal chip per Table 11:
+   logic 1 -> signal -1, logic 0 -> signal +1. */
+static inline int8_t logic_to_chip_icd(int bit) {
+  return bit ? (int8_t)-1 : (int8_t)+1;
+}
+
+static inline int boc_sign(int m, float u) {
+  if (m <= 0) return +1; // BPSK
+  int k = (int)floorf(2.0f * m * u); // toggles 2*m times per chip
+  return (k & 1) ? -1 : +1;
+}
+
+static inline float cboc_e1b_weight(float u) {
+  const float w1 = 0.9534625892455923f; // sqrt(10/11)
+  const float w6 = 0.3015113445777636f; // sqrt(1/11)
+  int s11 = boc_sign(1, u);
+  int s61 = boc_sign(6, u);
+  // E1-B uses minus sign for the 6,1 branch
+  return w1 * (float)s11 - w6 * (float)s61;
+}
+
+// -------------------------------
+// Code chip picker: returns +/-1 code value for PRN at fractional chip phase (wrapped).
+// code_phase_chips in [0, L), L=4092
+static inline int code_chip_at(const int* code, float code_phase_chips, int L) {
+  int idx = (int)floorf(code_phase_chips);
+  if (idx >= L) idx -= L;
+  else if (idx < 0) idx += L;
+  return code[idx];
+}
+
+// -------------------------------
+// Code chip picker: returns +/-1 code value for PRN at fractional chip phase (wrapped).
+// code_phase_chips in [0, L), L=4092
+static inline int code_chip_int8(const int8_t* code, float code_phase_chips, int L) {
+  int idx = (int)floorf(code_phase_chips);
+  if (idx >= L) idx -= L;
+  else if (idx < 0) idx += L;
+  return code[idx];
+}
+
+
+/* Convert an in-memory hex stream (any separators are allowed; only [0-9A-Fa-f] are consumed)
+   into E1B_CODE_LEN chips in {+1, -1}, MSB-first within each nibble (Annex C.2).
+   Returns 0 on success, <0 on error (e.g., insufficient hex). */
+static int hexstream_to_e1b_chips(const char* hex_stream, int8_t chips[E1B_CODE_LEN]) {
+  int chip_idx = 0;
+  for (const char* p = hex_stream; *p && chip_idx < E1B_CODE_LEN; ++p) {
+    int v = hex_nibble((unsigned char)*p);
+    if (v < 0) continue; // skip non-hex
+    // MSB-first within nibble: bits 3,2,1,0
+    for (int b = 3; b >= 0 && chip_idx < E1B_CODE_LEN; --b) {
+      int bit = (v >> b) & 1;
+      chips[chip_idx++] = logic_to_chip_icd(bit);
+    }
+  }
+  return (chip_idx == E1B_CODE_LEN) ? 0 : -1;
+}
+
+/* Unpack MSB-first packed bits into +/-1 chips.
+   Input:
+     packed: pointer to packed bits, MSB-first in each byte (bit 7 is first)
+     nbits:  number of valid bits; must be >= 10230
+   Output:
+     code: length 10230, values +1 or -1 (int8_t)
+   Mapping: bit 0 -> +1, bit 1 -> -1 (change if your convention differs)
+*/
+static int hexstream_to_e5a_chips(const char* hex_stream, int8_t chips[E5A_CODE_LEN]) {
+  int chip_idx = 0;
+  for (const char* p = hex_stream; *p && chip_idx < E5A_CODE_LEN; ++p) {
+    int v = hex_nibble((unsigned char)*p);
+    if (v < 0) continue; // skip non-hex
+    // MSB-first within nibble: bits 3,2,1,0
+    for (int b = 3; b >= 0 && chip_idx < E5A_CODE_LEN; --b) {
+      int bit = (v >> b) & 1;
+      chips[chip_idx++] = logic_to_chip_icd(bit);
+    }
+  }
+  return (chip_idx == E5A_CODE_LEN) ? 0 : -1;
+}
+
+static int hexstream_to_e5a_qp_chips( char* hex_stream, int* chips) {
+  int chip_idx = 0;
+  for (const char* p = hex_stream; *p && chip_idx < E5_QP_CODE_LEN; ++p) {
+    int v = hex_nibble((unsigned char)*p);
+    if (v < 0) continue; // skip non-hex
+    // MSB-first within nibble: bits 3,2,1,0
+    for (int b = 3; b >= 0 && chip_idx < E5_QP_CODE_LEN; --b) {
+      int bit = (v >> b) & 1;
+      chips[chip_idx++] = logic_to_chip_icd(bit);
+    }
+  }
+  return (chip_idx == E5_QP_CODE_LEN) ? 0 : -1;
+}
+
+/* Trim leading/trailing whitespace in-place; returns pointer to first nonspace. */
+static char* trim_inplace(char* s) {
+  if (!s) { return s; }
+  while (isspace((unsigned char)*s)) { ++s; }
+  if (*s == 0) { return s; }
+  char* e = s + strlen(s) - 1;
+  while (e >= s && isspace((unsigned char)*e)) { *e-- = '\0'; }
+  return s;
+}
+
+/* Try to parse an integer PRN at the start of line and locate start of hex field.
+   Accepts separators: comma, semicolon, space, tab.
+   On success: *out_prn set 1..E1B_MAX_PRN, returns pointer into the line where hex likely starts.
+   On failure (no PRN at start): returns NULL. */
+static const char* parse_prnnd_hex_start(const char* line, int* out_prn) {
+  const char* p = line;
+  // skip leading spaces
+  while (isspace((unsigned char)*p)) { ++p; }
+  // must start with digit to consider PRN
+  if (!isdigit((unsigned char)*p)) { return NULL; }
+
+  char* endptr = NULL;
+  long prn = strtol(p, &endptr, 10);
+  if (endptr == p || prn < 1 || prn > E1B_MAX_PRN) { return NULL; }
+
+  // skip separators to reach hex
+  const char* q = endptr;
+  while (*q == ',' || *q == ';' || isspace((unsigned char)*q)) { ++q; }
+  *out_prn = (int)prn;
+  return q;
+}
+
+int load_e5_qp_codes(char* path, int out[E5_QP_CODE_LEN], int prn) {
+
+  FILE* f = fopen(path, "r");
+  if (!f) { return -1; }
+  char line[E5_QP_HEX_LEN + 64];
+  int loaded = 0;
+  int next_prn_seq = 1;
+  while (fgets(line, (int)sizeof(line), f)) {
+    char* raw = trim_inplace(line);
+    if (*raw == '\0') continue;           // empty
+    if (*raw == '#')  continue;           // comment
+    // If the line is suspiciously short in hex, skip early
+    // (still allow separators; we’ll count hex later)
+    int hex_chars = 0;
+    for (char* c = raw; *c; ++c) {
+      if (isxdigit((unsigned char)*c)) { ++hex_chars; }
+    }
+    if (hex_chars == 0) {
+      continue;
+    }
+    int prn_line = 0;
+    const char* hex_start = parse_prnnd_hex_start(raw, &prn_line);
+    if (prn_line != prn) {
+      continue;
+    }
+    if (!hex_start) {
+      // No explicit PRN; treat as hex-only line
+      if (next_prn_seq > E5_QP_MAX_PRN) continue; // extra lines ignored
+      prn_line = next_prn_seq++;
+      hex_start = raw;
+    }
+    // Copy only hex digits into a temporary buffer to ensure exactly 83 nibbles are considered.
+    char hexbuf[E5_QP_HEX_LEN + 1];
+    int h = 0;
+    for (const char* p = hex_start; *p && h < E5_QP_HEX_LEN; ++p) {
+      if (isxdigit((unsigned char)*p)) hexbuf[h++] = *p;
+    }
+    hexbuf[h] = '\0';
+    if (h != E5_QP_HEX_LEN) {
+      // Try to keep reading more hex from the remainder of the current line (already done) – not enough.
+      // Some files may wrap the hex across multiple lines; this loader assumes one line per PRN.
+      // You can extend here to accumulate across lines if needed.
+      // Skip malformed line
+      continue;
+    }
+    if (hexstream_to_e5a_qp_chips(hexbuf, out) == 0) {
+      loaded++;
+    }
+  }
+  fclose(f);
+  return loaded;
+}
+
+/* Load E1-B codes from a file.
+   Formats supported:
+     - CSV/TXT: "<PRN><sep><1023-hex>" per line (sep can be ',', ';', space, or tab)
+     - HEX-only: "<1023-hex>" per line, PRNs assigned by line number (1..50)
+   Returns number of PRNs successfully loaded (0..50), or <0 on file open/read error. */
+int load_e1b_primary_codes(char* path, int8_t out[E1B_MAX_PRN + 1][E1B_CODE_LEN]) {
+  FILE* f = fopen(path, "r");
+  if (!f) { return -1; }
+
+  // zero out to mark "not loaded"
+  for (int prn = 0; prn <= E1B_MAX_PRN; ++prn) {
+    for (int i = 0; i < E1B_CODE_LEN; ++i) {
+      out[prn][i] = 0;
+    }
+  }
+
+  char line[16384];
+  int loaded = 0;
+  int next_prn_seq = 1;
+
+  while (fgets(line, (int)sizeof(line), f)) {
+    char* raw = trim_inplace(line);
+    if (*raw == '\0') continue;           // empty
+    if (*raw == '#')  continue;           // comment
+
+    // If the line is suspiciously short in hex, skip early
+    // (still allow separators; we’ll count hex later)
+    int hex_chars = 0;
+    for (char* c = raw; *c; ++c) {
+      if (isxdigit((unsigned char)*c)) { ++hex_chars; }
+    }
+    if (hex_chars == 0) {
+      continue;
+    }
+
+    int prn = 0;
+    const char* hex_start = parse_prnnd_hex_start(raw, &prn);
+
+    if (!hex_start) {
+      // No explicit PRN; treat as hex-only line
+      if (next_prn_seq > E1B_MAX_PRN) continue; // extra lines ignored
+      prn = next_prn_seq++;
+      hex_start = raw;
+    }
+
+    // Copy only hex digits into a temporary buffer to ensure exactly 1023 nibbles are considered.
+    char hexbuf[E1B_HEX_LEN + 1];
+    int h = 0;
+    for (const char* p = hex_start; *p && h < E1B_HEX_LEN; ++p) {
+      if (isxdigit((unsigned char)*p)) hexbuf[h++] = *p;
+    }
+    hexbuf[h] = '\0';
+
+    if (h != E1B_HEX_LEN) {
+      // Try to keep reading more hex from the remainder of the current line (already done) – not enough.
+      // Some files may wrap the hex across multiple lines; this loader assumes one line per PRN.
+      // You can extend here to accumulate across lines if needed.
+      // Skip malformed line
+      continue;
+    }
+
+    if (hexstream_to_e1b_chips(hexbuf, out[prn]) == 0) {
+      loaded++;
+    }
+  }
+
+  fclose(f);
+  return loaded;
+}
+
+int load_e1c_primary_codes(char* path, int prn_out, int8_t out[E1C_CODE_LEN]) {
+  FILE* f = fopen(path, "r");
+  if (!f) { return -1; }
+
+  // zero out to mark "not loaded"
+  for (int i = 0; i < E1C_CODE_LEN; ++i) { out[i] = 0; }
+
+  char line[4096];
+  int loaded = 0;
+  int next_prn_seq = 1;
+
+  while (fgets(line, (int)sizeof(line), f)) {
+    char* raw = trim_inplace(line);
+    if (*raw == '\0') continue;           // empty
+    if (*raw == '#')  continue;           // comment
+
+    // If the line is suspiciously short in hex, skip early
+    // (still allow separators; we’ll count hex later)
+    int hex_chars = 0;
+    for (char* c = raw; *c; ++c) {
+      if (isxdigit((unsigned char)*c)) { ++hex_chars; }
+    }
+    if (hex_chars == 0) {
+      continue;
+    }
+
+    int prn = 0;
+    const char* hex_start = parse_prnnd_hex_start(raw, &prn);
+
+    if (prn != prn_out) {
+      continue;
+    }
+
+    if (!hex_start) {
+      // No explicit PRN; treat as hex-only line
+      if (next_prn_seq > E1B_MAX_PRN) continue; // extra lines ignored
+      prn = next_prn_seq++;
+      hex_start = raw;
+    }
+
+    // Copy only hex digits into a temporary buffer to ensure exactly 1023 nibbles are considered.
+    char hexbuf[E1B_HEX_LEN + 1];
+    int h = 0;
+    for (const char* p = hex_start; *p && h < E1B_HEX_LEN; ++p) {
+      if (isxdigit((unsigned char)*p)) hexbuf[h++] = *p;
+    }
+    hexbuf[h] = '\0';
+
+    if (h != E1C_HEX_LEN) {
+      // Try to keep reading more hex from the remainder of the current line (already done) – not enough.
+      // Some files may wrap the hex across multiple lines; this loader assumes one line per PRN.
+      continue;
+    }
+
+    // ok to us e1b parser as e1c has same length etc
+    if (hexstream_to_e1b_chips(hexbuf, out) == 0) {
+      loaded++;
+    }
+  }
+
+  fclose(f);
+  return loaded;
+}
+
+extern void getE5_QPCode(int num, int samplesPerChip, const int prn, int* out) {
+  int e5a_qp[E5_QP_CODE_LEN];
+#if IS_ERIC
+  load_e5_qp_codes((char*)"C:/work/Baseband/HEX_E5aQP.txt", e5a_qp, prn);
+#else
+  load_e5_qp_codes((char*)"C:/work/support/esa/qp/HEX_E5aQP.txt", e5a_qp, prn);
+#endif
+
+  int* e5a_qp_int = (int*)malloc(num * sizeof(int));
+  int i, j, k;
+
+  for (i = 0; i < num; ++i) {
+    e5a_qp_int[i] = e5a_qp[i % E5_QP_CODE_LEN];
+  }
+
+  if (samplesPerChip > 1) {
+    for (i = 0, k = 0; i < num; ++i) {
+      for (j = 0; j < samplesPerChip; ++j) {
+        out[k++] = e5a_qp_int[i];
+      }
+    }
+  }
+  else {
+    memcpy(out, e5a_qp_int, num * sizeof(int));
+  }
+  free(e5a_qp_int);
+}
+
+/* Load E5-A codes from a file.
+   Formats supported:
+     - CSV/TXT: "<PRN><sep><1023-hex>" per line (sep can be ',', ';', space, or tab)
+     - HEX-only: "<1023-hex>" per line, PRNs assigned by line number (1..50)
+   Returns number of PRNs successfully loaded (0..50), or <0 on file open/read error. */
+int load_e5a_primary_codes(char* path, int8_t out[E5A_CODE_LEN], int target_prn) {
+  FILE* f = fopen(path, "r");
+  if (!f) { return -1; }
+
+  char line[E5A_HEX_LEN + 512];
+  int loaded = 0;
+  int next_prn_seq = 1;
+
+  while (fgets(line, (int)sizeof(line), f)) {
+    char* raw = trim_inplace(line);
+    if (*raw == '\0') continue;           // empty
+    if (*raw == '#')  continue;           // comment
+
+    // If the line is suspiciously short in hex, skip early
+    // (still allow separators; we’ll count hex later)
+    int hex_chars = 0;
+    for (char* c = raw; *c; ++c) {
+      if (isxdigit((unsigned char)*c)) { ++hex_chars; }
+    }
+    if (hex_chars == 0) {
+      continue;
+    }
+
+    int prn = 0;
+    const char* hex_start = parse_prnnd_hex_start(raw, &prn);
+
+    if (prn != target_prn) {
+      continue;
+    }
+
+    if (!hex_start) {
+      // No explicit PRN; treat as hex-only line
+      if (next_prn_seq > E5A_MAX_PRN) continue; // extra lines ignored
+      prn = next_prn_seq++;
+      hex_start = raw;
+    }
+
+    // Copy only hex digits into a temporary buffer to ensure exactly 1023 nibbles are considered.
+    char hexbuf[E5A_HEX_LEN + 1];
+    int h = 0;
+    for (const char* p = hex_start; *p && h < E5A_HEX_LEN; ++p) {
+      if (isxdigit((unsigned char)*p)) hexbuf[h++] = *p;
+    }
+    hexbuf[h] = '\0';
+
+    if (h != E5A_HEX_LEN) {
+      // Try to keep reading more hex from the remainder of the current line (already done) – not enough.
+      // Some files may wrap the hex across multiple lines; this loader assumes one line per PRN.
+      // You can extend here to accumulate across lines if needed.
+      // Skip malformed line
+      continue;
+    }
+
+    if (hexstream_to_e5a_chips(hexbuf, out) == 0) {
+      loaded++;
+    }
+  }
+
+  fclose(f);
+  return loaded;
+}
+
+void sincosf_fast(float phia, float* sine, float* cosine) {
+  *sine = sin(phia);
+  *cosine = cos(phia);
+}
+
+extern void getGalCode(int prn, int* out, int size) {
+  for (int i = 0; i < size; i++) {
+    out[i] = E1B_Code[prn][i];
+  }
+}
+
+static size_t gcd_size_t(size_t a, size_t b) {
+  while (b) {
+    size_t t = a % b;
+    a = b;
+    b = t;
+  }
+  return a;
+}
+
+// Rotate array a[0..len-1] right by N positions (forward).
+void rotate_right_i8_cycles(int8_t* a, size_t len, long long N) {
+  if (!a || len == 0) return;
+
+  long long kll = N % (long long)len;
+  if (kll < 0) kll += (long long)len; // handle negative
+  size_t k = (size_t)kll;
+  if (k == 0) return;
+
+  size_t g = gcd_size_t(len, k);
+  for (size_t start = 0; start < g; ++start) {
+    int8_t tmp = a[start];
+    size_t i = start;
+
+    while (1) {
+      size_t next = i + k;
+      if (next >= len) next -= len;
+      if (next == start) break;
+
+      a[i] = a[next];
+      i = next;
+    }
+    a[i] = tmp;
+  }
+}
+
+extern void synth_e5_qp_prn(int prn, // one based indexing
+  float doppler,
+  size_t N,
+  c32* out,
+  int rotate_offset) {
+  float phi_rad = 0.0;
+  float code_phase = 0.0;
+  const float fs_hz = 5.115e6f; // 10.23e6;// Mspc
+  const float code_rate_cps = 5.115e6f; // p 10 Galileo_OS_SIS_ICD_v2.2.pdf
+  // code length is on page 15 of Galileo_OS_SIS_ICD_v2.2.pdf
+  // The 330 - chip code is repeated 31 times within a 2 ms period without any overlay or secondary code.
+  // Each code has therefore a period of 2 / 31 ms 330 * 31 = 10230 chips
+
+  int code_loc[E5_QP_CODE_LEN] = { 0 };
+  int ret = load_e5_qp_codes((char*)"C:/work/Baseband/HEX_E5aQP.txt", code_loc, prn);
+  if (ret < 0) { printf("Error loading Galileo codes; check path in synth_e5_QP_prn()\n"); return; }
+
+  if (rotate_offset) {
+    //rotate_right_i8_cycles(code_loc, E5_QP_CODE_LEN, rotate_offset); //still a bug in this
+    int size = E5_QP_CODE_LEN;
+    int* temp = (int*)malloc(sizeof(int) * size);
+    if (temp == NULL) { printf("rotate_fwd's malloc failed");  return; }
+    for (int i = 0; i < size; i++) {
+      if (i - rotate_offset < 0) { temp[i] = code_loc[size + (i - rotate_offset)]; }
+      else { temp[i] = code_loc[i - rotate_offset]; }
+    }
+    memcpy(code_loc, temp, sizeof(int) * size);
+    free(temp);
+  }
+
+  //FILE* fp_out = NULL; //output file
+  //errno_t er = fopen_s(&fp_out, "C:/Python/prn36.csv", "w");
+  //for (int i = 0; i < E5_QP_CODE_LEN; i++) {
+  //  fprintf(fp_out, "%d, %d\n",i, -code_loc[i]);
+  //}
+  //fclose(fp_out);
+
+  const int L = E5_QP_CODE_LEN;
+  const int* ca = code_loc;
+  float dchips = (code_rate_cps) / fs_hz;
+  float dphia = 2.0f * (float)PI * (doppler) / fs_hz; // phase increment per sample
+  float chips = code_phase;
+  float phia = phi_rad;
+  //c32 in[E5_QP_CODE_LEN];
+  int8_t no_quant = 1; // 0 for quantization
+  for (size_t n = 0; n < L; ++n) {
+    //float frac = chips - floorf(chips);
+    int code = code_chip_at(ca, chips, L);
+    float sca = 1.0;// cboc_e1b_weight(frac);
+    float ampa = (float)code * sca; // data assumed +1
+
+    float sa, ca;
+    sincosf_fast(phia, &sa, &ca);
+    c32 xa = { ampa * ca, ampa * sa };
+
+    out[n].r = no_quant ? xa.r : quantize_pm1(xa.r + noise(1.0));
+    out[n].i = no_quant ? xa.i : quantize_pm1(xa.i + noise(1.0));
+
+    // advance
+    chips += dchips;
+    if (chips >= L) { chips -= L; }
+    else if (chips < 0) { chips += L; }
+
+    phia += dphia;
+    if (phia > 1e9f || phia < -1e9f) {
+      phia = fmodf(phia, 2.0f * PI);
+    }
+  }
+}
+
+//   prn              : PRN number
+//   doppler          : carrier Doppler (Hz) per PRN
+//   phi   _rad       : initial carrier phase (rad) at sample 0
+//   code_phase       : initial code phase (chips) in [0,4092)
+//   fs_hz            : sample rate
+//   code_rate_cps    : nominal code chip rate (1.023e6 for E1), set per-PRN Doppler via scaling if desired
+//   N                : number of samples
+//   out              : output buffer of c32 length N
+extern void synth_e5a_prn(
+  int prn, // one based indexing
+  float doppler,
+  size_t N,
+  c32* out,
+  int rotate_offset
+  ) {
+  float phi_rad = 0.0;
+  float code_phase = 0.0;
+  const float fs_hz = 10.23e6;// Mspc
+  const float code_rate_cps = 10.23e6f;
+
+  int8_t code_loc[E5A_CODE_LEN] = { 0 };
+  //int ret = load_e5a_primary_codes((char*)"C:/work/Baseband/HEX_E5AI.txt", code_loc, prn);
+  //if (ret < 0) { printf("Error loading Galileo codes; check path in synth_e5b_prn()\n"); return; }
+  GetE5AICode(prn, 1, code_loc);
+
+
+  if (rotate_offset) {
+    //rotate_right_i8_cycles(code_loc, E5A_CODE_LEN, rotate_offset); //still a bug in this
+    int size = E5A_CODE_LEN;
+    int8_t* temp = (int8_t*)malloc(sizeof(int8_t) * size);
+    if (temp == NULL) { printf("rotate_fwd's malloc failed");  return; }
+    for (int i = 0; i < size; i++) {
+      if (i - rotate_offset < 0) { temp[i] = code_loc[size + (i - rotate_offset)]; }
+      else { temp[i] = code_loc[i - rotate_offset]; }
+    }
+    memcpy(code_loc, temp, sizeof(int8_t) * size);
+    free(temp);
+  }
+
+  //FILE* fp_out = NULL; //output file
+  //errno_t er = fopen_s(&fp_out, "C:/Python/prn36.csv", "w");
+  //for (int i = 0; i < E5A_CODE_LEN; i++) {
+  //  fprintf(fp_out, "%d, %d\n",i, -code_loc[i]);
+  //}
+  //fclose(fp_out);
+
+
+  const int L = E5A_CODE_LEN;
+  const int8_t* ca = code_loc;
+
+  float dchips = (code_rate_cps) / fs_hz;
+  float dphia = 2.0f * (float)PI * (doppler) / fs_hz; // phase increment per sample
+  float chips = code_phase;
+  float phia = phi_rad;
+  //c32 in[E5A_CODE_LEN];
+  int8_t no_quant = 1; // 0 for quantization
+  for (size_t n = 0; n < L; ++n) {
+    // PRN a
+    //float frac = chips - floorf(chips);
+    int code = code_chip_int8(ca, chips, L);
+    float sca = 1.0;// cboc_e1b_weight(frac);
+    float ampa = (float)code * sca; // data assumed +1
+
+    float sa, ca;
+    sincosf_fast(phia, &sa, &ca);
+    c32 xa = { ampa * ca, ampa * sa };
+
+    out[n].r = no_quant ? xa.r : quantize_pm1(xa.r + noise(1.0));
+    out[n].i = no_quant ? xa.i : quantize_pm1(xa.i + noise(1.0));
+
+    // advance
+    chips += dchips;
+    if (chips >= L) { chips -= L; }
+    else if (chips < 0) { chips += L; }
+
+    phia += dphia;
+    if (phia > 1e9f || phia < -1e9f) {
+      phia = fmodf(phia, 2.0f * PI);
+    }
+
+  }
+}
+
+//   prn              : PRN number
+//   doppler          : carrier Doppler (Hz) per PRN
+//   phi   _rad       : initial carrier phase (rad) at sample 0
+//   code_phase       : initial code phase (chips) in [0,4092)
+//   fs_hz            : sample rate
+//   code_rate_cps    : nominal code chip rate (1.023e6 for E1), set per-PRN Doppler via scaling if desired
+//   N                : number of samples
+//   out              : output buffer of c32 length N
+extern void synth_e5qp_prn(
+  int prn, // one based indexing
+  float doppler,
+  size_t msps,
+  c32* out,
+  int rotate_offset
+) {
+  float phi_rad = 0.0;
+  float code_phase = 0.0;
+  const float fs_hz = msps*1000.0f;// Mspc
+  const float code_rate_cps = 5.115e6f;
+
+  int spc = round(fs_hz / code_rate_cps);
+  int* code_loc = malloc(E5_QP_CODE_LEN*spc * sizeof(int));
+  memset(code_loc, 0, E5_QP_CODE_LEN * spc * sizeof(int));
+  //int ret = load_e5a_primary_codes((char*)"C:/work/Baseband/HEX_E5AI.txt", code_loc, prn);
+  //if (ret < 0) { printf("Error loading Galileo codes; check path in synth_e5b_prn()\n"); return; }
+  getE5_QPCode(E5_QP_CODE_LEN, spc, prn, code_loc);
+//make_replica(prn_code, replica, doppler, E5_QP_CODE_LEN * spc, chipping_rate * SPC);
+//memcpy(fft_repl, replica, sizeof(c32) * E5_QP_CODE_LEN);
+  /*
+  // test code against generated
+  uint8_t code15[15] = { 0,1,1,1,1,0,0,0,1,1,1,1,1,0,1 };
+  uint8_t code11[11] = { 0,1,1,1,0,1,0,0,1,1,1 };
+  uint8_t code10[10] = { 0,1,1,0,1,1,1,0,0,0 };
+  int8_t tempcode[E5_QP_CODE_LEN] = { 0 };
+  for (int tcode = 0; tcode < E5_QP_CODE_LEN; tcode++)
+    tempcode[tcode] = (code15[tcode % 15] ^ code11[tcode % 11] ^ code10[tcode % 10]) ? -1 : 1;
+    */
+
+  if (rotate_offset) {
+    //rotate_right_i8_cycles(code_loc, E5A_CODE_LEN, rotate_offset); //still a bug in this
+    int size = E5_QP_CODE_LEN;
+    int8_t* temp = (int8_t*)malloc(sizeof(int8_t) * size);
+    if (temp == NULL) { printf("rotate_fwd's malloc failed");  return; }
+    for (int i = 0; i < size; i++) {
+      if (i - rotate_offset < 0) { temp[i] = code_loc[size + (i - rotate_offset)]; }
+      else { temp[i] = code_loc[i - rotate_offset]; }
+    }
+    memcpy(code_loc, temp, sizeof(int8_t) * size);
+    free(temp);
+  }
+
+  //FILE* fp_out = NULL; //output file
+  //errno_t er = fopen_s(&fp_out, "C:/Python/prn36.csv", "w");
+  //for (int i = 0; i < E5A_CODE_LEN; i++) {
+  //  fprintf(fp_out, "%d, %d\n",i, -code_loc[i]);
+  //}
+  //fclose(fp_out);
+
+
+  const int L = E5_QP_CODE_LEN;
+  const int* ca = code_loc;
+
+  float dchips = (code_rate_cps) / fs_hz;
+  float dphia = 2.0f * (float)PI * (doppler) / fs_hz; // phase increment per sample
+  float chips = code_phase;
+  float phia = phi_rad;
+  //c32 in[E5_QP_CODE_LEN];
+  int8_t no_quant = 1; // 0 for quantization
+  for (size_t n = 0; n < L; ++n) {
+    // PRN a
+    //float frac = chips - floorf(chips);
+    int code = code_chip_at(ca, chips, L);
+    float sca = 1.0;// cboc_e1b_weight(frac);
+    float ampa = (float)code * sca; // data assumed +1
+
+    float sa, ca;
+    sincosf_fast(phia, &sa, &ca);
+    c32 xa = { ampa * ca, ampa * sa };
+
+    out[n].r = no_quant ? xa.r : quantize_pm1(xa.r + noise(1.0));
+    out[n].i = no_quant ? xa.i : quantize_pm1(xa.i + noise(1.0));
+
+    // advance
+    chips += dchips;
+    if (chips >= L) { chips -= L; }
+    else if (chips < 0) { chips += L; }
+
+    phia += dphia;
+    if (phia > 1e9f || phia < -1e9f) {
+      phia = fmodf(phia, 2.0f * PI);
+    }
+
+  }
+  free(code_loc);
+}
+
+extern void synth_e5b_prn(
+  int prn, // one based indexing
+  float doppler,
+  size_t N,
+  c32* out,
+  int rotate_offset
+) {
+  float phi_rad = 0.0;
+  float code_phase = 0.0;
+  const float fs_hz = 10.23e6;// Mspc
+  const float code_rate_cps = 10.23e6f;
+
+  int8_t code_loc[E5A_CODE_LEN] = { 0 };
+  int ret = load_e5a_primary_codes((char*)"C:/work/Baseband/HEX_E5BI.txt", code_loc, prn);
+  if (ret < 0) { printf("Error loading Galileo codes; check path in synth_e5b_prn()\n"); return; }
+
+  if (rotate_offset) {
+    //rotate_right_i8_cycles(code_loc, E5A_CODE_LEN, rotate_offset); //still a bug in this
+    int size = E5B_CODE_LEN;
+    int8_t* temp = (int8_t*)malloc(sizeof(int8_t) * size);
+    if (temp == NULL) { printf("rotate_fwd's malloc failed");  return; }
+    for (int i = 0; i < size; i++) {
+      if (i - rotate_offset < 0) { temp[i] = code_loc[size + (i - rotate_offset)]; }
+      else { temp[i] = code_loc[i - rotate_offset]; }
+    }
+    memcpy(code_loc, temp, sizeof(int8_t) * size);
+    free(temp);
+  }
+
+  //FILE* fp_out = NULL; //output file
+  //errno_t er = fopen_s(&fp_out, "C:/Python/prn36.csv", "w");
+  //for (int i = 0; i < E5A_CODE_LEN; i++) {
+  //  fprintf(fp_out, "%d, %d\n",i, -code_loc[i]);
+  //}
+  //fclose(fp_out);
+
+
+  const int L = E5B_CODE_LEN;
+  const int8_t* ca = code_loc;
+
+  float dchips = (code_rate_cps) / fs_hz;
+  float dphia = 2.0f * (float)PI * (doppler) / fs_hz; // phase increment per sample
+  float chips = code_phase;
+  float phia = phi_rad;
+  //c32 in[E5A_CODE_LEN];
+  bool no_quant = true;
+  for (size_t n = 0; n < L; ++n) {
+    // PRN a
+    //float frac = chips - floorf(chips);
+    int code = code_chip_int8(ca, chips, L);
+    float sca = 1.0;// cboc_e1b_weight(frac);
+    float ampa = (float)code * sca; // data assumed +1
+
+    float sa, ca;
+    sincosf_fast(phia, &sa, &ca);
+    c32 xa = { ampa * ca, ampa * sa };
+
+    out[n].r = no_quant ? xa.r : quantize_pm1(xa.r + noise(1.0));
+    out[n].i = no_quant ? xa.i : quantize_pm1(xa.i + noise(1.0));
+
+    // advance
+    chips += dchips;
+    if (chips >= L) { chips -= L; }
+    else if (chips < 0) { chips += L; }
+
+    phia += dphia;
+    if (phia > 1e9f || phia < -1e9f) {
+      phia = fmodf(phia, 2.0f * PI);
+    }
+
+  }
+}
+
+void readL5Icode(int prn, int8_t* out) {
+//#define IS_ERIC 1
+  FILE* f = NULL;
+#if IS_ERIC
+  f = fopen("C:/work/Baseband/codes_L5I.csv", "r");
+#else
+  f = fopen("C:/work/support/esa/fft/FFT-master/codes_L5I.csv", "r");
+#endif
+  if ( f == NULL) {
+    printf("Error opening L5I code file\n");
+    return;
+  }
+  char line[128];
+  // prn N is in the N-1 th column
+  int line_num = 0;
+  char* token = NULL;
+  //char* context = NULL;
+  while (fgets(line, sizeof(line), f)) {
+    for (int i = 0; i < 32; i++) {
+      token = (i == 0) ? strtok(line, ",") : strtok(NULL,",");
+      if (i == (prn - 1)) {
+        out[line_num] = atoi(token);
+        break;
+      }
+    }
+    line_num++;
+  }
+  if (line_num != L5_CODE_LEN) {
+    printf("Error reading L5I code for PRN %d\n", prn);
+  }
+  fclose(f);
+}
+
+bool HasGPSL5(int prn)
+{
+  switch (prn)
+  {
+  default:
+    return false;
+  case 1:
+  case 3:
+  case 4:
+  case 6:
+  case 8:
+  case 9:
+  case 10:
+  case 11:
+  case 14:
+  case 18:
+  case 20:
+  case 21:
+  case 23:
+  case 24:
+  case 25:
+  case 26:
+  case 27:
+  case 28:
+  case 30:
+  case 32:
+    return true;
+  }
+
+}
+
+bool HasE5QP(int prn)
+{
+  switch (prn)
+  {
+  default:
+    return false;
+  case 5:
+  case 13:
+  case 15:
+  case 21:
+  case 23:
+  case 25:
+  case 27:
+  case 29:
+  case 33:
+  case 34:
+  case 36:
+    return true;
+  }
+
+}
+
+extern void synth_L5I_prn(
+  int prn, // one based indexing
+  float doppler,
+  size_t N,
+  c32* out,
+  int rotate_offset
+) {
+  float phi_rad = 0.0;
+  float code_phase = 0.0;
+  const float fs_hz = 10.23e6;// Mspc
+  const float code_rate_cps = 10.23e6f;
+
+  int8_t code_loc[L5_CODE_LEN] = { 0 };
+
+  readL5Icode(prn, code_loc);
+  //if (!l5_generate_I(prn, code_loc, L5_CODE_LEN, true, NULL)) {
+  //  fprintf(stderr, "Unsupported PRN\n");
+  //  return 1;
+  //}
+
+
+  if (rotate_offset) {
+    int size = L5_CODE_LEN;
+    int8_t* temp = (int8_t*)malloc(sizeof(int8_t) * size);
+    if (temp == NULL) { printf("rotate_fwd's malloc failed");  return; }
+    for (int i = 0; i < size; i++) {
+      if (i - rotate_offset < 0) { temp[i] = code_loc[size + (i - rotate_offset)]; }
+      else { temp[i] = code_loc[i - rotate_offset]; }
+    }
+    memcpy(code_loc, temp, sizeof(int8_t) * size);
+    free(temp);
+  }
+
+
+  const int L = L5_CODE_LEN;
+  const int8_t* ca = code_loc;
+
+  float dchips = (code_rate_cps) / fs_hz;
+  float dphia = 2.0f * (float)PI * (doppler) / fs_hz; // phase increment per sample
+  float chips = code_phase;
+  float phia = phi_rad;
+  //c32 in[L5_CODE_LEN];
+  int8_t no_quant = 1; // 0 for quantization
+  for (size_t n = 0; n < L; ++n) {
+    // PRN a
+    //float frac = chips - floorf(chips);
+    int code = code_chip_int8(ca, chips, L);
+    float sca = 1.0;
+    float ampa = (float)code * sca; // data assumed +1
+
+    float sa, ca;
+    sincosf_fast(phia, &sa, &ca);
+    c32 xa = { ampa * ca, ampa * sa };
+
+    out[n].r = no_quant ? xa.r : quantize_pm1(xa.r + noise(1.0));
+    out[n].i = no_quant ? xa.i : quantize_pm1(xa.i + noise(1.0));
+
+    // advance
+    chips += dchips;
+    if (chips >= L) { chips -= L; }
+    else if (chips < 0) { chips += L; }
+
+    phia += dphia;
+    if (phia > 1e9f || phia < -1e9f) {
+      phia = fmodf(phia, 2.0f * PI);
+    }
+
+  }
+}
+
+extern void up_sample_N_to_M(c32* in, int N_in, c32* out, int M_out) {
+  if (M_out == N_in)
+  {
+    memcpy(out, in, sizeof(c32) * M_out);
+    return;
+  }
+
+  // wrapper around the function doing this
+  const double Fin = N_in*1000.0;
+  const double Fout = M_out*1000.0;
+  const int    NTAPS = 12;      // try 8, 12, or 16
+  const double CUTOFF = 0.45;
+
+  iq_resamp_zp_t* rs = iq_resamp_zp_init(Fin, Fout, NTAPS, CUTOFF);
+  if (!rs) { fprintf(stderr, "init failed\n"); return; }
+
+  size_t Nin = N_in;
+
+
+  size_t Nout_cap = (size_t)llround(Fin * (Fout / Fin));
+
+  //size_t Nout =
+  iq_resamp_process_zero_phase(rs, in, Nin, out, Nout_cap);
+
+  iq_resamp_zp_free(rs);
+}
+
+void up_sample_10k_to_16k(c32* in , c32* out) {
+  // wrapper around the function doing this
+  const double Fin = 10230e3;
+  const double Fout = 16384e3;
+  const int    NTAPS = 12;      // try 8, 12, or 16
+  const double CUTOFF = 0.45;
+
+  iq_resamp_zp_t* rs = iq_resamp_zp_init(Fin, Fout, NTAPS, CUTOFF);
+  if (!rs) { fprintf(stderr, "init failed\n"); return ; }
+
+  size_t Nin = 10230; // 1 ms at 10.23 Msps
+
+  size_t Nout_cap = (size_t)llround(Nin * (Fout / Fin)) + 8;
+
+  //size_t Nout =
+  iq_resamp_process_zero_phase(rs, in, Nin, out, Nout_cap);
+  //printf("Produced %zu samples (expected ~16384)\n", Nout);
+
+  iq_resamp_zp_free(rs);
+}
+
+void GetE1BCode(const int prn,int spc, int8_t Code[])
+{
+  int i;
+
+  int8_t* cp = &Code[0];
+  const uint8_t* codebits = E1B_CODE[prn - 1];
+
+  for (i = 0; i < E1B_CODE_LEN; i++)
+  {
+    int8_t val = ((codebits[i / 8] >> (7 - i % 8)) & 0x01) ? 1 : -1;
+    int j = spc;
+    while (j--)
+    {
+      // apply the sub-code
+      *cp = (j < 2) ? val : -val;
+      cp++;
+    }
+  }
+}
+
+void GetE5AICode(const int prn, int spc, int8_t Code[])
+{
+  int i;
+
+  int8_t* cp = &Code[0];
+  const uint8_t* codebits = E5AICodes[prn - 1];
+
+  for (i = 0; i < E5A_CODE_LEN; i++)
+  {
+    int8_t val = ((codebits[i / 8] >> (7 - i % 8)) & 0x01) ? 1 : -1;
+    //int8_t val = (codebits[i / 8] & (0x80 >> (i % 8))) ? 1 : -1;
+    int j = spc;
+    while (j--)
+    {
+      *cp = val;
+      cp++;
+    }
+  }
+}
+
+
+// -------------------------------
+// Signal synthesis for two PRNs (PRN2 and PRN4) into one complex baseband stream.
+// Inputs:
+
+//   prn              : PRN number
+//   doppler          : carrier Doppler (Hz) per PRN
+//   phi   _rad       : initial carrier phase (rad) at sample 0
+//   code_phase       : initial code phase (chips) in [0,4092)
+//   fs_hz            : sample rate
+//   code_rate_cps    : nominal code chip rate (1.023e6 for E1), set per-PRN Doppler via scaling if desired
+//   N                : number of samples
+//   out              : output buffer of c32 length N
+// Notes:
+//   - E1-B data bit is assumed +1 for this short synthesis. If needed, pass a per-sample sign array and multiply.
+extern void synth_e1b_prn(
+  int prn, // one based indexing
+  float doppler,
+  size_t N,
+  c32* out,
+  int spc,
+  int rotate_offset
+) {
+  float phi_rad = 0.0;
+  float code_phase = 0.0;
+  const float fs_hz = 1.023e6f * spc;
+  const float code_rate_cps = 1.023e6f;
+  //int ret = load_e1b_primary_codes((char*)"C:/work/Baseband/HEX_E1B.txt", E1B_Code);
+  //if (ret < 0) { printf("Error loading Galileo codes; check path in synth_e1b_prn()\n"); return; }
+  //int8_t* test = (int8_t*)malloc(sizeof(int8_t)* N);
+
+
+  //for (int i = 0; i < 4092; i++) {
+  //  if (test[i] != E1B_Code[prn][i]) {
+  //    printf("error test %d old %d \n", test[i], E1B_Code[prn][i]);
+  //  }
+  //}
+  const int L = 4092;
+  static int8_t ca[4092 * 8] = {0};
+
+  GetE1BCode(prn, spc, ca);
+  //memcpy(ca, E1B_Code[prn], sizeof(int8_t) * L);
+
+  //if (spc > 1) {
+  //  spc = 1;
+  //  // upsample code to spc
+  //  int8_t* up_ca = (int8_t*)malloc(sizeof(int8_t) * L * spc);
+  //  for (int i = 0; i < L; i++) {
+  //    for (int j = 0; j < spc; j++) {
+  //      // alternate mod 2 to flip
+  //      up_ca[i * spc + j] = ca[i];// *(j < 2) ? 1 : -1;
+  //    }
+  //  }
+  //  memcpy(ca, up_ca, sizeof(int8_t) * L * spc);
+  //  free(up_ca);
+  //}
+
+  rotate_fwd_int8(ca, L*spc, rotate_offset);
+  float dchips = (code_rate_cps) / fs_hz;
+  float dphia = 2.0f * (float) PI * (doppler) / fs_hz; // phase increment per sample
+  float chips = code_phase;
+  float phia = phi_rad;
+
+  //FILE* dbg_fp = NULL;
+  //fopen_s(&dbg_fp, "C:/Python/prn23-new.csv", "w");
+  //fprintf(dbg_fp, "num, prn23\n");
+
+  for (size_t n = 0; n < N; ++n) {
+    // PRN a
+    //float frac = chips - floorf(chips);
+    //int code = code_chip_at(ca, chips, L);
+    //float sca = cboc_e1b_weight(frac);
+    float ampa = ca[n];// round((float)code * sca); // data assumed +/-1
+
+    //fprintf(dbg_fp, "%d, %f, %d, amp, %f\n",n+1, frac , code,ampa);
+
+    float saph, caph;
+    sincosf_fast(phia, &saph, &caph);
+    c32 xa = { ampa * caph, ampa * saph };
+
+    out[n].r = xa.r;
+    out[n].i = xa.i;
+
+    // advance
+    chips += dchips;
+    if (chips >= L) { chips -= L * spc; }
+    else if (chips < 0) { chips += L * spc; }
+
+    phia += dphia;
+    if (phia > 1e9f || phia < -1e9f) {
+      phia = fmodf(phia, 2.0f * PI);
+    }
+
+  }
+  //fclose(dbg_fp);
+}
+
+
+extern void synth_e1c_prn(
+  int prn, // one based indexing
+  float doppler,
+  size_t N,
+  c32* out,
+  int spc,
+  int rotate_offset
+) {
+  //float code_phase = 0.0;
+  double car_phase_deg = 0.0;
+  double fs_hz = 1.023e6 * spc;
+  //const float code_rate_cps = 1.023e6f;
+  static int8_t ca_1ec[4092 * 8] = { 0 };
+  int ret = load_e1c_primary_codes((char*)"C:/work/Baseband/HEX_E1C.txt", prn , ca_1ec);
+  if (ret < 0) { printf("Error loading Galileo codes; check path in synth_e1c_prn()\n"); return; }
+  const int L = 4092;
+
+  if (spc > 1) {
+    // upsample code to spc
+    int8_t* up_ca = (int8_t*)malloc(sizeof(int8_t) * L * spc);
+    for (int i = 0, k = 0; i < L; ++i) {
+      for (int j = 0; j < spc; ++j) {
+        up_ca[k++] = ca_1ec[i];
+      }
+    }
+    memcpy(ca_1ec, up_ca, sizeof(int8_t) * L * spc);
+    free(up_ca);
+  }
+
+  rotate_fwd_int8(ca_1ec, N, rotate_offset);
+
+  //float dchips = (code_rate_cps) / fs_hz;
+  const float dphia = 2.0f * (float)PI * (doppler) / fs_hz; // phase increment per sample
+  const double ca_inc = (double)cos(dphia);
+  const double sa_inc = (double)sin(dphia);
+
+  double pca = cos(car_phase_deg * PI / 180.0);
+  double psa = sin(car_phase_deg * PI / 180.0);
+
+  for (size_t n = 0; n < N; ++n) {
+    out[n].r = ca_1ec[n] * pca;
+    out[n].i = ca_1ec[n] * psa;
+
+    // advance both phasors
+    double npca = pca * ca_inc - psa * sa_inc;
+    double npsa = pca * sa_inc + psa * ca_inc;
+    pca = npca; psa = npsa;
+
+    // renormalize occasionally to limit float drift (not necessary for 1 ms)
+    double na = 1.0 / sqrt(pca * pca + psa * psa);
+    pca *= na; psa *= na;
+  }
+}
+
+////////////////////////////////////////////////////////////////
+
+extern void getCode(int num, int samplesPerChip, const int prn, int* out)
+{
+  //Feedback taps as defined in GPS spec
+  int g1tap[] = { 2,9 };
+  int g2tap[] = { 1,2,5,7,8,9 };
+  int g1tap_len = 2;
+  int g2tap_len = 6;
+  int sats[37][2] = { {1, 5}, {2, 6}, {3, 7}, {4, 8}, {0, 8}, {1, 9}, {0, 7}, {1, 8}, {2, 9}, {1, 2},
+                      {2, 3}, {4, 5}, {5, 6}, {6, 7}, {7, 8}, {8, 9}, {0, 3}, {1, 4}, {2, 5}, {3, 6},
+                      {4, 7}, {5, 8}, {0, 2}, {3, 5}, {4, 6}, {5, 7}, {6, 8}, {7, 9}, {0, 5}, {1, 6},
+                      {2, 7}, {3, 8}, {4, 9}, {3, 9}, {0, 6}, {1, 7}, {3, 9} };
+
+  int* g = (int*)malloc(sizeof(int)*num);// can go beyond max size length
+
+  int g1[10], g2[10];
+  int i, j, k;
+  for (i = 0; i < 10; ++i) {
+    g1[i] = 1;
+    g2[i] = 1;
+  }
+
+  for (i = 0; i < num; ++i) {
+    int val = (g1[9] + g2[sats[prn - 1][0]] + g2[sats[prn - 1][1]]) % 2;
+    g[i] = val;
+
+    // Shift g1
+    int g1_fb = 0;
+    for (j = 0; j < g1tap_len; ++j) {
+      g1_fb += g1[g1tap[j]];
+    }
+    g1_fb %= 2;
+    for (j = 9; j > 0; --j) {
+      g1[j] = g1[j - 1];
+    }
+    g1[0] = g1_fb;
+
+    int g2_fb = 0;
+    for (j = 0; j < g2tap_len; ++j) {
+      g2_fb += g2[g2tap[j]];
+    }
+    g2_fb %= 2;
+    for (j = 9; j > 0; --j) {
+      g2[j] = g2[j - 1];
+    }
+    g2[0] = g2_fb;
+  }
+
+  for (i = 0; i < num; ++i) {
+    if (g[i] == 0) { g[i] = -1; } // map 0,1 to -1,+1
+  }
+
+  if (samplesPerChip > 1) {
+    for (i = 0, k = 0; i < num; ++i) {
+      for (j = 0; j < samplesPerChip; ++j) {
+        out[k++] = g[i];
+      }
+    }
+  }
+  else {
+    memcpy(out, g, num * sizeof(int));
+  }
+  free(g);
+}
+
+void mix_prn(const int32_t* prn_a,
+  const double doppler_a_hz, const double phase_a_deg, c32* signal, int size, int spc)
+{
+  double FS = 1.023e6 * spc;
+  // PRN A phasor increment and initial phase
+  const double dth_a = 2.0 * PI * (double)doppler_a_hz / (double)FS;
+  const double ca_inc = (double)cos(dth_a);
+  const double sa_inc = (double)sin(dth_a);
+
+  double pca = cos(phase_a_deg * PI / 180.0);
+  double psa = sin(phase_a_deg * PI / 180.0);
+
+  for (int samp = 0; samp < size; ++samp) {
+    double a = (double)prn_a[samp];  // +/- 1
+
+    // s[n] = a*e^{j theta_a[n]}
+    double ia = a * pca, qa = a * psa;
+
+    signal[samp].r = (float)(ia);
+    signal[samp].i = (float)(qa);
+
+    // advance both phasors
+    double npca = pca * ca_inc - psa * sa_inc;
+    double npsa = pca * sa_inc + psa * ca_inc;
+    pca = npca; psa = npsa;
+
+    // renormalize occasionally to limit float drift (not necessary for 1 ms)
+    double na = 1.0 / sqrt(pca * pca + psa * psa);
+    pca *= na; psa *= na;
+  }
+}
+
+
+void synth_gps_prn(int prn, float doppler, size_t size, c32*  replica, int spc, int c_phase) {
+  int* code = (int*)malloc(sizeof(int) * size);
+  getCode(size/ spc, spc, prn, code);
+  rotate_fwd(code, size, c_phase);
+  mix_prn((int32_t*)code,doppler,0, replica, size, spc);
+  free(code);
+}
+
+#define Q13_THRESHOLD 0.568 //0.5
+int8_t quantize_pm13(double x) {
+  double thr = Q13_THRESHOLD;
+  if (thr < 0.0) thr = 0.0;
+  if (thr > 1.0) thr = 1.0;
+  int8_t mag = (fabs(x) >= thr) ? 3 : 1;
+  return (x < 0.0) ? (int8_t)(-mag) : mag;
+}
+
+int8_t quantize_pm1(double x) {
+  // Symmetric tie-break: zero maps to +1
+  return (x >= 0.0f) ? +1 : -1;
+}
+
+double noise(double sigma) {
+  double u1 = 0.0;
+  do { u1 = (double)rand() / RAND_MAX; } while (u1 == 0.0); // avoid log(0)
+  double u2 = (double)rand() / RAND_MAX;
+  double ans = sigma * sqrt(-2.0 * log(u1)) * cos(2.0 * PI * u2);
+  //printf("%f ", ans);
+  return ans;
+}
+
+void DecodeOrsIQCplx(uint8_t* data, uint32_t byteLength, c32 iqs[])
+{
+  /// A 2-bit look up table for decoding
+  static int16_t TwoBitTable[4] = { 1,-1,3,-3 };
+
+  for (uint32_t i = 0; i < byteLength; i++) {
+    uint8_t byte = data[i];
+
+    uint8_t bits = (byte) & 0x03;
+    iqs[2 * i].r = (float)TwoBitTable[bits];
+
+    bits = (byte >> 2) & 0x03;
+    iqs[2 * i].i = (float)TwoBitTable[bits];
+
+    bits = (byte >> 4) & 0x03;
+    iqs[2 * i + 1].r = (float)TwoBitTable[bits];
+
+    bits = (byte >> 6) & 0x03;
+    iqs[2 * i + 1].i = (float)TwoBitTable[bits];
+  }
+}
+
+int16_t map13(int8_t val) {
+  // must corresp to TwoBitTable[4] = { 1,-1,3,-3 };
+  switch (val) {
+  case 1:
+    return 0;
+  case -1:
+    return 1;
+  case 3:
+    return 2;
+  case -3:
+    return 3;
+  default:
+    printf("Error bit map out of range"); //exit(0);
+    return 0; // should not happen
+  }
+}
+
+/*
+void EncodeOrsIQCplx(c32 iqs[], uint8_t* data, uint32_t byteLength)
+{
+  /// A 2-bit look up table for encoding
+  static int16_t TwoBitTable[4] = { 1,-1,3,-3 };
+  for (uint32_t i = 0; i < byteLength; i++) {
+    uint8_t byte = 0;
+    int8_t r_ = (int)iqs[2 * i].r;
+    int8_t i_ = (int)iqs[2 * i].i;
+    byte |= ((map13(r_) & 0x03) << 0); // bits 0-1
+    byte |= ((map13(i_) & 0x03) << 2); // bits 2-3
+    r_ = (int)iqs[2 * i + 1].r;
+    i_ = (int)iqs[2 * i + 1].i;
+    byte |= ((map13(r_) & 0x03) << 4); // bits 4-5
+    byte |= ((map13(i_) & 0x03) << 6); // bits 6-7
+    data[i] = byte;
+  }
+}
+*/
+
+double interpCodePhase(c32* correl, int size, top2_pks* peaks)
+{
+  double early = pow_c32(correl[(peaks->idx1 - 1) % size]), prompt = pow_c32(correl[peaks->idx1]), late = pow_c32(correl[(peaks->idx1 + 1) % size]);
+  double code_phase = InterpolateCodePhase(peaks->idx1, early, prompt, late);
+  return code_phase;
+}
+
+double interpCodePhaseFloat(float* correl, int size, top2_pks* peaks)
+{
+  double early = (correl[(peaks->idx1 - 1) % size]), prompt = (correl[peaks->idx1]), late = (correl[(peaks->idx1 + 1) % size]);
+  double code_phase = InterpolateCodePhase(peaks->idx1, early, prompt, late);
+  return code_phase;
+}
+
+double InterpolateCodePhase(uint32_t index, double earlyPower, double promptPower, double latePower)
+{
+  double interpolatedIndex;
+  if (latePower > earlyPower) {
+    interpolatedIndex = 0.5 * (latePower - earlyPower) / (promptPower - earlyPower);
+    interpolatedIndex = index + (interpolatedIndex / 3.0) * (2.0 * interpolatedIndex + 2.0);
+  }
+  else {
+    interpolatedIndex = 0.5 * (latePower - earlyPower) / (promptPower - latePower);
+    interpolatedIndex = index + (interpolatedIndex / 3.0) * (-2.0 * interpolatedIndex + 2.0);
+  }
+  return interpolatedIndex;
+}
+
+double compute_snr_cplx(c32* convol, int cov_size, top2_pks peaks) {
+  double sum = 0, sum_sq = 0;
+  for (int i = 0; i < cov_size; i++) {
+    float magn = mag(convol[i]);
+    if (abs(i - peaks.idx1) > 2) {
+      sum += magn;
+      sum_sq += magn * magn;
+    }
+  }
+  double mean = sum / (cov_size - 5);
+  //double var = (sum_sq / (cov_size - 5)) - (mean * mean);
+  //double snr_lin = 10.0 * log10((peak * peak) / (var * (float)(cov_size - 5)));
+  double snr_lin = peaks.val1 / mean;// (peak - mean) / var
+  double snr = 10.0 * log10(snr_lin);
+  return snr;
+}
+
+double compute_snr_real(float* convol, int cov_size, top2_pks peaks) {
+  double sum = 0, sum_sq = 0;
+  for (int i = 0; i < cov_size; i++) {
+    float magn = convol[i];
+    if (abs(i - peaks.idx1) > 2) {
+      sum += magn;
+      sum_sq += magn * magn;
+    }
+  }
+  double mean = sum / (cov_size - 5);
+  //double var = (sum_sq / (cov_size - 5)) - (mean * mean);
+  //double snr_lin = 10.0 * log10((peaks.val1) / sqrt(var));
+  double snr_lin = (peaks.val1 - mean) / (peaks.val2 - mean);
+  //printf("SNR Lin2: %f , SNR Lin: %f \n", snr_lin2, snr_lin);
+  double snr = 20.0 * log10(snr_lin); // x by 20 for power
+  return snr;
+}
+
+int find_top2_peaks_cplx(const c32* data, int data_size, int pk_sep, top2_pks* peaks, FILE* fp_out) {
+  if (data_size <= 0 || !data || !peaks) { return -1; }
+  float v1 = -1e36f, v2 = -1e36f;
+  int idx1 = -1, idx2 = -1;
+
+  for (int m = 0; m < data_size; m++) {
+    float magn = mag(data[m]);
+    if (fp_out != NULL) { fprintf(fp_out, "%d, %f \n", m, magn); }
+    if (magn >= v1) {
+      if (idx1 != -1 && (abs(m - idx1) > pk_sep)) { v2 = v1; idx2 = idx1; } // Promote current best to second, insert new best
+      v1 = magn; idx1 = m;
+    }
+    else if (magn > v2) {
+      if ((magn != v1) && (abs(m - idx1) > pk_sep)) { v2 = magn;  idx2 = m; } // Update second best if it doesn't collide with best
+    }
+  }
+
+  peaks->val1 = v1;
+  peaks->idx1 = idx1;
+  peaks->val2 = v2;
+  peaks->idx2 = idx2;
+  return 0; // Success
+}
+
+int find_top2_peaks_real(const float* data, int data_size, int pk_sep, top2_pks* peaks, FILE* fp_out) {
+  if (data_size <= 0 || !data || !peaks) { return -1; }
+  float v1 = -1e10f, v2 = -1e10f;
+  int idx1 = -1, idx2 = -1;
+
+  /*
+  for (int m = 0; m < data_size; m++) {
+    float magn = data[m];
+    if (fp_out != NULL) { fprintf(fp_out, "%d, %f \n", m, magn); }
+    if (magn >= v1) {
+      if (idx1 != -1 && (abs(m - idx1) > pk_sep)) { v2 = v1; idx2 = idx1; } // Promote current best to second, insert new best
+      v1 = magn; idx1 = m;
+    }
+    else if (magn > v2) {
+      if ((magn != v1) && (abs(m - idx1) > pk_sep)) { v2 = magn;  idx2 = m; } // Update second best if it doesn't collide with best
+    }
+  }
+  */
+  float min = 1e100;
+  for (int m = 0; m < data_size; m++) {
+    float magn = data[m];
+    //if (fp_out != NULL) { fprintf(fp_out, "%d, %f \n", m, magn); }
+    if (magn >= v1)
+    {
+      v1 = magn;
+      idx1 = m;
+    }
+    if (magn < min) min = magn;
+  }
+
+  float avg = 0;
+  for (int m = pk_sep; m < data_size - pk_sep; m++) {
+    int thisidx = (m + idx1) % data_size;
+    float magn = data[thisidx];
+    avg += magn;
+    if (magn >= v2)
+    {
+      v2 = magn;
+      idx2 = thisidx;
+    }
+  }
+  avg /= (data_size-2*pk_sep);
+  peaks->val1 = v1;
+  peaks->idx1 = idx1;
+  peaks->val2 = v2;
+  peaks->idx2 = idx2;
+  //peaks->ratio = v1/v2;
+  peaks->ratio = (v1 - avg) / (v2 - avg);
+  //peaks->ratio = (v1 - min) / (v2 - min);
+  //printf("v1=%f, v2= %f, avg=%f, rat1=%f, rat2=%f ", v1, v2, avg, v1 / v2, peaks->ratio);
+
+  return 0; // Success
+}
+
+int compareConstelPRN(const void* a, const void* b) {
+  if (((acq_struct*)a)->constel > ((acq_struct*)b)->constel) {
+    return 1;
+  }
+  else if (((acq_struct*)a)->constel < ((acq_struct*)b)->constel) {
+    return -1;
+  }
+  else {
+    if (((acq_struct*)a)->prn > ((acq_struct*)b)->prn) {
+      return 1;
+    }
+    else if (((acq_struct*)a)->prn < ((acq_struct*)b)->prn) {
+      return -1;
+    }
+    else {
+      return 0;
+    }
+  }
+}
+
+int parse_log(char* log_file, char* record, acq_struct* acq_results) {
+  // record needs to have path removed to find just file name
+  record = strrchr(record, '/') + 1; // only handles / separators only
+  FILE* fp_out = fopen(log_file, "r");
+  //char* next_token = NULL;
+  char line[512]; bool find_ast = false;
+  int rec_cnt = 0;
+  while (fgets(line, sizeof(line), fp_out)) {
+    if (strstr(line, "Reading file:") != NULL) {
+      if (strstr(line, record) != NULL) { find_ast = true; } // now start looking for %AST
+    }
+    if (find_ast) {
+      if (strstr(line, "%AST") != NULL) {
+        if (strstr(line, "Number of visible") != NULL) { continue; } //%AST,Number of visible satellites (after adjusting with -331 (+/- 50): 20
+        //%AST, 343150.451, G04, 413.48, 87.97, 26.49
+        char* token = strtok(line, ",");
+        strtok(NULL, ",");
+        token = strtok(NULL, ",");
+        acq_results[rec_cnt].constel = (token[1] == 'G') ? 1 : 2; // G or E
+        acq_results[rec_cnt].prn = atoi(&token[2]); // skip G
+        token = strtok(NULL, ",");
+        acq_results[rec_cnt].doppler = atof(token);
+        token = strtok(NULL, ",");
+        acq_results[rec_cnt].elev = atof(token);
+        //token = strtok_s(NULL, ",", &next_token);
+        //acq_results[rec_cnt].azim = atof(token);
+        rec_cnt++;
+      }
+    }
+    if (strstr(line, "Noise floor") != NULL && find_ast == true) { break; } //stop looking
+  }
+  fclose(fp_out);
+  return rec_cnt;
+}
+
+int cnt_monotonic(float val) {
+#define MEM_SIZE 6
+  static int num_tot = 0;
+  static int num_monotone = 0;
+  static float last_n[MEM_SIZE] = { -1.0e9f };
+  for (int i = 0; i < MEM_SIZE- 1; i++) {
+    last_n[i] = last_n[i + 1];
+  }
+  last_n[MEM_SIZE - 1] = val;
+
+  int tp_idx = MEM_SIZE - 1;
+  if (num_tot >= 3) {
+    if (last_n[tp_idx - 2] < last_n[tp_idx - 1] && last_n[tp_idx - 1] < last_n[tp_idx] && last_n[tp_idx] - last_n[0] > 2000) {
+    //if (last_n[tp_idx - 2] > last_n[tp_idx - 1] && last_n[tp_idx - 1] > last_n[tp_idx] && last_n[0] - last_n[tp_idx]  > 15) {
+      num_monotone++; // increasing
+    }
+    else {
+      num_monotone = 0; // change
+    }
+
+    //else if (last_n[tp_idx - 2] > last_n[tp_idx - 1] && last_n[tp_idx - 1] > last_n[tp_idx]) {
+    //  num_monotone++; // decreasing
+    //}
+    //else if (last_n[tp_idx - 2] > last_n[tp_idx - 1] && last_n[tp_idx - 1] < last_n[tp_idx] ||
+    //         last_n[tp_idx - 2] < last_n[tp_idx - 1] && last_n[tp_idx - 1] > last_n[tp_idx]) {
+    //  num_monotone = 0; // change
+    //}
+  }
+  num_tot++;
+  return num_monotone;
+}
+
+
+////////////////////////// utilities for parsing annexes to uint8_t arrays/////////
+/* Convert a single hex character to its 0..15 value, or -1 on error */
+static int hexval(char c) {
+  if (c >= '0' && c <= '9') return c - '0';
+  c = (char)tolower((unsigned char)c);
+  if (c >= 'a' && c <= 'f') return 10 + (c - 'a');
+  return -1;
+}
+
+/* Remove non-hex characters (e.g., spaces, separators) in-place. */
+static void strip_nonhex(char* s) {
+  char* w = s;
+  for (char* r = s; *r; ++r) {
+    int v = hexval(*r);
+    if (v >= 0) *w++ = (char)tolower((unsigned char)*r);
+  }
+  *w = '\0';
+}
+
+bool hex_to_bytes(const char* hex_in, int8_t** out_bytes, size_t* out_len) {
+  if (!hex_in || !out_bytes || !out_len) return false;
+
+  // Make a mutable copy and keep only hex digits
+  char* tmp = strdup(hex_in);
+  if (!tmp) return false;
+  strip_nonhex(tmp);
+
+  size_t nhex = strlen(tmp);
+  if (nhex == 0) {
+    free(tmp);
+    *out_bytes = NULL;
+    *out_len = 0;
+    return true; // empty input -> empty output
+  }
+
+  size_t nbytes = nhex / 2;
+  size_t extra = 0;
+  if ((nhex & 1U) != 0U) {
+    extra = 1;// add one if odd
+  }
+  int8_t* buf = (int8_t*)malloc((nbytes + extra) * sizeof(int8_t));
+  if (!buf) {
+    free(tmp);
+    return false;
+  }
+
+  for (size_t i = 0; i < nbytes; ++i) {
+    int hi = hexval(tmp[2 * i]);
+    int lo = hexval(tmp[2 * i + 1]);
+    if (hi < 0 || lo < 0) {
+      free(buf);
+      free(tmp);
+      return false;
+    }
+    uint8_t byte = (uint8_t)((hi << 4) | lo);
+    // Store into int8_t; bit pattern preserved, though values >=0x80 appear negative if printed as signed.
+    buf[i] = (int8_t)byte;
+  }
+
+  if (extra == 1) {
+    int hi = hexval(tmp[nhex - 1]);
+    uint8_t byte = (uint8_t)(hi << 4);
+    buf[nbytes] = (int8_t)byte;
+  }
+
+  free(tmp);
+  *out_bytes = buf;
+  *out_len = nbytes + extra;
+  return true;
+}
+
+void print_bytes_c_initializer(const int8_t* bytes, size_t len) {
+  printf("{ ");
+  for (size_t i = 0; i < len; ++i) {
+    // Cast to unsigned for printing the canonical hex
+    unsigned v = (unsigned)(uint8_t)bytes[i];
+    printf("0x%02X", v);
+    if (i + 1 < len) printf(",");
+  }
+  printf(" }");
+}
+
+
