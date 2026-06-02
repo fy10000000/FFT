@@ -21,6 +21,13 @@ typedef struct {
   int      bit_pos;
 } buff_str;
 
+typedef enum {
+  SIGNAL_L1,
+  SIGNAL_E1,
+  SIGNAL_L5,
+  SIGNAL_E5a,
+  SIGNAL_E5aQP
+} signalEnum;
 
 typedef struct {
   double time_tag;   /* time (s) expressed by standard time_t */
@@ -29,8 +36,10 @@ typedef struct {
   float doppler;     /* doppler frequency (Hz) */
   float carr_phase;  /* cycles at L1 90.5,0.5] */
   float cno;         /* carrier-to-noise density ratio (dB-Hz) */
+  float ratio;
   uint16_t prn;      /* satellite PRN number */
   uint16_t constellation; /* constellation type (GPS, GLONASS, Galileo, etc.) */
+  signalEnum signal;
 } bb_meas_sat_t;
 
 typedef struct {

@@ -13,7 +13,7 @@
 #include <stdbool.h>
 #include "cplx_types.h"
 
-#define IS_ERIC 1
+#define IS_ERIC 0
 
 #define SPEED_LIGHT 299792458.0 // speed of light in m/s
 

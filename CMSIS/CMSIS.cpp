@@ -29,6 +29,24 @@
 #define D2R (3.14159265358979f / 180.0f)
 #define FS (4.092e6f) // sample rate
 
+FILE* fpResults = NULL;
+
+typedef enum
+{
+  OPTION_ERROR = 0x00,
+  OPTION_L1 = 0x01,
+  OPTION_E1 = 0x02,
+  OPTION_L5 = 0x10,
+  OPTION_E5a = 0x20,
+  OPTION_QP = 0x40,
+  OPTION_QX = 0x80 // use only qp satellites, but not as qp
+} optionSigEnum;
+
+static int optionSig = OPTION_ERROR;
+static int optionMsCoh = -1;
+static int optionMsps = -1;
+static int optionDUnc = -1; // doppler uncertainty in Hz
+
 typedef struct {
   int num_errors;
   int num_trials;
@@ -271,7 +289,7 @@ float mag(const c32 in) {
 }
 
 
-double compute_gps_time(int year, int month, int day, int hour, int minute, int second)
+double compute_gps_time(int year, int month, int day, int hour, int minute, double second)
 {
   struct tm refTime, epochTime;
   time_t refTimeRaw, epochTimeRaw;
@@ -282,7 +300,7 @@ double compute_gps_time(int year, int month, int day, int hour, int minute, int 
   refTime.tm_mday = day;
   refTime.tm_hour = hour;
   refTime.tm_min = minute;
-  refTime.tm_sec = second;
+  refTime.tm_sec = (int)second;
   refTime.tm_isdst = 0;
   refTimeRaw = mktime(&refTime);
 
@@ -296,6 +314,7 @@ double compute_gps_time(int year, int month, int day, int hour, int minute, int 
   epochTimeRaw = mktime(&epochTime);
 
   diff = difftime(refTimeRaw, epochTimeRaw);
+  diff += second - (int)second; // include fractional seconds
 
   return diff;
 }
@@ -1198,10 +1217,13 @@ void read_L5E5AE5QP(char* input) {
 
 #define SPC 2
 #define FFT_SIZE 16384 
-#define SAMP 10230 // for 1 ms at 10.23 MHz
+//#define SAMP 10230 // for 1 ms at 10.23 MHz
 //#define SAMP 5115 // for 1 ms at 10.23 MHz
 //#define SAMP 16384
 //#define SAMP 15345
+  int msps = 10230;
+  if (optionMsps > 0)
+    msps = optionMsps;
   // only 9 and 36 with q31; 10, 6 also works with float
   //int prn = 36;// 6;// 6;// 36;// 9;// 36
   //double doppler = -1*(1580 + 1e6 +2500);// E36:1580 E6: 1261 ; G10:-582, G32:1232
@@ -1214,6 +1236,12 @@ void read_L5E5AE5QP(char* input) {
   fopen_s(&fpAssist, filename, "r");
   if (fpAssist == NULL) {
     fprintf(stderr, "Failed to open assitance file %s\n", filename);
+    return;
+  }
+
+  if (msps < 10230 && !(optionSig & OPTION_QP))
+  {
+    fprintf(stderr, "msps too low\n");
     return;
   }
 
@@ -1234,9 +1262,9 @@ void read_L5E5AE5QP(char* input) {
       continue;
     sscanf_s(line + 1, "%d %lf", &prn2acq[cnt].prn, &prn2acq[cnt].doppler);
     if (c == 'G' && !HasGPSL5(prn2acq[cnt].prn)) continue; // won't be able to get these
-    hasQp = (c == 'E') && HasE5QP(prn2acq[cnt].prn);
-    if (!hasQp && SAMP < 10230) continue; // won't work
-    if (!hasQp) continue; // only do QP
+    hasQp = (optionSig & OPTION_QP) && (c == 'E') && HasE5QP(prn2acq[cnt].prn);
+    if (!hasQp && msps < 10230) continue; // won't work
+    //if (!hasQp) continue; // only do QP
 
     prn2acq[cnt].doppler *= 1176.45 / 1575.42; // adjust to L5
 
@@ -1245,10 +1273,10 @@ void read_L5E5AE5QP(char* input) {
   fclose(fpAssist);
 
   /////////////////////////////////////////////////////
-  int maxCorrLength = USE_FFT ? FFT_SIZE : SAMP;
+  int maxCorrLength = USE_FFT ? FFT_SIZE : msps;
 
-  c32* sampl     = (c32*)malloc(SAMP * sizeof(c32));
-  c32* repli     = (c32*)malloc(SAMP * sizeof(c32));
+  c32* sampl     = (c32*)malloc(msps * sizeof(c32));
+  c32* repli     = (c32*)malloc(msps * sizeof(c32));
   c32* up_samp   = (c32*)malloc(maxCorrLength * sizeof(c32));
   c32* up_repli  = (c32*)malloc(maxCorrLength * sizeof(c32));
   c32* up_prod   = (c32*)malloc(maxCorrLength * sizeof(c32));
@@ -1258,6 +1286,16 @@ void read_L5E5AE5QP(char* input) {
   bb_meas_t meas;
   memset(&meas, 0, sizeof(bb_meas_sat_t)); 
 
+  char* dateTimeStr = strchr(input,'G'); // sample filename
+  int year, month, day, hour, minute;
+  double sec;
+  sscanf_s(dateTimeStr, "G_%d_%d_%d_%d_%d_%lf", &year, &month, &day, &hour, &minute, &sec);
+  double gpstime = compute_gps_time(year, month, day, hour, minute, sec);
+  meas.time = (uint64_t)gpstime;
+  meas.sec = gpstime - (uint64_t)gpstime;
+  int week = (int)(gpstime / 604800.0);
+  double tow = fmod(gpstime, 604800.0);
+  
   char* pc = 0;
   if (0)
   {
@@ -1273,16 +1311,19 @@ void read_L5E5AE5QP(char* input) {
   for (int prn_loop = 0; prn_loop < cnt; prn_loop++) {
     int prn = prn2acq[prn_loop].prn;
     int gal_proc = (prn2acq[prn_loop].constel == 2) ? 1 : 0;
-    hasQp = gal_proc && HasE5QP(prn);
+    hasQp = (optionSig & OPTION_QP) && gal_proc && HasE5QP(prn);
     //EDif (gal_proc == 0 || hasQp == false) { continue; }
     //EDif ( (prn2acq[prn_loop].prn == 15 || prn2acq[prn_loop].prn == 34) == false) { continue; }
     //printf("Processing PRN %d Doppler %f constel %d \n", prn, doppler, prn2acq[prn_loop].constel);
     printf("Processing %c%02d%c around %.1lf Hz\n", gal_proc ? 'E' : 'G', prn, gal_proc ? (hasQp ? 'q' : 'a') : ' ', prn2acq[prn_loop].doppler);
-    int msps = SAMP;
     int codeLength = (hasQp) ? E5_QP_CODE_LEN : E5A_CODE_LEN;
     int codeRate = (hasQp) ? 5115 : 10230;
     int spc = msps / codeRate;
 
+    int mixcount = 0;
+    int fftcount = 0;
+    int ifftcount = 0;
+    int interpcount = 0;
 
     int sampLength = codeLength * spc;
     int corrLength = sampLength;
@@ -1302,7 +1343,10 @@ void read_L5E5AE5QP(char* input) {
     int dopplerStep = 500 / tc;
     if (hasQp)
     {
-      tc = 2 * 31 / 2; // n*31/2 for n ms
+      int msCoh = 2;
+      if (optionMsCoh > 0)
+        msCoh = optionMsCoh;
+      tc = msCoh * 31 / 2; // n*31/2 for n ms
       dopplerStep = 500 / (tc * 2.0/ 31);
     }
     //dopplerStep = 200;
@@ -1317,55 +1361,64 @@ void read_L5E5AE5QP(char* input) {
     
     int dopplerOffset;
     int dopplerUncertainty = 3 * dopplerStep;
+    if (optionDUnc >= 0) dopplerUncertainty = optionDUnc;
     double ratio = 0.0;
     double bestRatio = 0.0;
     int bestCodeOffset = 0.0;
     int bestDoppOffset = 0.0;
     int codeoff = 0;
-    double div = 4;
-    for (dopplerOffset = -dopplerUncertainty; dopplerOffset <= dopplerUncertainty; dopplerOffset += dopplerStep)
-    {
-      //double doppler = -1 * (prn2acq[prn_loop].doppler + 1e6 + 4100 + dopplerOffset);
-      double doppler = -1 * (prn2acq[prn_loop].doppler + 4100 + dopplerOffset);
+    double div = 2;
+    if (hasQp) div = 1;
 
-      for (codeoff = 0; codeoff < sampLength; codeoff += (sampLength/(div))) // try different code offsets
+    // Generate code replica
+
+    if (gal_proc) {
+      if (hasQp)
       {
-        if (gal_proc) {
-          if (hasQp)
-          {
-            //getE5_QPCode(E5_QP_CODE_LEN, 1, prn2acq[cnt].prn, prn_code);
-            //make_replica(prn_code, replica, doppler, E5_QP_CODE_LEN * spc, chipping_rate * SPC);
-            //memcpy(fft_repl, replica, sizeof(c32) * E5_QP_CODE_LEN);
-            //synth_e5qp_prn(prn, -doppler, msps, repli, 0);
-            //synth_e5qp_prn(prn, 0.0, msps, repli, 0);
-            int* prn_code = (int*)malloc(E5_QP_CODE_LEN * spc * sizeof(int));
-            getE5_QPCode(E5_QP_CODE_LEN, spc, prn, prn_code);
-            memset(repli, 0, sizeof(c32)* sampLength);
-            for (int sampi = 0; sampi < sampLength; sampi++)
-              repli[sampi].r = prn_code[sampi];
-            free(prn_code);
+        //getE5_QPCode(E5_QP_CODE_LEN, 1, prn2acq[cnt].prn, prn_code);
+        //make_replica(prn_code, replica, doppler, E5_QP_CODE_LEN * spc, chipping_rate * SPC);
+        //memcpy(fft_repl, replica, sizeof(c32) * E5_QP_CODE_LEN);
+        //synth_e5qp_prn(prn, -doppler, msps, repli, 0);
+        //synth_e5qp_prn(prn, 0.0, msps, repli, 0);
+        int* prn_code = (int*)malloc(E5_QP_CODE_LEN * spc * sizeof(int));
+        getE5_QPCode(E5_QP_CODE_LEN, spc, prn, prn_code);
+        memset(repli, 0, sizeof(c32) * sampLength);
+        for (int sampi = 0; sampi < sampLength; sampi++)
+          repli[sampi].r = prn_code[sampi];
+        free(prn_code);
 
-          }
-          else
-          {
-            //synth_e5a_prn(prn, -doppler, sampLength, repli, 0);
-            synth_e5a_prn(prn, 0.0, msps, repli, 0);
-          }
-        }
-        else { // GPS
-          synth_L5I_prn(prn, 0.0, msps, repli, 0);
-        }
-        if (USE_FFT)
-        {
-          //up_sample_10k_to_16k(repli, up_repli);
-          //memcpy(repli, up_repli, sizeof(c32)* SAMP);
-          memset(up_repli, 0, sizeof(c32) * corrLength);
-          //memcpy(up_repli, repli, sampLength);
-          //up_sample_N_to_M(repli, sampLength, up_repli, corrLength);
-          upsample_linear_c32(repli, sampLength, up_repli, corrLength, false);
+      }
+      else
+      {
+        //synth_e5a_prn(prn, -doppler, sampLength, repli, 0);
+        synth_e5a_prn(prn, 0.0, msps, repli, 0);
+      }
+    }
+    else { // GPS
+      synth_L5I_prn(prn, 0.0, msps, repli, 0);
+    }
+    if (USE_FFT)
+    {
+      //up_sample_10k_to_16k(repli, up_repli);
+      //memcpy(repli, up_repli, sizeof(c32)* SAMP);
+      memset(up_repli, 0, sizeof(c32) * corrLength);
+      //memcpy(up_repli, repli, sampLength);
+      //up_sample_N_to_M(repli, sampLength, up_repli, corrLength);
+      upsample_linear_c32(repli, sampLength, up_repli, corrLength, false);
+      interpcount++;
+      fft_c32(corrLength, up_repli, true); // forward FFT 
+      fftcount++;
+    }
 
-          fft_c32(corrLength, up_repli, true); // forward FFT 
-        }
+
+    //for (codeoff = bestCodeOffset - (sampLength/div); codeoff <= (sampLength/div); codeoff += (sampLength/(2*div))) // try different code offsets
+    for (codeoff = 0; codeoff < sampLength; codeoff += sampLength / div) // try different code offsets
+    {
+      for (dopplerOffset = -dopplerUncertainty; dopplerOffset <= dopplerUncertainty; dopplerOffset += dopplerStep)
+      {
+        //double doppler = -1 * (prn2acq[prn_loop].doppler + 1e6 + 4100 + dopplerOffset);
+        double doppler = -1 * (prn2acq[prn_loop].doppler + 4100 + dopplerOffset);
+
 
         char* context = nullptr;
         // read in the csv data
@@ -1391,8 +1444,10 @@ void read_L5E5AE5QP(char* input) {
 
         ///////////// NCI loop /////////////////////////////////////////////
         memset(nci_sum, 0, sizeof(float) * corrLength);
-        double upsampSecs = 1.0 / (msps * 1000.0 * corrLength / sampLength);
-        double dphi = 2.0 * PI_F64 * doppler* upsampSecs;
+        //double upsampSecs = 1.0 / (msps * 1000.0 * corrLength / sampLength);
+        //double dphi = 2.0 * PI_F64 * doppler * upsampSecs;
+        double sampSecs = 1.0 / (msps * 1000.0);
+        double dphi = 2.0 * PI_F64 * doppler * sampSecs;
         if (dphi < 0) dphi += 2.0 * PI_F64;
         uint32_t totalSampleCount = 0;
         for (int nci = 0; nci < NCI; nci++)
@@ -1404,6 +1459,7 @@ void read_L5E5AE5QP(char* input) {
           for (int tci = 0; tci < tc; tci++)
           {
             int idx = 0;
+            /*
             while (!feof(fp_1bitcsv)) {
               if (fgets(line, sizeof(line), fp_1bitcsv) != NULL) {
                 char* token = strtok_s(line, ",", &context);
@@ -1420,8 +1476,8 @@ void read_L5E5AE5QP(char* input) {
             // upsample
             c32* temp_up_samp = (c32*)malloc(maxCorrLength * sizeof(c32));
             memset(temp_up_samp, 0, sizeof(c32) * corrLength);
-            //memcpy(up_samp, sampl, sampLength);
-            //up_sample_N_to_M(sampl, sampLength, up_samp, corrLength);
+            //memcpy(temp_up_samp, sampl, sampLength);
+            //up_sample_N_to_M(sampl, sampLength, temp_up_samp, corrLength);
             upsample_linear_c32(sampl, sampLength, temp_up_samp, corrLength, false);
 
             // wipe Doppler
@@ -1437,15 +1493,510 @@ void read_L5E5AE5QP(char* input) {
               totalSampleCount++;
             }
             free(temp_up_samp);
+            */
+            while (!feof(fp_1bitcsv)) {
+              if (fgets(line, sizeof(line), fp_1bitcsv) != NULL) {
+                char* token = strtok_s(line, ",", &context);
+                token = strtok_s(NULL, ",", &context);
+                if (token != NULL) {
+                  sampl[idx].r = (float)atof(token);
+                  token = strtok_s(NULL, ",", &context);
+                  if (token != NULL) { sampl[idx].i = (float)atof(token); }
+                }
+                c32 phase;
+                double phi = fmod(dphi * totalSampleCount, 2 * PI_F64);
+                phase.r = cos(phi);
+                phase.i = sin(phi);
+                c32 tempsamp1 = mult(sampl[idx], phase);
+                c32 tempsamp2 = add(up_samp[idx], tempsamp1);
+                up_samp[idx] = tempsamp2;
+                totalSampleCount++;
+
+                idx++;
+
+                if ((idx != 0) && (idx % LEN == 0)) { break; }
+              }
+            }
+            mixcount++;
+
           }
           if (USE_FFT)
           {
-
+            /*
             // note repli has been FFTed already
             fft_c32(corrLength, up_samp, true); // forward FFT
             for (int k = 0; k < corrLength; k++) { up_prod[k] = mult(up_samp[k], get_conj(up_repli[k])); }
             fft_c32(corrLength, up_prod, false); // IFFT
             for (int i = 0; i < corrLength; i++) { nci_sum[i] += mag(up_prod[i]); }
+            */
+
+            // upsample
+            c32* temp_up_samp = (c32*)malloc(maxCorrLength * sizeof(c32));
+            memset(temp_up_samp, 0, sizeof(c32)* corrLength);
+            //memcpy(temp_up_samp, up_samp, sampLength);
+            //up_sample_N_to_M(up_samp, sampLength, temp_up_samp, corrLength);
+            upsample_linear_c32(up_samp, sampLength, temp_up_samp, corrLength, false);
+            interpcount++;
+            fftcount++;
+            ifftcount++;
+
+            // note repli has been FFTed already
+            fft_c32(corrLength, temp_up_samp, true); // forward FFT
+            for (int k = 0; k < corrLength; k++) { up_prod[k] = mult(temp_up_samp[k], get_conj(up_repli[k])); }
+            fft_c32(corrLength, up_prod, false); // IFFT
+            for (int i = 0; i < corrLength; i++) { nci_sum[i] += mag(up_prod[i]); }
+            free(temp_up_samp);
+
+          }
+          else
+          {
+            //TimeDomainCorrelate(sampLength, sampl, repli, nci_sum);
+          }
+          if (0)
+          {
+            top2_pks peaks;
+            find_top2_peaks_real(nci_sum, corrLength, 10, &peaks, fp_out);
+            double cn0 = compute_snr_real(nci_sum, corrLength, peaks) + 35.0;
+            double early = nci_sum[peaks.idx1 - 1], prompt = nci_sum[peaks.idx1], late = nci_sum[peaks.idx1 + 1];
+            double interp = InterpolateCodePhase(peaks.idx1, early * early, prompt * prompt, late * late) * sampLength / corrLength;
+            interp += codeoff;
+            if (interp > sampLength)
+              interp -= sampLength;
+            ratio = peaks.ratio;
+            printf("NC%03d PRN %c%02d doppler %6.0f ratio %5.2f loc %5d interp %10.4f CN0 %5.2f %5d %5d %c\n", nci, (gal_proc == 1) ? 'E' : 'G', prn2acq[prn_loop].prn, prn2acq[prn_loop].doppler + dopplerOffset, ratio, (int)peaks.idx1, interp, cn0, dopplerOffset, codeoff, (ratio > bestRatio) ? '*' : ' ');
+          }
+        }
+
+        top2_pks peaks;
+        //fprintf(fp_out, "%c%02d %6.0f %5d %5d\n", (gal_proc == 1) ? 'E' : 'G', prn2acq[prn_loop].prn, prn2acq[prn_loop].doppler + dopplerOffset, dopplerOffset, codeoff);
+        find_top2_peaks_real(nci_sum, corrLength, 10, &peaks, fp_out);
+        double cn0 = compute_snr_real(nci_sum, corrLength, peaks) + 35.0;
+        double early = nci_sum[peaks.idx1 - 1], prompt = nci_sum[peaks.idx1], late = nci_sum[peaks.idx1 + 1];
+        double interp = InterpolateCodePhase(peaks.idx1, early * early, prompt * prompt, late * late) * sampLength / corrLength;
+
+
+        interp += codeoff;
+        if (interp > sampLength)
+          interp -= sampLength;
+
+        ratio = peaks.ratio;
+        printf("Avail PRN %c%02d doppler %6.0f ratio %5.2f loc %5d interp %10.4f CN0 %5.2f %5d %5d %c\n", 
+          (gal_proc == 1) ? 'E' : 'G', prn2acq[prn_loop].prn, prn2acq[prn_loop].doppler + dopplerOffset, ratio, (int)peaks.idx1, interp, cn0, dopplerOffset, codeoff, (ratio > bestRatio) ? '*' : ' ');
+
+        if (ratio > bestRatio) {
+          meas.sats[meas.num_sat].prn = prn2acq[prn_loop].prn;
+          meas.sats[meas.num_sat].code_phase = float(interp / msps); // [ms] QP will have some offset of 2/31 segments
+          meas.sats[meas.num_sat].doppler = -(prn2acq[prn_loop].doppler + dopplerOffset);
+          meas.sats[meas.num_sat].cno = (float)cn0;
+          meas.sats[meas.num_sat].ratio = (float)ratio;
+          meas.sats[meas.num_sat].constellation = gal_proc ? SYS_GAL : SYS_GPS;
+          meas.sats[meas.num_sat].signal = gal_proc ? (hasQp ? SIGNAL_E5aQP : SIGNAL_E5a) : SIGNAL_L5;
+          if ((optionSig & OPTION_QX) && gal_proc && HasE5QP(prn))
+            meas.sats[meas.num_sat].signal = SIGNAL_E5aQP;
+          bestDoppOffset = dopplerOffset;
+          bestCodeOffset = codeoff;
+
+          if (fp_out != NULL)
+          {
+            fprintf(fp_out, "PRN %c%02d, doppler %6.0f, ratio %5.2f, loc %5d, interp %10.4f, CN0 %5.2f, %5d, %5d\n", (gal_proc == 1) ? 'E' : 'G', prn2acq[prn_loop].prn, prn2acq[prn_loop].doppler + dopplerOffset, ratio, (int)peaks.idx1, interp, cn0, dopplerOffset, codeoff);
+            for (int pwri = 0; pwri < corrLength; pwri++) fprintf(fp_out, "%03d, %10.4lf\n", pwri, nci_sum[pwri]);
+            fflush(fp_out);
+          }
+            
+          bestRatio = ratio;
+          //printf("Acquired %s %d Doppler %f Hz CodePhase %f [ms] C/N0 %f dB-Hz ratio=%f\n", (gal_proc == 1) ? "GAL" : "GPS",
+          //  prn2acq[prn_loop].prn, -prn2acq[prn_loop].doppler, meas.sats[meas.num_sat].code_phase, meas.sats[meas.num_sat].cno, ratio * ratio);
+        } 
+        rewind(fp_1bitcsv);
+      } // for codeoff
+      //div *= 2;
+      rewind(fp_1bitcsv);
+    } // for doppler
+#ifdef COUNT_OPERATIONS
+    fprintf(fpResults, "%c%02d, %d, %3d, %2.0lf, %3d, %3d, %3d, %3d\n",
+      meas.sats[meas.num_sat].constellation == SYS_GPS ? 'G' : 'E',
+      meas.sats[meas.num_sat].prn,
+      meas.sats[meas.num_sat].signal,
+      dopplerUncertainty,
+      div,
+      mixcount,
+      interpcount,
+      fftcount,
+      ifftcount);
+#endif
+
+    printf("Avail PRN %c%02d doppler %6.0f ratio %5.2f loc %5d CN0 %5.2f  %5d %5d \n", (gal_proc == 1) ? 'E' : 'G', 
+      meas.sats[meas.num_sat].prn, meas.sats[meas.num_sat].doppler, bestRatio,(int) (meas.sats[meas.num_sat].code_phase *msps), meas.sats[meas.num_sat].cno, bestDoppOffset, bestCodeOffset);
+    if (bestRatio > 1.29) {
+      meas.num_sat++;
+    }
+  } // end for prn_loop
+  if (fp_out != NULL) fclose(fp_out);
+
+#ifndef COUNT_OPERATIONS
+  if (fpResults != NULL)
+  {
+    for (int imeas = 0; imeas < meas.num_sat; imeas++)
+      fprintf(fpResults, "%c%02d, %d, %04d, %9.3lf, %6.0lf, %5.2f, %.6lf, %10.3lf\n",
+        meas.sats[imeas].constellation == SYS_GPS ? 'G' : 'E',
+        meas.sats[imeas].prn,
+        meas.sats[imeas].signal,
+        week,
+        tow,
+        meas.sats[imeas].doppler,
+        meas.sats[imeas].ratio,
+        meas.sats[imeas].code_phase,
+        meas.sats[imeas].code_phase * SPEED_LIGHT * 0.001
+      );
+  }
+#endif
+
+  pc = strrchr(input, '/')+1;
+  strcpy_s(filename, pc);
+  *strrchr(filename, '.') = 0;
+  strcat_s(filename, ".msb");
+  printf("Writing %s\n", filename);
+  int num_bytes = write_msb(&meas, (char*)filename);
+  bb_meas_t check = { 0 };
+  FILE* test = NULL;
+  errno_t er2 = fopen_s(&test, filename, "rb");
+  uint8_t tbuff[128] = { 0 };
+  fread(tbuff, 1, num_bytes, test);
+  read_bb_msb(tbuff, num_bytes, &check);
+  fclose(test);
+
+ 
+  fclose(fp_1bitcsv); 
+  free(sampl); free(repli); free(up_samp); free(up_repli); free(up_prod); free(nci_sum); free(sum_prod);
+}
+/////////////////////////////////////////////////////////////////////////////
+void read_L1E1(char* input) {
+  FILE* fp_1bitcsv = NULL;
+  fopen_s(&fp_1bitcsv, input, "r");
+  if (fp_1bitcsv == NULL) {
+    fprintf(stderr, "Failed to open sample file %s\n", input);
+    return;
+  }
+  fseek(fp_1bitcsv, 0L, SEEK_END);
+  size_t bytes_to_read = ftell(fp_1bitcsv);
+  rewind(fp_1bitcsv);
+  FILE* fp_out = NULL; //output file
+
+#define SPC 2
+#define FFT_SIZE 16384 
+  //#define SAMP 10230 // for 1 ms at 10.23 MHz
+//#define SAMP (4092*4) // for 1 ms at 10.23 MHz
+//#define SAMP 16384
+//#define SAMP 15345
+  int msps = 4092;
+  if (optionMsps > 0)
+    msps = optionMsps;
+  // only 9 and 36 with q31; 10, 6 also works with float
+  //int prn = 36;// 6;// 6;// 36;// 9;// 36
+  //double doppler = -1*(1580 + 1e6 +2500);// E36:1580 E6: 1261 ; G10:-582, G32:1232
+
+  char filename[256];
+  strcpy_s(filename, input);
+  *strrchr(filename, '.') = 0;
+  strcat_s(filename, ".ast");
+  FILE* fpAssist = NULL;
+  fopen_s(&fpAssist, filename, "r");
+  if (fpAssist == NULL) {
+    fprintf(stderr, "Failed to open assitance file %s\n", filename);
+    return;
+  }
+
+  acq_struct prn2acq[40] = { 0 };
+  int cnt = 0;
+  char line[256];
+  /**/
+  bool hasQp = false;
+
+  while (fgets(line, sizeof(line), fpAssist) != NULL)
+  {
+    char c = line[0];
+    if (c == 'G')
+      prn2acq[cnt].constel = 1;
+    else if (c == 'E')
+      prn2acq[cnt].constel = 2;
+    else
+      continue;
+    sscanf_s(line + 1, "%d %lf", &prn2acq[cnt].prn, &prn2acq[cnt].doppler);
+    if (c == 'G' && !HasGPSL5(prn2acq[cnt].prn)) continue; // keep the same sats as qp testing
+    hasQp = (c == 'E') && HasE5QP(prn2acq[cnt].prn);
+    //if (!hasQp && SAMP < 10230) continue; // won't work
+    //if (!hasQp) continue; // only do QP
+
+    //prn2acq[cnt].doppler *= 1176.45 / 1575.42; // adjust to L5
+
+    cnt++;
+  }
+  fclose(fpAssist);
+
+  /////////////////////////////////////////////////////
+  int maxSampleLength = msps * 4; // allow for E1
+  int maxCorrLength = USE_FFT ? FFT_SIZE : maxSampleLength;
+
+
+  c32* sampl = (c32*)malloc(maxSampleLength * sizeof(c32));
+  c32* repli = (c32*)malloc(maxSampleLength * sizeof(c32));
+  c32* up_samp = (c32*)malloc(maxCorrLength * sizeof(c32));
+  c32* up_repli = (c32*)malloc(maxCorrLength * sizeof(c32));
+  c32* up_prod = (c32*)malloc(maxCorrLength * sizeof(c32));
+  c32* sum_prod = (c32*)malloc(maxCorrLength * sizeof(c32));
+  float* nci_sum = (float*)malloc(maxCorrLength * sizeof(float));
+
+  bb_meas_t meas;
+  memset(&meas, 0, sizeof(bb_meas_sat_t));
+
+  char* dateTimeStr = strchr(input, 'G'); // sample filename
+  int year, month, day, hour, minute;
+  double sec;
+  sscanf_s(dateTimeStr, "G_%d_%d_%d_%d_%d_%lf", &year, &month, &day, &hour, &minute, &sec);
+  double gpstime = compute_gps_time(year, month, day, hour, minute, sec);
+  meas.time = (uint64_t)gpstime;
+  meas.sec = gpstime - (uint64_t)gpstime;
+  int week = (int)(gpstime / 604800.0);
+  double tow = fmod(gpstime, 604800.0);
+
+  char* pc = 0;
+  if (0)
+  {
+    pc = strrchr(input, '/') + 1;
+    strcpy_s(filename, pc);
+    *strrchr(filename, '.') = 0;
+    strcat_s(filename, "-pwr.txt");
+    errno_t er = fopen_s(&fp_out, filename, "w");
+    if (er != 0 || fp_out == NULL) { fprintf(stderr, "Failed to open output file\n"); return; }
+  }
+
+  ///////////////////// main prn loop ////////////////////////////////
+  for (int prn_loop = 0; prn_loop < cnt; prn_loop++) {
+    int prn = prn2acq[prn_loop].prn;
+    int gal_proc = (prn2acq[prn_loop].constel == 2) ? 1 : 0;
+    hasQp = gal_proc && HasE5QP(prn);
+    //EDif (gal_proc == 0 || hasQp == false) { continue; }
+    //EDif ( (prn2acq[prn_loop].prn == 15 || prn2acq[prn_loop].prn == 34) == false) { continue; }
+    //printf("Processing PRN %d Doppler %f constel %d \n", prn, doppler, prn2acq[prn_loop].constel);
+    printf("Processing %c%02d%c around %.1lf Hz\n", gal_proc ? 'E' : 'G', prn, gal_proc ? (hasQp ? 'q' : 'a') : ' ', prn2acq[prn_loop].doppler);
+    int msps = 4092;
+    int codeRate = 1023;
+    int spc = msps / codeRate;
+    int codeLengthMs = (gal_proc) ? 4 : 1;
+    int codeLength = codeRate * codeLengthMs;
+
+    int mixcount = 0;
+    int fftcount = 0;
+    int ifftcount = 0;
+    int interpcount = 0;
+
+    int sampLength = codeLength * spc;
+    int corrLength = sampLength;
+    if (USE_FFT)
+    {
+      // find the next power of 2
+      for (corrLength = 128; corrLength < sampLength; corrLength *= 2)
+        ;
+      //printf("fftSize = %d\n", corrLength);
+    }
+
+
+    int LEN = sampLength;
+    int msSkip = 0; // skip this many ms worth of samples
+    int msUse = 20; // use this many ms of samples
+    int msCoherent = 4; // number of ms to use for coherent integration
+    if (optionMsCoh > 0)
+      msCoherent = optionMsCoh;
+
+    int dopplerStep = 500 / msCoherent;
+    //dopplerStep = 200;
+    int tc = msCoherent / codeLengthMs; // number of code lengths for coherent integration
+
+    memset(sampl, 0, sizeof(c32) * sampLength);
+    memset(repli, 0, sizeof(c32) * sampLength);
+    memset(up_samp, 0, sizeof(c32) * corrLength);
+    memset(up_repli, 0, sizeof(c32) * corrLength);
+    memset(up_prod, 0, sizeof(c32) * corrLength);
+    memset(sum_prod, 0, sizeof(c32) * corrLength);
+
+    int dopplerOffset;
+    int dopplerUncertainty = 3 * dopplerStep;
+    if (optionDUnc >= 0) dopplerUncertainty = optionDUnc;
+    double ratio = 0.0;
+    double bestRatio = 0.0;
+    int bestCodeOffset = 0.0;
+    int bestDoppOffset = 0.0;
+    int codeoff = 0;
+    double div = 1;
+    if (gal_proc) div = 4;
+
+    // Generate code replica
+
+    if (gal_proc) {
+      //synth_e1b_prn(prn, 0, sampLength, repli, spc, 0);
+      int8_t* prn_code = (int8_t*)malloc(codeLength * sizeof(int8_t));
+      GetE1BCode(prn, 1, prn_code);
+      for (int sampi = 0; sampi < sampLength; sampi++)
+        repli[sampi].r = prn_code[sampi / spc];
+      free(prn_code);
+    }
+    else {
+      //synth_gps_prn(prn, 0, sampLength, repli, spc, 0);
+      int* prn_code = (int*)malloc(codeLength * sizeof(int));
+      getCode(codeLength, 1, prn, prn_code);
+      for (int sampi = 0; sampi < sampLength; sampi++)
+        repli[sampi].r = prn_code[sampi / spc];
+      free(prn_code);
+
+    }
+
+    if (USE_FFT)
+    {
+      //up_sample_10k_to_16k(repli, up_repli);
+      //memcpy(repli, up_repli, sizeof(c32)* sampLength);
+      memset(up_repli, 0, sizeof(c32) * corrLength);
+      //memcpy(up_repli, repli, sampLength);
+      //up_sample_N_to_M(repli, sampLength, up_repli, corrLength);
+      upsample_linear_c32(repli, sampLength, up_repli, corrLength, false);
+      interpcount++;
+
+      fft_c32(corrLength, up_repli, true); // forward FFT 
+      fftcount++;
+    }
+
+
+    //for (codeoff = bestCodeOffset - (sampLength/div); codeoff <= (sampLength/div); codeoff += (sampLength/(2*div))) // try different code offsets
+    for (codeoff = 0; codeoff < sampLength; codeoff += sampLength / div) // try different code offsets
+    {
+      for (dopplerOffset = -dopplerUncertainty; dopplerOffset <= dopplerUncertainty; dopplerOffset += dopplerStep)
+      {
+        //double doppler = -1 * (prn2acq[prn_loop].doppler + 1e6 + 4100 + dopplerOffset);
+        double doppler = -1 * (prn2acq[prn_loop].doppler + 4100 * 1575.42 / 1176.45 + dopplerOffset);
+
+
+        char* context = nullptr;
+        // read in the csv data
+        //char line[256];
+        int NCI = msUse / msCoherent;
+
+        if (msSkip > 0)
+        {
+          // skip samples at the beginning of the file
+          for (int skip = 0; skip < msSkip * msps; skip++)
+            fgets(line, sizeof(line), fp_1bitcsv);
+        }
+        if (codeoff > 0)
+        {
+          NCI--; // we'll run out of space if there's a code offset because we are skipping samples to do this
+          for (int skip = 0; skip < codeoff; skip++)
+            fgets(line, sizeof(line), fp_1bitcsv);
+        }
+
+        ///////////// NCI loop /////////////////////////////////////////////
+        memset(nci_sum, 0, sizeof(float) * corrLength);
+        //double upsampSecs = 1.0 / (msps * 1000.0 * corrLength / sampLength);
+        //double dphi = 2.0 * PI_F64 * doppler * upsampSecs;
+        double sampSecs = 1.0 / (msps * 1000.0);
+        double dphi = 2.0 * PI_F64 * doppler * sampSecs;
+        if (dphi < 0) dphi += 2.0 * PI_F64;
+        uint32_t totalSampleCount = 0;
+        for (int nci = 0; nci < NCI; nci++)
+        {
+          memset(sampl, 0, sizeof(c32) * sampLength);
+          memset(up_samp, 0, sizeof(c32) * corrLength);
+          memset(up_prod, 0, sizeof(c32) * corrLength);
+          memset(sum_prod, 0, sizeof(c32) * corrLength);
+          for (int tci = 0; tci < tc; tci++)
+          {
+            int idx = 0;
+            /*
+            while (!feof(fp_1bitcsv)) {
+              if (fgets(line, sizeof(line), fp_1bitcsv) != NULL) {
+                char* token = strtok_s(line, ",", &context);
+                token = strtok_s(NULL, ",", &context);
+                if (token != NULL) {
+                  sampl[idx].r = (float)atof(token);
+                  token = strtok_s(NULL, ",", &context);
+                  if (token != NULL) { sampl[idx].i = (float)atof(token); }
+                }
+                idx++;
+                if ((idx != 0) && (idx % LEN == 0)) { break; }
+              }
+            }
+            // upsample
+            c32* temp_up_samp = (c32*)malloc(maxCorrLength * sizeof(c32));
+            memset(temp_up_samp, 0, sizeof(c32) * corrLength);
+            //memcpy(temp_up_samp, sampl, sampLength);
+            //up_sample_N_to_M(sampl, sampLength, temp_up_samp, corrLength);
+            upsample_linear_c32(sampl, sampLength, temp_up_samp, corrLength, false);
+
+            // wipe Doppler
+            for (int sampi = 0; sampi < corrLength; sampi++)
+            {
+              c32 phase;
+              double phi = fmod(dphi * totalSampleCount,2*PI_F64);
+              phase.r = cos(phi);
+              phase.i = sin(phi);
+              c32 tempsamp1 = mult(temp_up_samp[sampi], phase);
+              c32 tempsamp2 = add(up_samp[sampi], tempsamp1);
+              up_samp[sampi] = tempsamp2;
+              totalSampleCount++;
+            }
+            free(temp_up_samp);
+            */
+            while (!feof(fp_1bitcsv)) {
+              if (fgets(line, sizeof(line), fp_1bitcsv) != NULL) {
+                char* token = strtok_s(line, ",", &context);
+                token = strtok_s(NULL, ",", &context);
+                if (token != NULL) {
+                  sampl[idx].r = (float)atof(token);
+                  token = strtok_s(NULL, ",", &context);
+                  if (token != NULL) { sampl[idx].i = (float)atof(token); }
+                }
+                c32 phase;
+                double phi = fmod(dphi * totalSampleCount, 2 * PI_F64);
+                phase.r = cos(phi);
+                phase.i = sin(phi);
+                c32 tempsamp1 = mult(sampl[idx], phase);
+                c32 tempsamp2 = add(up_samp[idx], tempsamp1);
+                up_samp[idx] = tempsamp2;
+                totalSampleCount++;
+
+                idx++;
+
+                if ((idx != 0) && (idx % LEN == 0)) { break; }
+              }
+            }
+            mixcount++;
+
+          }
+          if (USE_FFT)
+          {
+            /*
+            // note repli has been FFTed already
+            fft_c32(corrLength, up_samp, true); // forward FFT
+            for (int k = 0; k < corrLength; k++) { up_prod[k] = mult(up_samp[k], get_conj(up_repli[k])); }
+            fft_c32(corrLength, up_prod, false); // IFFT
+            for (int i = 0; i < corrLength; i++) { nci_sum[i] += mag(up_prod[i]); }
+            */
+
+            // upsample
+            c32* temp_up_samp = (c32*)malloc(maxCorrLength * sizeof(c32));
+            memset(temp_up_samp, 0, sizeof(c32) * corrLength);
+            //memcpy(temp_up_samp, up_samp, sampLength);
+            //up_sample_N_to_M(up_samp, sampLength, temp_up_samp, corrLength);
+            upsample_linear_c32(up_samp, sampLength, temp_up_samp, corrLength, false);
+            interpcount++;
+            fftcount++;
+            ifftcount++;
+
+            // note repli has been FFTed already
+            fft_c32(corrLength, temp_up_samp, true); // forward FFT
+            for (int k = 0; k < corrLength; k++) { up_prod[k] = mult(temp_up_samp[k], get_conj(up_repli[k])); }
+            fft_c32(corrLength, up_prod, false); // IFFT
+            for (int i = 0; i < corrLength; i++) { nci_sum[i] += mag(up_prod[i]); }
+            free(temp_up_samp);
+
           }
           else
           {
@@ -1468,7 +2019,7 @@ void read_L5E5AE5QP(char* input) {
 
         top2_pks peaks;
         //fprintf(fp_out, "%c%02d %6.0f %5d %5d\n", (gal_proc == 1) ? 'E' : 'G', prn2acq[prn_loop].prn, prn2acq[prn_loop].doppler + dopplerOffset, dopplerOffset, codeoff);
-        find_top2_peaks_real(nci_sum, corrLength, 3, &peaks, fp_out);
+        find_top2_peaks_real(nci_sum, corrLength, 10, &peaks, fp_out);
         double cn0 = compute_snr_real(nci_sum, corrLength, peaks) + 35.0;
         double early = nci_sum[peaks.idx1 - 1], prompt = nci_sum[peaks.idx1], late = nci_sum[peaks.idx1 + 1];
         double interp = InterpolateCodePhase(peaks.idx1, early * early, prompt * prompt, late * late) * sampLength / corrLength;
@@ -1479,42 +2030,78 @@ void read_L5E5AE5QP(char* input) {
           interp -= sampLength;
 
         ratio = peaks.ratio;
-        //printf("Avail PRN %c%02d doppler %6.0f ratio %5.2f loc %5d interp %10.4f CN0 %5.2f %5d %5d %c\n", 
-        // (gal_proc == 1) ? 'E' : 'G', prn2acq[prn_loop].prn, prn2acq[prn_loop].doppler + dopplerOffset, ratio, (int)peaks.idx1, interp, cn0, dopplerOffset, codeoff, (ratio > bestRatio) ? '*' : ' ');
+        printf("Avail PRN %c%02d doppler %6.0f ratio %5.2f loc %5d interp %10.4f CN0 %5.2f %5d %5d %c\n",
+          (gal_proc == 1) ? 'E' : 'G', prn2acq[prn_loop].prn, prn2acq[prn_loop].doppler + dopplerOffset, ratio, (int)peaks.idx1, interp, cn0, dopplerOffset, codeoff, (ratio > bestRatio) ? '*' : ' ');
 
         if (ratio > bestRatio) {
           meas.sats[meas.num_sat].prn = prn2acq[prn_loop].prn;
           meas.sats[meas.num_sat].code_phase = float(interp / msps); // [ms] QP will have some offset of 2/31 segments
           meas.sats[meas.num_sat].doppler = -(prn2acq[prn_loop].doppler + dopplerOffset);
           meas.sats[meas.num_sat].cno = (float)cn0;
+          meas.sats[meas.num_sat].ratio = (float)ratio;
           meas.sats[meas.num_sat].constellation = gal_proc ? SYS_GAL : SYS_GPS;
+          meas.sats[meas.num_sat].signal = gal_proc ? SIGNAL_E1 : SIGNAL_L1;
+          if ((optionSig & OPTION_QX) && gal_proc && HasE5QP(prn))
+            meas.sats[meas.num_sat].signal = SIGNAL_E5aQP;
           bestDoppOffset = dopplerOffset;
           bestCodeOffset = codeoff;
+
           if (fp_out != NULL)
           {
             fprintf(fp_out, "PRN %c%02d, doppler %6.0f, ratio %5.2f, loc %5d, interp %10.4f, CN0 %5.2f, %5d, %5d\n", (gal_proc == 1) ? 'E' : 'G', prn2acq[prn_loop].prn, prn2acq[prn_loop].doppler + dopplerOffset, ratio, (int)peaks.idx1, interp, cn0, dopplerOffset, codeoff);
             for (int pwri = 0; pwri < corrLength; pwri++) fprintf(fp_out, "%03d, %10.4lf\n", pwri, nci_sum[pwri]);
             fflush(fp_out);
           }
-            
+
           bestRatio = ratio;
           //printf("Acquired %s %d Doppler %f Hz CodePhase %f [ms] C/N0 %f dB-Hz ratio=%f\n", (gal_proc == 1) ? "GAL" : "GPS",
           //  prn2acq[prn_loop].prn, -prn2acq[prn_loop].doppler, meas.sats[meas.num_sat].code_phase, meas.sats[meas.num_sat].cno, ratio * ratio);
-        } 
+        }
         rewind(fp_1bitcsv);
       } // for codeoff
       //div *= 2;
       rewind(fp_1bitcsv);
     } // for doppler
-    printf("Avail PRN %c%02d doppler %6.0f ratio %5.2f loc %5d CN0 %5.2f  %5d %5d \n", (gal_proc == 1) ? 'E' : 'G', 
-      meas.sats[meas.num_sat].prn, meas.sats[meas.num_sat].doppler, bestRatio,(int) (meas.sats[meas.num_sat].code_phase *msps), meas.sats[meas.num_sat].cno, bestDoppOffset, bestCodeOffset);
+#ifdef COUNT_OPERATIONS
+    fprintf(fpResults, "%c%02d, %d, %3d, %2.0lf, %3d, %3d, %3d, %3d\n",
+      meas.sats[meas.num_sat].constellation == SYS_GPS ? 'G' : 'E',
+      meas.sats[meas.num_sat].prn,
+      meas.sats[meas.num_sat].signal,
+      dopplerUncertainty,
+      div,
+      mixcount,
+      interpcount,
+      fftcount,
+      ifftcount);
+#endif
+
+    printf("Avail PRN %c%02d doppler %6.0f ratio %5.2f loc %5d CN0 %5.2f  %5d %5d \n", (gal_proc == 1) ? 'E' : 'G',
+      meas.sats[meas.num_sat].prn, meas.sats[meas.num_sat].doppler, bestRatio, (int)(meas.sats[meas.num_sat].code_phase * msps), meas.sats[meas.num_sat].cno, bestDoppOffset, bestCodeOffset);
     if (bestRatio > 1.29) {
       meas.num_sat++;
     }
   } // end for prn_loop
   if (fp_out != NULL) fclose(fp_out);
 
-  pc = strrchr(input, '/')+1;
+#ifndef COUNT_OPERATIONS
+  if (fpResults != NULL)
+  {
+    for (int imeas = 0; imeas < meas.num_sat; imeas++)
+      fprintf(fpResults, "%c%02d, %d, %04d, %9.3lf, %6.0lf, %5.2f, %.6lf, %10.3lf\n",
+        meas.sats[imeas].constellation == SYS_GPS ? 'G' : 'E',
+        meas.sats[imeas].prn,
+        meas.sats[imeas].signal,
+        week,
+        tow,
+        meas.sats[imeas].doppler,
+        meas.sats[imeas].ratio,
+        meas.sats[imeas].code_phase,
+        meas.sats[imeas].code_phase * SPEED_LIGHT * 0.001
+      );
+  }
+#endif
+
+  pc = strrchr(input, '/') + 1;
   strcpy_s(filename, pc);
   *strrchr(filename, '.') = 0;
   strcat_s(filename, ".msb");
@@ -1528,9 +2115,15 @@ void read_L5E5AE5QP(char* input) {
   read_bb_msb(tbuff, num_bytes, &check);
   fclose(test);
 
- 
-  fclose(fp_1bitcsv); 
-  free(sampl); free(repli); free(up_samp); free(up_repli); free(up_prod); free(nci_sum); free(sum_prod);
+
+  fclose(fp_1bitcsv);
+  free(up_samp);
+  free(sampl);
+  free(repli);
+  free(up_repli);
+  free(up_prod);
+  free(nci_sum);
+  free(sum_prod);
 }
 
 void read_L1(char* input, TestCase test_case) {
@@ -2598,6 +3191,34 @@ int main(int argc,char* argv[])
 //#define DO_Q31_RADIX2 
 //#define DO_Q31_RADIX4
 
+  for (int argi = 1; argi < argc; argi++)
+  {
+    if (strcmp(argv[argi], "L1") == 0) optionSig |= OPTION_L1;
+    if (strcmp(argv[argi], "E1") == 0) optionSig |= OPTION_E1;
+    if (strcmp(argv[argi], "L5") == 0) optionSig |= OPTION_L5;
+    if (strcmp(argv[argi], "E5") == 0) optionSig |= OPTION_E5a;
+    if (strcmp(argv[argi], "QP") == 0) optionSig |= OPTION_QP;
+    if (strcmp(argv[argi], "QX") == 0) optionSig |= OPTION_QX;
+
+    if (strcmp(argv[argi], "mscoh") == 0)
+    {
+      argi++; 
+      optionMsCoh = atoi(argv[argi]);
+    }
+
+    if (strcmp(argv[argi], "msps") == 0)
+    {
+      argi++;
+      optionMsps = atoi(argv[argi]);
+    }
+
+    if (strcmp(argv[argi], "dunc") == 0)
+    {
+      argi++;
+      optionDUnc = atoi(argv[argi]);
+    }
+  }
+
 
   if (0) {
     // set to 1 above if need to recalculate some of the twiddleCoefs
@@ -2626,6 +3247,7 @@ int main(int argc,char* argv[])
   }
 
   if (1) {
+
     // G_2025_09_03_23_04_45.ors G_2025_09_03_23_04_56.ors G_2025_09_03_23_05_33.ors G_2025_09_03_23_04_56.ors G_2025_09_03_23_12_45.ors G_2025_09_03_23_19_10.ors
     char line[256] = { 0 };
     char path[256] = { 0 };
@@ -2639,17 +3261,25 @@ int main(int argc,char* argv[])
     //const char* folder = "C:/work/support/esa/qp/data/t12/2026-04-07/L5_05_87";
     //const char* folder = "C:/work/support/esa/qp/data/t12/2026-04-07/L5-1_05_87";
     //const char* folder = ".";
+    sprintf_s(path, 256, "%s/results.csv", folder);
+    errno_t er =  fopen_s(&fpResults, path, "w");
     sprintf_s(path, 256, "%s/csvFiles.txt", folder);
     FILE* fp_in = NULL; //output file
-    errno_t er = fopen_s(&fp_in, path, "r");
+    er = fopen_s(&fp_in, path, "r");
     while (fgets(line, sizeof(line), fp_in)) {
       *strchr(line, '\n') = 0;
       sprintf_s(path, 256, "%s/%s", folder, line);
       printf("Processing %s\n", path);
       //read_E5A(path);
-      read_L5E5AE5QP(path);
+      if (optionSig & (OPTION_L1 | OPTION_E1))
+        read_L1E1(path);
+      else
+        read_L5E5AE5QP(path);
+      if (fpResults != NULL) fflush(fpResults);
+      break;
     }
     if (fp_in != NULL) { fclose(fp_in); }
+    if (fpResults != NULL) { fclose(fpResults); }
 
     //read_ors((char*)"C:/work/Baseband/TestData/100ms/bw25/G_2025_09_03_23_05_33.ors");
     //read_ors((char*)"C:/work/Baseband/TestData/100ms/bw25/G_2025_09_03_23_04_56.ors");
