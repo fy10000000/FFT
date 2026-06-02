@@ -3255,12 +3255,12 @@ int main(int argc,char* argv[])
     //const char* folder = "C:/work/support/esa/qp/data/t11/2026-04-01/L5-1_16";
     //const char* folder = "C:/work/support/esa/qp/data/t11/2026-04-01/L5-1_10";
     //const char* folder = "C:/work/baseband/utilities/2026-04-07/L5-1_10"; //old
-    const char* folder = "C:/work/Baseband/Utilities/2026-04-20/L5_10_87";  
+    //const char* folder = "C:/work/Baseband/Utilities/2026-04-20/L5_10_87";  
     //const char* folder = "C:/work/support/esa/qp/data/t12/2026-04-07/L5-5_05_42";
     //const char* folder = "C:/work/support/esa/qp/data/t12/2026-04-07/L5_05_42";
     //const char* folder = "C:/work/support/esa/qp/data/t12/2026-04-07/L5_05_87";
     //const char* folder = "C:/work/support/esa/qp/data/t12/2026-04-07/L5-1_05_87";
-    //const char* folder = ".";
+    const char* folder = ".";
     sprintf_s(path, 256, "%s/results.csv", folder);
     errno_t er =  fopen_s(&fpResults, path, "w");
     sprintf_s(path, 256, "%s/csvFiles.txt", folder);
