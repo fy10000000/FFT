@@ -1301,6 +1301,26 @@ void GetE5AICode(const int prn, int spc, int8_t Code[])
   }
 }
 
+void GetE5A_QPCode(const int prn, int spc, int8_t Code[])
+{
+  int i;
+
+  int8_t* cp = &Code[0];
+  const int8_t* codebits = E5A_QP[prn - 1];
+
+  for (i = 0; i < E5_QP_CODE_LEN; i++)
+  {
+    int8_t val = ((codebits[i / 8] >> (7 - i % 8)) & 0x01) ? -1 : +1;
+    //int8_t val = (codebits[i / 8] & (0x80 >> (i % 8))) ? 1 : -1;
+    int j = spc;
+    while (j--)
+    {
+      *cp = val;
+      cp++;
+    }
+  }
+}
+
 
 // -------------------------------
 // Signal synthesis for two PRNs (PRN2 and PRN4) into one complex baseband stream.

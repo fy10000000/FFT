@@ -1347,18 +1347,18 @@ void read_L5E5AE5QP(char* input) {
       if (optionMsCoh > 0)
         msCoh = optionMsCoh;
       tc = msCoh * 31 / 2; // n*31/2 for n ms
-      dopplerStep = 500 / (tc * 2.0/ 31);
+      dopplerStep = 500 / (tc * 2.0 / 31);
     }
     //dopplerStep = 200;
-    
 
-    memset(sampl   , 0, sizeof(c32) * sampLength);
-    memset(repli   , 0, sizeof(c32) * sampLength);
-    memset(up_samp, 0, sizeof(c32)* corrLength);
+
+    memset(sampl,    0, sizeof(c32) * sampLength);
+    memset(repli,    0, sizeof(c32) * sampLength);
+    memset(up_samp,  0, sizeof(c32) * corrLength);
     memset(up_repli, 0, sizeof(c32) * corrLength);
-    memset(up_prod , 0, sizeof(c32) * corrLength);
+    memset(up_prod,  0, sizeof(c32) * corrLength);
     memset(sum_prod, 0, sizeof(c32) * corrLength);
-    
+
     int dopplerOffset;
     int dopplerUncertainty = 3 * dopplerStep;
     if (optionDUnc >= 0) dopplerUncertainty = optionDUnc;
