@@ -2830,7 +2830,7 @@ void test_quasi_pilot_330(results_s* results) {
   int found[50] = { 0 };
   int window = 70; //  window/2 ms either side of center 
   int nci = 1100;
-#define SPC 2 // samples per chip was 3
+#define SPC 1 // samples per chip was 3
   int   len = E5_QP_CODE_LEN * SPC * nci; // 4 samples per chip and 100 ms
   int   c_phase = 300;// 1;// 329; // which chip to set the code phase to
   int   prn1 = 14, prn2 = 18;
