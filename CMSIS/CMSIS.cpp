@@ -16,7 +16,7 @@
 #include "gnss_codes.h"
 #include "up_sample.h"
 #include "msb_funcs.h"
-
+#include "LabSat.h"
 #include "string_helpers.h"
 
 #include <complex> // not to be confused with complex.h
@@ -2119,6 +2119,40 @@ void test_quasi_pilot3() {
   free(out);
 }
 
+void parseLabsat() {
+  IniParser ini;
+  if (!ini.load("C:/work/X1_L1_X5_20260618T050502Z.ini"))
+    throw std::runtime_error("Failed to load INI");
+
+  LabSatConfig cfg;
+  cfg.channels = std::stoi(ini.get("config", "CHN"));
+  cfg.quantization = std::stoi(ini.get("config", "QUA"));
+  cfg.quantA = std::stoi(ini.get("config", "QUAN_A"));
+  cfg.quantB = std::stoi(ini.get("config", "QUAN_B"));
+  cfg.sampleRate = std::stoi(ini.get("config", "SMP"));
+  cfg.shiftFormat = std::stoi(ini.get("config", "SFT"));
+
+  cfg.print();
+
+  LabSat4Parser parser("C:/work/X1_L1_X5_20260618T050502Z-short.ls4", cfg);
+
+  std::vector<std::complex<float>> chA, chB;
+
+  const size_t blockSize = 16384;
+
+  while (parser.readSamples(chA, chB, blockSize))
+  {
+    for (size_t i = 0; i < chA.size(); ++i)
+    {
+      std::cout
+        << chA[i].real() << ","
+        << chA[i].imag() << ","
+        << chB[i].real() << ","
+        << chB[i].imag() << "\n";
+    }
+  }
+}
+
 /**
  * Main for testing and developing under Visual Studio 2022
  */
@@ -2138,6 +2172,10 @@ int main(int argc,char* argv[])
 //#define DO_Q31_RADIX2 
 //#define DO_Q31_RADIX4
 
+
+  if (1) {
+    parseLabsat();
+  }
 
   if (0) {
     // set to 1 above if need to recalculate some of the twiddleCoefs

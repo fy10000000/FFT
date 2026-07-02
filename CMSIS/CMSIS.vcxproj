@@ -433,6 +433,7 @@
     <ClInclude Include="..\Include\dsp\utils.h" />
     <ClInclude Include="..\Include\dsp\window_functions.h" />
     <ClInclude Include="..\Include\gnss_codes.h" />
+    <ClInclude Include="..\Include\LabSat.h" />
     <ClInclude Include="..\Include\msb_funcs.h" />
     <ClInclude Include="..\Include\string_helpers.h" />
     <ClInclude Include="..\Include\up_sample.h" />
