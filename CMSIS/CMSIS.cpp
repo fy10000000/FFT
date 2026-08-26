@@ -365,25 +365,27 @@ void armBitRevTableCalculator(void) {
   }
 }
 
-bool findMax(double input) {
-  const int MAX_VALUES = 21;
+bool findMax(double input, double thresh = 10000, int queue_size = 21) {
+  #define MAX_VALUES  21
   static double values[MAX_VALUES];
+  if (queue_size > MAX_VALUES) { printf("invalid param queue_size=%d \n", queue_size); exit(0); }
   static int num_values = 0;
-  if (num_values < MAX_VALUES) {
+  if (num_values < queue_size) {
     values[num_values++] = input;
   }
   else {
-    for (int i = 0; i < MAX_VALUES - 1; i++) {
+    for (int i = 0; i < queue_size - 1; i++) {
       values[i] = values[i + 1]; // shift values left
     }
-    values[MAX_VALUES - 1] = input;
+    values[queue_size - 1] = input;
   }
-  bool primed = (num_values == MAX_VALUES);
+  bool primed = (num_values == queue_size);
   bool is_max = false;
+  int mult = queue_size == 215 ? 5 :1;
   if (primed) {
     //for (int i = 0; i < MAX_VALUES; i++) {  printf("%f,", values[i]); } printf("\n");
-    if (values[0] < values[5] && values[5] < values[10] && values[10] > values[15] && values[15] > values[20]) {
-      if (values[10] > 10000) { //was 16000
+    if (values[0] < values[1 * mult] && values[1 * mult] < values[2 * mult] && values[2 * mult] > values[3*mult] && values[3*mult] > values[4*mult]) {
+      if (values[2*mult] > thresh) { //was 16000
         is_max = true;
       }
     }
@@ -1748,6 +1750,225 @@ void shiftDown(c32* array,int gap, int size) {
   }
 }
 
+void gps_data_bits(results_s* results) {
+  srand((unsigned int)time(NULL)); // randomise seed
+  // Test the quasi pilot generation
+ 
+  int min_idx = 0;
+  int loc_cnt = 0;
+  float min_val = 1e5;
+
+  int locations[50] = { 20, 40, 60, 80, 100, 120, 140, 160, 180, 200, 220, 240, 260, 280 };
+  int found[50] = { 0 };
+  int window = 10; //  window/2 ms either side of center 
+  int nci = 300;
+  double chipping_rate = 1.023e6; // chips per sec
+#define SPC 4 // samples per chip
+#define FFT_DB_SIZE 1024 * 4 // data bit size
+#define FFT_DB_CODE_LEN 1023
+  int len = 1023 * SPC * nci; // 4 samples per chip and 100 ms
+  int c_phase = 3333; // which chip to set the code phase to
+  int prn1 = 4, prn2 = 8;
+  float dop1 = 2000, dop2 = -3000;
+  float dop_error = 250;// 10; // full 250 Hz error in wipeoff
+  float dop_err_rate = 0.0;// 0.6;//Hz per ms
+  float pwr = -128.5;// -129.5;// -128.5;// -128.75;// dBm signal power
+  float N0 = -174.0 + 2.5;// dBm/Hz thermal noise ktb density + noise figure
+  float cn0 = pwr - N0; // dBm/Hz pgae 14 Galileo_OS_SIS_ICD_v2.2
+  float sigma = 8;// sqrt((1.0 * chipping_rate * SPC) / (2.0f * pow(10.0, cn0 / 10.0)));
+  //printf("sigma %f \n", sigma);
+  //sigma = 0.1;// 12.7;// 15.98;// 3.5;// 3.5; // noise level 15->6*31
+  int   num_errors = 0; 
+  c32* out = (c32*)malloc(len * sizeof(c32));
+  c32* cache = (c32*)malloc(FFT_DB_SIZE * window * sizeof(c32));
+  memset(cache, 0, sizeof(c32) * FFT_DB_SIZE * window);
+  if (out == NULL) { fprintf(stderr, "Memory allocation failed for 100 ms I&Q array.\n"); return; }
+  int* prn_c1 = (int*)malloc(sizeof(int) * FFT_DB_SIZE * SPC);
+  int* prn_c2 = (int*)malloc(sizeof(int) * FFT_DB_SIZE * SPC);
+  int* prn_c3 = (int*)malloc(sizeof(int) * FFT_DB_SIZE * SPC);
+  c32* replica = (c32*)malloc(sizeof(c32) * FFT_DB_SIZE * SPC);
+  //float* nci_sum = (float*)malloc(sizeof(float) * FFT_QP_SIZE);
+  memset(prn_c1, 0, sizeof(int) * FFT_DB_SIZE * SPC);
+  memset(prn_c2, 0, sizeof(int) * FFT_DB_SIZE * SPC);
+  memset(replica, 0, sizeof(c32) * FFT_DB_SIZE * SPC);
+  getCode(FFT_DB_CODE_LEN, SPC, prn1, prn_c1);
+  getCode(FFT_DB_CODE_LEN, SPC, prn2, prn_c2);
+  memcpy(prn_c3, prn_c1, sizeof(int) * FFT_DB_SIZE * SPC); // unshifted version for later
+
+  make_replica(prn_c3, replica, 0.0, FFT_DB_CODE_LEN * SPC, chipping_rate * SPC);
+  rotate_fwd(prn_c1, FFT_DB_CODE_LEN * SPC, c_phase); // now advance code-phase  
+
+  int sign2 = 1; // sign applied a posteriori after finding BTT
+  int num_btts = -1;
+  for (int i = 0; i < nci; i++) {
+    for (int j = 0; j < 50; j++) {
+      if (locations[j] == i) { sign2 *= -1; num_btts++;  break; } // change sign at the bit transitions
+    }
+    // offset doppler by 250 Hz and add a residual doppler ramp of 0.1 Hz per ms
+    mix_two_prns_oversampled_per_prn(prn_c1, prn_c2, dop1 + i * dop_err_rate, dop2 - i * dop_err_rate,
+      PI / 2, 0, &out[FFT_DB_CODE_LEN * SPC * i], FFT_DB_CODE_LEN * SPC, chipping_rate * SPC, sigma, sign2); // was 2.31 for -128.5 dBm 3.1 for -131.5
+  }
+  free(prn_c1); free(prn_c2);
+
+  // subtract the Doppler from the samples
+  c32 phase;
+  double dphi = 2.0 * PI_F64 * -dop1 / (chipping_rate * SPC); //  radians per sample
+  for (int i = 0; i < len; i++) {
+    double phi = fmod(dphi * i, 2 * PI_F64);
+    phase.r = cos(phi);
+    phase.i = sin(phi);
+    out[i] = mult(out[i], phase);
+  }
+
+  // Compute circular correlation C_k(τ) = FFT^-1{ FFT[signal] · conj(FFT[replica]) }.
+  c32* fft_repl = (c32*)malloc(sizeof(c32) * FFT_DB_SIZE);
+  c32* fft_data = (c32*)malloc(sizeof(c32) * FFT_DB_SIZE);
+  c32* fft_sum  = (c32*)malloc(sizeof(c32) * FFT_DB_SIZE);
+  c32* fft_prod = (c32*)malloc(sizeof(c32) * FFT_DB_SIZE);
+  memset(fft_repl, 0, sizeof(c32) * FFT_DB_SIZE);
+  if (fft_data == NULL || fft_repl == NULL) { printf("Error allocating fft_data or fft_prod\n"); return; }
+
+  memcpy(fft_repl, replica, sizeof(c32) * FFT_DB_CODE_LEN);
+  free(replica);
+  fft_c32(FFT_DB_SIZE, fft_repl, true);
+  auto start = std::chrono::high_resolution_clock::now();////////////////////////////////////////
+  int last_location = 0;
+  int cptr = 0;
+  for (int center = window / 2; center <= nci - window / 2 - 2; center++) {
+    if (center == window / 2) { // priming cache speeds things up 4x
+      for (int windex = center - window / 2; windex < center + window / 2; windex += 1) {
+        memcpy(&cache[cptr * FFT_DB_SIZE], &out[FFT_DB_CODE_LEN * SPC * windex], sizeof(c32) * SPC * (FFT_DB_CODE_LEN));
+        memcpy(&cache[cptr * FFT_DB_SIZE + FFT_DB_CODE_LEN * SPC], &out[FFT_DB_CODE_LEN * SPC * windex], sizeof(c32) * (FFT_DB_SIZE - SPC * FFT_DB_CODE_LEN));
+        fft_c32(FFT_DB_SIZE, &cache[cptr * FFT_DB_SIZE], true); // forward FFT
+        cptr = (cptr + 1) % window;
+      }
+    }
+    else {
+      int indx = window - 1;// center + window / 2 - 1; // index of new window member
+      int indx2 = center + (window / 2) - 1; // index of old window member to be removed
+      //memcpy(&cache[cptr * FFT_QP_SIZE], &out[E5_QP_CODE_LEN * SPC * indx], sizeof(c32) * SPC * (E5_QP_CODE_LEN));
+      //memcpy(&cache[cptr * FFT_QP_SIZE + E5_QP_CODE_LEN * SPC], &out[E5_QP_CODE_LEN * SPC * indx], sizeof(c32) * SPC * (FFT_QP_SIZE - E5_QP_CODE_LEN));
+      //fft_c32(FFT_QP_SIZE, &cache[cptr], true); // forward FFT
+      //cptr = (cptr + 1) % window;
+
+      //printf("B %f %f %f %f %f %f %f %f \n", cache[0 * FFT_QP_SIZE].r, cache[1 * FFT_QP_SIZE].r, cache[64 * FFT_QP_SIZE].r, cache[65 * FFT_QP_SIZE].r, cache[66 * FFT_QP_SIZE].r, cache[67 * FFT_QP_SIZE].r, cache[68 * FFT_QP_SIZE].r, cache[69 * FFT_QP_SIZE].r);
+      shiftDown(cache, FFT_DB_SIZE, FFT_DB_SIZE * (window - 1));
+      //printf("A %f %f %f %f %f %f %f %f \n", cache[0 * FFT_QP_SIZE].r, cache[1 * FFT_QP_SIZE].r, cache[64 * FFT_QP_SIZE].r, cache[65 * FFT_QP_SIZE].r, cache[66 * FFT_QP_SIZE].r, cache[67 * FFT_QP_SIZE].r, cache[68 * FFT_QP_SIZE].r, cache[69 * FFT_QP_SIZE].r);
+      memcpy(&cache[indx * FFT_DB_SIZE], &out[FFT_DB_CODE_LEN * SPC * indx2], sizeof(c32) * SPC * (FFT_DB_CODE_LEN));
+      memcpy(&cache[indx * FFT_DB_SIZE + FFT_DB_CODE_LEN * SPC], &out[FFT_DB_CODE_LEN * SPC * indx2], sizeof(c32) * (FFT_DB_SIZE - SPC * FFT_DB_CODE_LEN));
+      fft_c32(FFT_DB_SIZE, &cache[indx * FFT_DB_SIZE], true); // forward FFT
+    }
+
+    //memset(nci_sum, 0, sizeof(float) * FFT_QP_SIZE);
+    memset(fft_sum, 0, sizeof(c32) * FFT_DB_SIZE);
+    int tmp_idx = 0;
+    for (int windex = center - window / 2; windex < center + window / 2; windex += 1) {
+      //memset(fft_data, 0, sizeof(c32) * FFT_QP_SIZE);
+      //memcpy(fft_data, &out[E5_QP_CODE_LEN * SPC * windex], sizeof(c32) * SPC * (E5_QP_CODE_LEN));
+      //memcpy(&fft_data[E5_QP_CODE_LEN * SPC], &out[E5_QP_CODE_LEN * SPC * windex], sizeof(c32) * (FFT_QP_SIZE - SPC * E5_QP_CODE_LEN)); 
+      //fft_c32(FFT_QP_SIZE, fft_data, true); // forward FFT
+
+      //for (int lp = 0; lp < FFT_QP_SIZE; lp++) { 
+      //  if (fft_data[lp].i != cache[tmp_idx * FFT_QP_SIZE + lp].i) {
+      //    printf("cache and fftp disagree at %d \n", lp);
+      //  }
+      //}
+
+      for (int k = 0; k < FFT_DB_SIZE; k++) { // accumulate pt-wise * with conj of replica
+        c32 fft_data_ins = cache[tmp_idx * FFT_DB_SIZE + k];// cache[tmp_idx * FFT_QP_SIZE + k]; fft_data[k];
+        if (windex < center) { // cheaper method           //get_minus_conj
+          fft_sum[k] = add(fft_sum[k], mult(fft_data_ins, get_minus_conj(fft_repl[k])));
+        }
+        else {
+          fft_sum[k] = add(fft_sum[k], mult(fft_data_ins, get_conj(fft_repl[k])));
+        }
+        //fft_prod[k] = mult(fft_data_ins, get_conj(fft_repl[k]));
+      }
+
+      // parallel track prod and IFFT then square and sum
+      //fft_c32(FFT_QP_SIZE, fft_prod, false);
+      //for (int k = 0; k < FFT_QP_SIZE; k++) { nci_sum[k] += mag(fft_prod[k]); }
+
+      tmp_idx = (tmp_idx + 1) % window;
+    } // for windex 
+
+    // used to have the IFFT here
+    fft_c32(FFT_DB_SIZE, fft_sum, false); // IFFT // cheaper method
+
+    FILE* fp_out = NULL;
+    if (false) {} //center == 50) {  errno_t er = fopen_s(&fp_out, "C:/Python/nci_sum4.csv", "w"); }
+    top2_pks peaks;
+    find_top2_peaks_cplx(fft_sum, FFT_DB_SIZE, 4, &peaks, fp_out);
+    top2_pks peaks2 = { 0,0,1,0 };
+    //find_top2_peaks_real(nci_sum, E5_QP_CODE_LEN * SPC, 4, &peaks2, fp_out);
+
+
+    bool isMax = findMax(peaks.val1,7000,5);
+    int best_code = 0; float best_pwr = 0; float best_dop = 0; double phase_deg = 0;
+    if (false) {
+      phase_deg = recover_prn_phase_deg_with_doppler(&out[FFT_DB_CODE_LEN * SPC * (center)], FFT_DB_CODE_LEN * SPC,
+        prn_c3, peaks.idx1, dop1, chipping_rate * SPC, &best_code, &best_dop, &best_pwr);
+    }
+    bool isBT = checkBT(center, locations, num_btts);
+    if (peaks.idx1 != c_phase && isBT) { num_errors++; printf("code %d \n", peaks.idx1); }
+    //if (peaks2.idx1 != c_phase && isBT) { num_errors++; printf("code2 %d \n", peaks2.idx1); }
+
+    double ang = atan2(fft_sum[peaks.idx1].i, fft_sum[peaks.idx1].r) * 57.2957795;
+
+    float ratio = peaks.val1 / peaks.val2;
+    float ratio2 = peaks2.val1 / peaks2.val2;
+    // nix if last max was less than 20 points ago 
+    if (isMax) {
+      found[loc_cnt++] = center - 2;
+      last_location = center - 2;
+    }
+    
+    //printf("center,%03d, max,%6.1f,p1,%d,p2,%d,ratio,%4.2f,ang,%4.2f,cnt,%d\n", 
+    //  center, peaks.val1, peaks.idx1, peaks2.idx1, ratio, ang, isMax);
+  } // for center
+
+  
+  results->num_trials++;
+  int num_found = 0;
+  int diffs = 0;
+  found[num_found++] = 5;
+  found[num_found++] = 25;
+  found[num_found++] = 35;
+
+  for (int i = 0; i < num_btts; i++) {
+    printf("Diff %d %d %d \n", i, locations[i], found[i]);
+    if (found[i]) { num_found++; }
+    int diff = abs(locations[i] - found[i]);
+    results->differences[diffs++] = diff; // maybe get rid of this
+  }
+  int correct = 0;
+  int false_alarms = 0;
+  for (int i = 0; i < num_found; i++) {
+    for (int j = 0; j < num_btts; j++) {
+      // location correct but index might be off because of prev missed detect
+      if (found[i] == locations[j]) {
+        correct++;
+      }
+    }
+  }
+  results->btt_missed_detects += (num_btts - correct);
+  int copy = correct;
+  
+  for (int i = 0; i < num_found; i++) {
+    correct = 0;
+    for (int j = 0; j < num_btts; j++) {
+      if (found[i] == locations[j]) {
+        correct++;
+      }
+    }
+    if (correct == 0) { false_alarms++; }
+  }
+  results->btt_false_alarms += false_alarms;
+  printf("false alarms %d missed detections %d\n", false_alarms, (num_btts - copy));
+  printf("There are %d btt and found %d btt \n", num_btts, num_found);
+
+}
+
 void test_quasi_pilot_330(results_s* results) {
   // todo adapt for live signals eg skip samples
   // for 1 sample/chip (but 
@@ -1777,21 +1998,21 @@ void test_quasi_pilot_330(results_s* results) {
   float pwr = -128.5;// -129.5;// -128.5;// -128.75;// dBm signal power
   float N0 = -174.0 + 2.5;// dBm/Hz thermal noise ktb density + noise figure
   float cn0 = pwr - N0; // dBm/Hz pgae 14 Galileo_OS_SIS_ICD_v2.2
-  float sigma = sqrt((1.0 * chipping_rate * SPC) / (2.0f* pow(10.0,cn0/10.0)));
+  float sigma = sqrt((1.0 * chipping_rate * SPC) / (2.0f * pow(10.0, cn0 / 10.0)));
   //printf("sigma %f \n", sigma);
   //sigma = 0.1;// 12.7;// 15.98;// 3.5;// 3.5; // noise level 15->6*31
   int   num_errors = 0; int num_tries = 0;
-  c32*  out    = (c32*)malloc(len * sizeof(c32));
-  c32*  cache  = (c32*)malloc(FFT_QP_SIZE * window * sizeof(c32));
+  c32* out = (c32*)malloc(len * sizeof(c32));
+  c32* cache = (c32*)malloc(FFT_QP_SIZE * window * sizeof(c32));
   memset(cache, 0, sizeof(c32) * FFT_QP_SIZE * window);
   if (out == NULL) { fprintf(stderr, "Memory allocation failed for 100 ms I&Q array.\n"); return; }
-  int* prn_c1  = (int*)malloc(sizeof(int) * E5_QP_CODE_LEN * SPC);
-  int* prn_c2  = (int*)malloc(sizeof(int) * E5_QP_CODE_LEN * SPC);
-  int* prn_c3  = (int*)malloc(sizeof(int) * E5_QP_CODE_LEN * SPC);
+  int* prn_c1 = (int*)malloc(sizeof(int) * E5_QP_CODE_LEN * SPC);
+  int* prn_c2 = (int*)malloc(sizeof(int) * E5_QP_CODE_LEN * SPC);
+  int* prn_c3 = (int*)malloc(sizeof(int) * E5_QP_CODE_LEN * SPC);
   c32* replica = (c32*)malloc(sizeof(c32) * E5_QP_CODE_LEN * SPC);
   //float* nci_sum = (float*)malloc(sizeof(float) * FFT_QP_SIZE);
-  memset(prn_c1 , 0, sizeof(int) * E5_QP_CODE_LEN * SPC);
-  memset(prn_c2 , 0, sizeof(int) * E5_QP_CODE_LEN * SPC);
+  memset(prn_c1, 0, sizeof(int) * E5_QP_CODE_LEN * SPC);
+  memset(prn_c2, 0, sizeof(int) * E5_QP_CODE_LEN * SPC);
   memset(replica, 0, sizeof(c32) * E5_QP_CODE_LEN * SPC);
   getE5_QPCode(E5_QP_CODE_LEN, SPC, prn1, prn_c1);
   getE5_QPCode(E5_QP_CODE_LEN, SPC, prn2, prn_c2);
@@ -1800,7 +2021,7 @@ void test_quasi_pilot_330(results_s* results) {
 
   make_replica(prn_c3, replica, 0.0, E5_QP_CODE_LEN * SPC, chipping_rate * SPC);
   rotate_fwd(prn_c1, E5_QP_CODE_LEN * SPC, c_phase); // now advance code-phase  
-  
+
   int sign2 = 1; // sign applied a posteriori after finding BTT
   int num_btts = -1;
   for (int i = 0; i < nci; i++) {
@@ -1808,8 +2029,8 @@ void test_quasi_pilot_330(results_s* results) {
       if (locations[j] == i) { sign2 *= -1; num_btts++;  break; } // change sign at the bit transitions
     }
     // offset doppler by 250 Hz and add a residual doppler ramp of 0.1 Hz per ms
-    mix_two_prns_oversampled_per_prn(prn_c1, prn_c2, dop1 + i * dop_err_rate, dop2 - i * dop_err_rate, 
-      PI / 2, 0,&out[E5_QP_CODE_LEN * SPC * i], E5_QP_CODE_LEN * SPC, chipping_rate * SPC, sigma, sign2); // was 2.31 for -128.5 dBm 3.1 for -131.5
+    mix_two_prns_oversampled_per_prn(prn_c1, prn_c2, dop1 + i * dop_err_rate, dop2 - i * dop_err_rate,
+      PI / 2, 0, &out[E5_QP_CODE_LEN * SPC * i], E5_QP_CODE_LEN * SPC, chipping_rate * SPC, sigma, sign2); // was 2.31 for -128.5 dBm 3.1 for -131.5
   }
   free(prn_c1); free(prn_c2);
 
@@ -1826,7 +2047,7 @@ void test_quasi_pilot_330(results_s* results) {
   // Compute circular correlation C_k(τ) = FFT^-1{ FFT[signal] · conj(FFT[replica]) }.
   c32* fft_repl = (c32*)malloc(sizeof(c32) * FFT_QP_SIZE);
   c32* fft_data = (c32*)malloc(sizeof(c32) * FFT_QP_SIZE);
-  c32* fft_sum  = (c32*)malloc(sizeof(c32) * FFT_QP_SIZE);
+  c32* fft_sum = (c32*)malloc(sizeof(c32) * FFT_QP_SIZE);
   c32* fft_prod = (c32*)malloc(sizeof(c32) * FFT_QP_SIZE);
   memset(fft_repl, 0, sizeof(c32) * FFT_QP_SIZE);
   if (fft_data == NULL || fft_repl == NULL) { printf("Error allocating fft_data or fft_prod\n"); return; }
@@ -1843,9 +2064,10 @@ void test_quasi_pilot_330(results_s* results) {
         memcpy(&cache[cptr * FFT_QP_SIZE], &out[E5_QP_CODE_LEN * SPC * windex], sizeof(c32) * SPC * (E5_QP_CODE_LEN));
         memcpy(&cache[cptr * FFT_QP_SIZE + E5_QP_CODE_LEN * SPC], &out[E5_QP_CODE_LEN * SPC * windex], sizeof(c32) * (FFT_QP_SIZE - SPC * E5_QP_CODE_LEN));
         fft_c32(FFT_QP_SIZE, &cache[cptr * FFT_QP_SIZE], true); // forward FFT
-        cptr = (cptr+1) % window;
+        cptr = (cptr + 1) % window;
       }
-    } else {
+    }
+    else {
       int indx = window - 1;// center + window / 2 - 1; // index of new window member
       int indx2 = center + (window / 2) - 1; // index of old window member to be removed
       //memcpy(&cache[cptr * FFT_QP_SIZE], &out[E5_QP_CODE_LEN * SPC * indx], sizeof(c32) * SPC * (E5_QP_CODE_LEN));
@@ -1860,11 +2082,11 @@ void test_quasi_pilot_330(results_s* results) {
       memcpy(&cache[indx * FFT_QP_SIZE + E5_QP_CODE_LEN * SPC], &out[E5_QP_CODE_LEN * SPC * indx2], sizeof(c32) * (FFT_QP_SIZE - SPC * E5_QP_CODE_LEN));
       fft_c32(FFT_QP_SIZE, &cache[indx * FFT_QP_SIZE], true); // forward FFT
     }
- 
+
     //memset(nci_sum, 0, sizeof(float) * FFT_QP_SIZE);
     memset(fft_sum, 0, sizeof(c32) * FFT_QP_SIZE);
     int tmp_idx = 0;
-    for (int windex = center - window / 2; windex < center + window / 2; windex +=1) {
+    for (int windex = center - window / 2; windex < center + window / 2; windex += 1) {
       //memset(fft_data, 0, sizeof(c32) * FFT_QP_SIZE);
       //memcpy(fft_data, &out[E5_QP_CODE_LEN * SPC * windex], sizeof(c32) * SPC * (E5_QP_CODE_LEN));
       //memcpy(&fft_data[E5_QP_CODE_LEN * SPC], &out[E5_QP_CODE_LEN * SPC * windex], sizeof(c32) * (FFT_QP_SIZE - SPC * E5_QP_CODE_LEN)); 
@@ -1875,12 +2097,13 @@ void test_quasi_pilot_330(results_s* results) {
       //    printf("cache and fftp disagree at %d \n", lp);
       //  }
       //}
-     
+
       for (int k = 0; k < FFT_QP_SIZE; k++) { // accumulate pt-wise * with conj of replica
         c32 fft_data_ins = cache[tmp_idx * FFT_QP_SIZE + k];// cache[tmp_idx * FFT_QP_SIZE + k]; fft_data[k];
         if (windex < center) { // cheaper method           //get_minus_conj
           fft_sum[k] = add(fft_sum[k], mult(fft_data_ins, get_minus_conj(fft_repl[k])));
-        } else {
+        }
+        else {
           fft_sum[k] = add(fft_sum[k], mult(fft_data_ins, get_conj(fft_repl[k])));
         }
         //fft_prod[k] = mult(fft_data_ins, get_conj(fft_repl[k]));
@@ -1900,22 +2123,22 @@ void test_quasi_pilot_330(results_s* results) {
     if (false) {} //center == 50) {  errno_t er = fopen_s(&fp_out, "C:/Python/nci_sum4.csv", "w"); }
     top2_pks peaks;
     find_top2_peaks_cplx(fft_sum, E5_QP_CODE_LEN * SPC, 4, &peaks, fp_out);
-    top2_pks peaks2 = {0,0,1,0};
+    top2_pks peaks2 = { 0,0,1,0 };
     //find_top2_peaks_real(nci_sum, E5_QP_CODE_LEN * SPC, 4, &peaks2, fp_out);
 
- 
+
     bool isMax = findMax(peaks.val1);
     int best_code = 0; float best_pwr = 0; float best_dop = 0; double phase_deg = 0;
     if (false) {
-      phase_deg = recover_prn_phase_deg_with_doppler(&out[E5_QP_CODE_LEN * SPC * (center )], E5_QP_CODE_LEN * SPC,
+      phase_deg = recover_prn_phase_deg_with_doppler(&out[E5_QP_CODE_LEN * SPC * (center)], E5_QP_CODE_LEN * SPC,
         prn_c3, peaks.idx1, dop1, chipping_rate * SPC, &best_code, &best_dop, &best_pwr);
     }
     bool isBT = checkBT(center, locations, num_btts);
     if (peaks.idx1 != c_phase && isBT) { num_errors++; printf("code %d \n", peaks.idx1); }
     //if (peaks2.idx1 != c_phase && isBT) { num_errors++; printf("code2 %d \n", peaks2.idx1); }
-    
+
     double ang = atan2(fft_sum[peaks.idx1].i, fft_sum[peaks.idx1].r) * 57.2957795;
-    
+
     float ratio = peaks.val1 / peaks.val2;
     float ratio2 = peaks2.val1 / peaks2.val2;
     // nix if last max was less than 20 points ago 
@@ -1923,7 +2146,7 @@ void test_quasi_pilot_330(results_s* results) {
       found[loc_cnt++] = center - 8;
       last_location = center - 8;
     }
-    if (center > last_location + 2*100) {
+    if (center > last_location + 2 * 100) {
       last_location = locations[loc_cnt++];
       missed++;
       //printf("padd %d\n", last_location);
@@ -1934,18 +2157,18 @@ void test_quasi_pilot_330(results_s* results) {
   num_tries++;
   printf("Found %d btt there are %d btt \n", num_btts, num_btts - missed);
   for (int i = 0; i < num_btts; i++) {
-    printf("Diff %d %d %d \n", i, locations[i] , found[i]);
+    printf("Diff %d %d %d \n", i, locations[i], found[i]);
     int diff = abs(locations[i] - found[i]);
-    if (diff < 100  && found[i] != 0) {
+    if (diff < 100 && found[i] != 0) {
       results->differences[diff]++;
     }
   }
-  
+
   results->num_errors += num_errors;
   results->num_trials += num_btts;// num_tries;
-  if ((loc_cnt - num_btts) > 0) { results->btt_false_alarms+= (loc_cnt - num_btts); }
+  if ((loc_cnt - num_btts) > 0) { results->btt_false_alarms += (loc_cnt - num_btts); }
   if (missed) { results->btt_missed_detects += missed; }
-  
+
   free(prn_c3); free(cache); //free(nci_sum);
   free(out); free(fft_data); free(fft_sum); free(fft_repl); free(fft_prod);// free(fft_prev); //free(mag_sum);
 }
@@ -2124,20 +2347,7 @@ void test_quasi_pilot3() {
  */
 int main(int argc,char* argv[])
 {
-  float T = (float) (1.0 / 500.0); // Period for the test sine wave (1/500 seconds = 2ms period)
-  const int multK = 1; // multiple of 1K size can be used for 1,2,4,8,or 16 (has not been tested for less than 1K)
-  float F1 = 50.0f; // Frequency of the first sine wave
-  float F2 = 80.0f;// 80.0f; // Frequency of the second sine wave
-  float F3 = 155.0f;// 155.0f; // Frequency of the third sine wave (not used in this example, but can be added for more complexity)
-  float F4 = 230.0f; // Frequency of the third sine wave (not used in this example, but can be added for more complexity)
   
-// File lengths are too long to do float and radix4 and radix2 serially: use compile flags
-//#define DO_FLOAT
-//#define DO_Q15_RADIX2
-//#define DO_Q15_RADIX4
-//#define DO_Q31_RADIX2 
-//#define DO_Q31_RADIX4
-
 
   if (0) {
     // set to 1 above if need to recalculate some of the twiddleCoefs
@@ -2254,6 +2464,25 @@ int main(int argc,char* argv[])
   }
 
   if (1) {
+    results_s results = { 0 };
+    auto start = std::chrono::high_resolution_clock::now();
+    for (int i = 0; i < 3; i++) {
+      gps_data_bits(&results);
+    }
+    auto stop = std::chrono::high_resolution_clock::now();
+    auto duration = std::chrono::duration_cast<std::chrono::microseconds>(stop - start);
+    printf("Time taken: %d \n", (long)duration.count());
+    printf("Total tries: %d, Total errors: %d, code errors: %d #fa %d #md %d\n", results.num_trials, (results.btt_false_alarms + results.btt_missed_detects), results.num_errors,
+      results.btt_false_alarms, results.btt_missed_detects);
+    for (int i = 0; i < 100; i++) {
+      if (results.differences[i] == 0) { continue; }
+      printf("Num with diff %d is %d \n", i, results.differences[i]);
+    }
+    
+    return 0;
+  }
+
+  if (0) {
     //test_quasi_diff_pilot();
     //test_quasi_pilot_330Up();
     
@@ -2275,116 +2504,7 @@ int main(int argc,char* argv[])
     return 0;
   }
 
-#ifdef DO_FLOAT
-  float test[1024 * multK * 2];
-
-  memset(test, 0, sizeof(test));
-  int code[1024 * 1] = { 1 };
-  getCode(1024, 1, 23, code);
-  for (int i = 0; i < 1024 * multK; i++) {
-    double x = i * T;
-    test[i * 2 + 0] =  cos(F1 * 2.0 * PI * x) + code[i * 2 + 0] * cos(F2 * 2.0 * PI * x);// 0.5 * signalf(x, F1, F2, F3, F4);
-    test[i * 2 + 1] =  sin(F1 * 2.0 * PI * x) + code[i * 2 + 1] * sin(F2 * 2.0 * PI * x);// cos(F1 * 2.0 * PI * x); // set the imaginary part to 0
-  }
-  
-  arm_cfft_radix2_instance_f32 s;
-  std::cout << "************ float32 FFT ************************ \n";
- 
-  arm_cfft_radix2_init_f32(&s, 1024 * multK, 0, 1); // Initialize the CFFT instance for 8-point FFT
-  arm_cfft_radix2_f32(&s, test);
-  for (int i = 0; i < 1024 * multK / 2; i++) {
-    std::cout << "float [" << i << "] , " << (double(i)/double(T* multK*1024)) << " , " << sqrt(test[2 * i] * test[2 * i] + test[2 * i + 1] * test[2 * i + 1]) << "\n";
-  }
-#endif // DO_FLOAT
-
-  
-  q15_t src_q15[1024 * 2 * multK];
-  memset(src_q15, 0, sizeof(src_q15));
-
-#ifdef DO_Q15_RADIX4
-  // try the Q15 for radix4 
-  arm_cfft_radix4_instance_q15 s_q15_radix4;
-  std::cout << "************ FFT q15_t Radix4 ************************ \n";
-  for (int i = 0; i < 1024 * multK; i++) {
-    double x = i * T;
-    src_q15[i * 2] = (q15_t)(f2q15(signalf(x, F1, F2, F3, F4)));
-    src_q15[i * 2 + 1] = 0; // set the imaginary part to 0
-  }
-  arm_cfft_radix4_init_q15(&s_q15_radix4, 1024 * multK, 0, 1); // Initialize the CFFT instance for 8-point FFT
-  arm_cfft_radix4_q15(&s_q15_radix4, src_q15); 
-  for (int i = 0; i < 1024 * multK / 2; i++) {
-    std::cout << "rad4_q15[" << i << "] , " << (double(i)/double(T* multK*1024)) << " , " << sqrt(src_q15[2 * i] * src_q15[2 * i] + src_q15[2 * i + 1] * src_q15[2 * i + 1]) << "\n";
-  }
-#endif // DO_Q15_RADIX4
-
-#ifdef DO_Q15_RADIX2 
-  arm_cfft_radix2_instance_q15 s_q15;  
-  std::cout << "************ FFT q15_t Radix2 ************************ \n";
-  for (int i = 0; i < 1024 * multK; i++) {
-    double x = i * T;
-    src_q15[i*2] = (q15_t)f2q15(signalf(x, F1, F2, F3, F4));
-    src_q15[i*2+1] = 0; // set the imaginary part to 0
-  }
- 
-  arm_cfft_radix2_init_q15(&s_q15, 1024 * multK, 0, 1); // Initialize the CFFT instance 
-  arm_cfft_radix2_q15(&s_q15, src_q15); // fft done in place result is symmetric about 1/2 point
-
-  for (int i = 0; i < 1024 * multK / 2; i++) {
-    std::cout << "rad2_q15[" << i << "] , " << (double(i)/double(T* multK*1024)) << " , " << sqrt(src_q15[2 * i] * src_q15[2 * i] + src_q15[2 * i + 1] * src_q15[2 * i + 1]) << "\n";
-  }
-#endif // DO_Q15_RADIX2
-
-#if defined(DO_Q31_RADIX2) || defined(DO_Q31_RADIX4)
-  q31_t src_q31[1024 * 2 * multK];
-  memset(src_q31, 0, sizeof(src_q31));
-#endif
-
-#ifdef DO_Q31_RADIX2
-  // now try the Q31 version warning does not compile right
-  arm_cfft_radix2_instance_q31 s_q31;
-
-  std::cout << "************ FFT q31_t ************************ \n";
-  for (int i = 0; i < 1024 * multK; i++) {
-    double x = i * T;
-    src_q31[i*2] = (q31_t)f2q31(signalf(x, F1, F2, F3, F4));
-    src_q31[i * 2 + 1] = 0;
-  }
-  arm_cfft_radix2_init_q31(&s_q31, 1024 * multK, 0, 1); // Initialize the CFFT instance for 8-point FFT
-  arm_cfft_radix2_q31(&s_q31, src_q31);
-  for (int i = 0; i < 1024 * multK / 2; i++) {
-    std::cout << "rad2_q31[" << i << "] , " << (double(i) / double(T * multK * 1024)) << " , " << magnitude(src_q31[2 * i], src_q31[2 * i + 1]) << "\n";
-  }
-#endif //DO_Q31_RADIX2
-
-#ifdef DO_Q31_RADIX4
-  // now try the Q31 version warning does not compile right
-  arm_cfft_radix4_instance_q31 s_q31_r4;
- 
-  std::cout << "************ FFT q31_t rad4 ************************ \n";
-  for (int i = 0; i < 1024 * multK; i++) {
-    double x = i * T;
-    src_q31[i * 2] = (q31_t)f2q31(signalf(x, F1, F2, F3, F4));
-    src_q31[i * 2 + 1] = 0;
-  }
-  arm_cfft_radix4_init_q31(&s_q31_r4, 1024 * multK, 0, 1); // Initialize the CFFT instance for 8-point FFT
-  arm_cfft_radix4_q31(&s_q31_r4, src_q31);
-  for (int i = 0; i < 1024 * multK / 2; i++) {
-    std::cout << "rad4_q31[" << i << "] , " << (double(i) / double(T * multK * 1024)) << " , " << magnitude(src_q31[2 * i], src_q31[2 * i + 1]) << "\n";
-  }
-#endif //DO_Q31_RADIX2
 
   return 0;
 }
-
-// Run program: Ctrl + F5 or Debug > Start Without Debugging menu
-// Debug program: F5 or Debug > Start Debugging menu
-
-// Tips for Getting Started: 
-//   1. Use the Solution Explorer window to add/manage files
-//   2. Use the Team Explorer window to connect to source control
-//   3. Use the Output window to see build output and other messages
-//   4. Use the Error List window to view errors
-//   5. Go to Project > Add New Item to create new code files, or Project > Add Existing Item to add existing code files to the project
-//   6. In the future, to open this project again, go to File > Open > Project and select the .sln file
-
 
