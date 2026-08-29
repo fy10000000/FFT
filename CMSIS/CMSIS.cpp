@@ -823,6 +823,162 @@ void read_ors(char* input) {
   //////////////////////////////////////////////////////
 }
 
+void read_ors_btt(char* input) {
+  FILE* fp_msb = NULL;
+  fopen_s(&fp_msb, input, "rb");
+  if (fp_msb == NULL) {
+    fprintf(stderr, "Failed to open msb file %s\n", input); return;
+  }
+  fseek(fp_msb, 0L, SEEK_END);
+  size_t bytes_to_read = ftell(fp_msb);
+  rewind(fp_msb);
+
+  uint8_t* buffer = (uint8_t*)malloc(bytes_to_read);
+  size_t bytesRead;
+  bytesRead = fread(buffer, 1, bytes_to_read, fp_msb);
+  if (bytesRead != bytes_to_read) { printf("Error parsiing data\n"); }
+  fclose(fp_msb);
+
+  // 2 for res 1
+  uint16_t hdrlen = U2(&buffer[2]); // 2 for header length
+  // 6 for res2
+  uint16_t yr = U2(&buffer[10]) + 1900; // 12
+  uint16_t mon = buffer[12] + 1; // 13
+  uint16_t day = buffer[13]; // 14
+  double tods = U4(&buffer[14]) / 1000.0; // 18
+  int hr = (int)floor(tods / 3600.0);
+  int min = (int)floor((tods / 3600.0 - floor(tods / 3600.0)) * 60);
+  int sec = (int)floor((tods / 60.0 - floor(tods / 60.0)) * 60);
+  // map back to GPS time
+  double dtime = compute_gps_time(yr, mon, day, hr, min, sec);
+  dtime -= 18; // leap seconds
+  printf("week %d tow %f \n", (int)floor(dtime / 604800.0), dtime - floor(dtime / 604800.0) * 604800.0);
+  int msec = (int)round((sec - floor(sec)) * 1000);
+  uint32_t nanos = U3(&buffer[18]); // 21
+  printf("%4d-%02d-%02d-%02d-%02d-%02d msec=%d nanos=%d \n", yr, mon, day, hr, min, sec, msec, nanos);
+  int payload_size = bytes_to_read - hdrlen;
+  printf("size (total bytes - hdrs) %d \n", payload_size);
+  printf("Working on %s\n", input);
+
+  FILE* fp_out = NULL; //output file
+  char str[128];
+  top2_pks peaks;
+
+  //// Dial in the prn and doppler here ////////////////
+#define SPC  4
+#define SIZE 1024*SPC *4 // 16K for Galileo and 4K for GPS
+
+  acq_struct prn2acq[30] = { 0 };
+  int cnt = parse_log((char*)"C:/work/Baseband/TestData/100ms/bw25/replay_bw25.log", input, prn2acq);
+  qsort(prn2acq, cnt, sizeof(acq_struct), compareConstelPRN); // sort by constel & prn for expected order
+
+  c32* iandq = (c32*)malloc(payload_size * sizeof(c32));
+  c32* signl = (c32*)malloc(SIZE * sizeof(c32));
+  c32* repli = (c32*)malloc(SIZE * sizeof(c32));
+  c32* prod = (c32*)malloc(SIZE * sizeof(c32));
+  //c32* sums  = (c32*)malloc(SIZE * sizeof(c32));
+  float* sums = (float*)malloc(SIZE * sizeof(c32));
+
+  if (iandq == NULL || prod == NULL) {
+    fprintf(stderr, "Memory allocation failed for q32 array.\n");
+    free(iandq); free(repli); free(prod); free(signl); return;
+  }
+
+  bb_meas_t meas;
+
+  // use iandq as the main buffer (don't modify)
+  DecodeOrsIQCplx(&buffer[hdrlen], payload_size / 2, iandq);
+  free(buffer);
+  static int first_pass[30] = { 0 }, first_pass_cnt = 0;
+  memset(first_pass, 0, sizeof(int) * 30);
+  // on second pass cyclically advance code phase to before pos in 1st pass
+  // NB: do not cycle past the code phase otherswise errors will occur!
+  for (int pass = 0; pass < 2; pass++) {
+    memset(&meas, 0, sizeof(bb_meas_t)); first_pass_cnt = 0;
+    for (int loop = 0; loop < cnt; loop++) {
+      bool is_gps = (prn2acq[loop].constel == 1) ? true : false;
+      int rep_offset = first_pass[first_pass_cnt];
+      int size = is_gps ? 4092 : 16368; // the samples per epoch
+      int fft_size = is_gps ? 4096 : 16384;
+      memset(repli, 0, SIZE * sizeof(c32));
+      memset(sums, 0, SIZE * sizeof(float));
+      if (rep_offset > 200) {
+        rep_offset -= 150;
+      }
+
+      if (is_gps) {
+        synth_gps_prn(prn2acq[loop].prn, -prn2acq[loop].doppler, size, repli, SPC, rep_offset);
+      }
+      else { // Galileo
+        synth_e1b_prn(prn2acq[loop].prn, -prn2acq[loop].doppler, size, repli, SPC, rep_offset);
+      }
+
+      fft_c32(fft_size, repli, true); // F(repli)
+      for (int j = 0; j < 4; j++) {
+        memset(prod, 0, SIZE * sizeof(c32));
+        memset(signl, 0, SIZE * sizeof(c32));
+        memcpy(signl, &iandq[j * size], size * sizeof(c32));
+
+        fft_c32(fft_size, signl, true); // F(iandq) and prod=F(iandq) * conj(F(repli)) below
+        for (int i = 0; i < fft_size; i++) { prod[i] = mult(signl[i], get_conj(repli[i])); }
+        fft_c32(fft_size, prod, false); // in-place inv F(prod) 
+        for (int i = 0; i < fft_size; i++) {
+          sums[i] += mag(prod[i]);// add(sums[i], prod[i]);
+        }
+      }
+
+      snprintf(str, sizeof(str), "C:/Python/out%s-%d.csv", (is_gps) ? "GPS" : "GAL", prn2acq[loop].prn);
+      //errno_t err= fopen_s(&fp_out, str, "w");
+      find_top2_peaks_real(sums, size, 3, &peaks, fp_out); if (fp_out) { fclose(fp_out); }
+      if (false) {//is_gps == false) {
+        c32 sum = { 0 };
+        float c_span = 3;
+        int8_t e1_code[16368];
+        float code_out = 0, freq_out = 0, phase_out = 0;
+        GetE1BCode(prn2acq[loop].prn, SPC, e1_code);
+        estimate_prn_code_and_carrier(&iandq[0], size, SPC * 1.023e6f, c_span, e1_code, 1.023e6f,
+          peaks.idx1, 4.f, 1, -prn2acq[loop].doppler, 3, 1, &code_out, &freq_out, &phase_out, &sum);
+        printf("code_out=%f, freq_out=%f, phase_out=%f \n", code_out, freq_out, phase_out);
+      }
+      // compute noise stats for SNR
+      double BW = 3.1623e3; // Hz
+      double cn0 = compute_snr_real(sums, size, peaks) + 35;// +10 * log(BW)
+      double interp = interpCodePhaseFloat(sums, size, &peaks);
+      float thresh = (pass == 0) ? 1.001 : 1.3;
+      float ratio = (peaks.val1 / peaks.val2);
+      if (ratio > thresh) {
+        meas.sats[meas.num_sat].prn = prn2acq[loop].prn;
+        meas.sats[meas.num_sat].code_phase = float(interp + rep_offset) / (SPC * 1023.0f);
+        meas.sats[meas.num_sat].doppler = prn2acq[loop].doppler;
+        meas.sats[meas.num_sat].cno = (float)cn0;
+        meas.sats[meas.num_sat].constellation = is_gps ? SYS_GPS : SYS_GAL;
+        printf("Acquired %s %d Doppler %f Hz Code %f [ms] Chips %f  C/N0 %f dB-Hz ratio=%f\n", is_gps ? "GPS" : "GAL",
+          prn2acq[loop].prn, -prn2acq[loop].doppler, meas.sats[meas.num_sat].code_phase, meas.sats[meas.num_sat].code_phase * 4092.0, meas.sats[meas.num_sat].cno, ratio * ratio);
+        meas.num_sat++;
+      }
+      first_pass[first_pass_cnt] = (int)interp;
+      first_pass_cnt++; // must increment here for things to stay in syn
+    }
+    printf("Done inner loop\n");
+  }
+
+  char fname[256] = "";
+  strcat_s(fname, 256, input);
+  strcat_s(fname, 256, ".msb");
+  printf("writing to %s \n", fname);
+  int num_bytes = write_msb(&meas, (char*)fname);
+  bb_meas_t check = { 0 };
+  FILE* test = NULL;
+  errno_t er2 = fopen_s(&test, (char*)fname, "rb");
+  uint8_t tbuff[128] = { 0 };
+  fread(tbuff, 1, num_bytes, test);
+  read_bb_msb(tbuff, num_bytes, &check);
+  fclose(test);
+
+  free(iandq); free(repli); free(prod); free(signl); free(sums);
+  //////////////////////////////////////////////////////
+}
+
 void sim_E5A() {
   #define FFT_SIZE 16384
   int    prn_a = 5, prn_b = 15;
@@ -1471,6 +1627,120 @@ void test_quasi_diff_pilot() {
   free(fft_prev); free(diff_acc); free(replica);
 }
 
+// Differential bit-transition detection via a full non-coherent search
+// over all 20 candidate 1 ms bit-boundary phases, rather than a single
+// sliding window / edge test. Every boundary in the batch contributes
+// evidence for its own phase hypothesis (histogram/non-coherent combine),
+// so the estimate does not depend on any one boundary actually containing
+// a real transition. Uses z[k]*conj(z[k-1]) (not raw I) so the result is
+// insensitive to the open-loop (no PLL) carrier phase drift that a fixed
+// +1/-1 template on raw I would be vulnerable to in a snapshot receiver.
+void test_quasi_diff2() {
+  srand((unsigned int)time(NULL)); // randomise seed
+
+#define SPC 4     // samples per chip
+#define BIT_MS 20 // GPS nav bit period in ms (code epochs per bit)
+  int nci = 200;  // 100 ms snapshot
+  int len = 1023 * SPC * nci;
+  int c_phase = 4 * 4096 / 8; // known code phase (from acquisition)
+  int prn1 = 5, prn2 = 15;
+  float dop1 = 2000, dop2 = -3000;
+  float dop_error = 250;    // full 2*250 Hz error in open-loop wipeoff
+  float dop_err_rate = 0.6; // Hz per ms residual doppler ramp
+  float sigma = 9.0;        // noise level
+
+  // ground-truth bit transitions: deliberately no transition at 40 ms to
+  // prove the phase search is not fooled by a "missing" data transition
+  int locations[50] = {  82 };
+
+  c32* out = (c32*)malloc(len * sizeof(c32));
+  if (out == NULL) {
+    fprintf(stderr, "Memory allocation failed for 100 ms I&Q array.\n");
+    return;
+  }
+  int* prn_c1 = (int*)malloc(sizeof(int) * 1023 * SPC);
+  int* prn_c2 = (int*)malloc(sizeof(int) * 1023 * SPC);
+  c32* replica = (c32*)malloc(sizeof(c32) * 1024 * SPC);
+  memset(replica, 0, sizeof(c32) * 1024 * SPC);
+  getCode(1023, SPC, prn1, prn_c1);
+  getCode(1023, SPC, prn2, prn_c2);
+  make_replica(prn_c1, replica, dop1 + dop_error, 1023 * SPC, 1.023e6 * SPC);
+  rotate_fwd(prn_c1, 1023 * SPC, c_phase); // code phase, as found by acquisition
+  int sign2 = 1; // sign applied a posteriori after finding BTT
+  for (int i = 0; i < nci; i++) {
+    for (int j = 0; j < 50; j++) {
+      if (locations[j] == i) { sign2 *= -1; break; } // change sign at the bit transitions
+    }
+    // offset doppler and add a residual doppler ramp -- open loop, no PLL correction
+    mix_two_prns_oversampled_per_prn(prn_c1, prn_c2, dop1 + i * dop_err_rate, dop2 - i * dop_err_rate, PI/2, 0,
+      &out[1023 * SPC * i], 1023 * SPC, 1.023e6 * SPC, sigma, sign2);
+  }
+  free(prn_c1); free(prn_c2);
+
+  fft_c32(1024 * SPC, replica, true);
+
+  // Stage 1: correlate every 1 ms epoch against the replica and keep the
+  // complex value at the known (acquired) code-phase bin -- the "prompt"
+  // correlator output a tracking channel would produce every 1 ms.
+  c32* prompt = (c32*)malloc(sizeof(c32) * nci);
+  c32* fft_data = (c32*)malloc(sizeof(c32) * 1024 * SPC);
+  if (prompt == NULL || fft_data == NULL) { printf("Error allocating prompt/fft_data\n"); return; }
+  for (int i = 0; i < nci; i++) {
+    memset(fft_data, 0, sizeof(c32) * 1024 * SPC);
+    for (int j = 0; j < 1023 * SPC; j++) { fft_data[j] = out[1023 * SPC * i + j]; }
+    fft_c32(1024 * SPC, fft_data, true); // forward FFT
+    for (int k = 0; k < 1024 * SPC; k++) { fft_data[k] = mult(fft_data[k], get_conj(replica[k])); }
+    fft_c32(1024 * SPC, fft_data, false); // IFFT -> correlation function
+    prompt[i] = fft_data[c_phase];
+  }
+  free(fft_data);
+
+  // Stage 2: one-lag differential product. |diff| ~ constant (signal
+  // power); Re{diff} goes negative only when the nav bit actually flipped
+  // between epoch i-1 and i -- and that holds regardless of any residual,
+  // uncorrected carrier phase, since the common rotation between adjacent
+  // epochs cancels out of the product.
+  c32* diff = (c32*)malloc(sizeof(c32) * nci);
+  for (int i = 1; i < nci; i++) { diff[i] = mult(prompt[i], get_conj(prompt[i - 1])); }
+
+  // Stage 3: non-coherent search over the 20 candidate bit-boundary
+  // phases. Only the true phase can ever contain a real transition; every
+  // wrong phase only ever samples mid-bit epoch pairs and stays uniformly
+  // positive. Combine (average) Re{diff} over every available boundary
+  // for each phase -- using all ~5 bit periods in the batch, not just one.
+  double phase_sum[BIT_MS] = { 0 };
+  int phase_cnt[BIT_MS] = { 0 };
+  for (int i = 1; i < nci; i++) {
+    int phi = i % BIT_MS;
+    phase_sum[phi] += diff[i].r;
+    phase_cnt[phi]++;
+  }
+  int best_phi = 0; double best_mean = 1e30;
+  for (int phi = 0; phi < BIT_MS; phi++) {
+    double mean = phase_sum[phi] / phase_cnt[phi];
+    printf("phi=%2d mean(Re{diff})=%9.1f n=%d\n", phi, mean, phase_cnt[phi]);
+    if (mean < best_mean) { best_mean = mean; best_phi = phi; }
+  }
+  printf("Detected bit-boundary phase = %d ms (mean=%9.1f)\n", best_phi, best_mean);
+
+  // Stage 4: at the winning phase, classify each candidate boundary as a
+  // transition or not (Re{diff} < 0 => sign flip).
+  int loc_cnt = 0; int found[50] = { 0 };
+  for (int i = 1; i < nci; i++) {
+    if (i % BIT_MS != best_phi) { continue; }
+    bool is_transition = diff[i].r < 0.0f;
+    printf("boundary at %3d ms: Re{diff}=%9.1f Im{diff}=%9.1f -> %s\n",
+      i, diff[i].r, diff[i].i, is_transition ? "BT" : "no BT");
+    if (is_transition) { found[loc_cnt++] = i; }
+  }
+  printf("BTs: %d \n", loc_cnt);
+  for (int i = 0; i < loc_cnt; i++) {
+    printf("Bit transition at %d ms \n", found[i]);
+  }
+  
+  free(out); free(prompt); free(diff); free(replica);
+}
+
 void test_quasi_pilot() {
   srand((unsigned int)time(NULL)); // randomise seed
   // Test the quasi pilot generation
@@ -1758,9 +2028,9 @@ void gps_data_bits(results_s* results) {
   int loc_cnt = 0;
   float min_val = 1e5;
 
-  int locations[50] = { 20, 40, 60, 80, 100, 120, 140, 160, 180, 200, 220, 240, 260, 280 };
+  int locations[50] = { 21, 41, 61, 81, 101, 121, 141, 161, 181, 201, 221, 241, 261, 281 };
   int found[50] = { 0 };
-  int window = 10; //  window/2 ms either side of center 
+  int window = 20; //  window/2 ms either side of center 
   int nci = 300;
   double chipping_rate = 1.023e6; // chips per sec
 #define SPC 4 // samples per chip
@@ -1775,7 +2045,7 @@ void gps_data_bits(results_s* results) {
   float pwr = -128.5;// -129.5;// -128.5;// -128.75;// dBm signal power
   float N0 = -174.0 + 2.5;// dBm/Hz thermal noise ktb density + noise figure
   float cn0 = pwr - N0; // dBm/Hz pgae 14 Galileo_OS_SIS_ICD_v2.2
-  float sigma = 8;// sqrt((1.0 * chipping_rate * SPC) / (2.0f * pow(10.0, cn0 / 10.0)));
+  float sigma = 10;// sqrt((1.0 * chipping_rate * SPC) / (2.0f * pow(10.0, cn0 / 10.0)));
   //printf("sigma %f \n", sigma);
   //sigma = 0.1;// 12.7;// 15.98;// 3.5;// 3.5; // noise level 15->6*31
   int   num_errors = 0; 
@@ -1806,7 +2076,7 @@ void gps_data_bits(results_s* results) {
     }
     // offset doppler by 250 Hz and add a residual doppler ramp of 0.1 Hz per ms
     mix_two_prns_oversampled_per_prn(prn_c1, prn_c2, dop1 + i * dop_err_rate, dop2 - i * dop_err_rate,
-      PI / 2, 0, &out[FFT_DB_CODE_LEN * SPC * i], FFT_DB_CODE_LEN * SPC, chipping_rate * SPC, sigma, sign2); // was 2.31 for -128.5 dBm 3.1 for -131.5
+      PI/2, 0, &out[FFT_DB_CODE_LEN * SPC * i], FFT_DB_CODE_LEN * SPC, chipping_rate * SPC, sigma, sign2); // was 2.31 for -128.5 dBm 3.1 for -131.5
   }
   free(prn_c1); free(prn_c2);
 
@@ -1910,7 +2180,10 @@ void gps_data_bits(results_s* results) {
         prn_c3, peaks.idx1, dop1, chipping_rate * SPC, &best_code, &best_dop, &best_pwr);
     }
     bool isBT = checkBT(center, locations, num_btts);
-    if (peaks.idx1 != c_phase && isBT) { num_errors++; printf("code %d \n", peaks.idx1); }
+    if (peaks.idx1 != c_phase && isBT) { 
+      num_errors++; printf("code %d \n", peaks.idx1); 
+      results->differences[results->num_errors++] = abs(int(c_phase - peaks.idx1));
+    }
     //if (peaks2.idx1 != c_phase && isBT) { num_errors++; printf("code2 %d \n", peaks2.idx1); }
 
     double ang = atan2(fft_sum[peaks.idx1].i, fft_sum[peaks.idx1].r) * 57.2957795;
@@ -1931,15 +2204,11 @@ void gps_data_bits(results_s* results) {
   results->num_trials++;
   int num_found = 0;
   int diffs = 0;
-  found[num_found++] = 5;
-  found[num_found++] = 25;
-  found[num_found++] = 35;
+  
 
   for (int i = 0; i < num_btts; i++) {
     printf("Diff %d %d %d \n", i, locations[i], found[i]);
     if (found[i]) { num_found++; }
-    int diff = abs(locations[i] - found[i]);
-    results->differences[diffs++] = diff; // maybe get rid of this
   }
   int correct = 0;
   int false_alarms = 0;
@@ -2030,7 +2299,7 @@ void test_quasi_pilot_330(results_s* results) {
     }
     // offset doppler by 250 Hz and add a residual doppler ramp of 0.1 Hz per ms
     mix_two_prns_oversampled_per_prn(prn_c1, prn_c2, dop1 + i * dop_err_rate, dop2 - i * dop_err_rate,
-      PI / 2, 0, &out[E5_QP_CODE_LEN * SPC * i], E5_QP_CODE_LEN * SPC, chipping_rate * SPC, sigma, sign2); // was 2.31 for -128.5 dBm 3.1 for -131.5
+      PI/2, 0, &out[E5_QP_CODE_LEN * SPC * i], E5_QP_CODE_LEN * SPC, chipping_rate * SPC, sigma, sign2); // was 2.31 for -128.5 dBm 3.1 for -131.5
   }
   free(prn_c1); free(prn_c2);
 
@@ -2181,7 +2450,7 @@ void test_quasi_pilot2() {
   int loc_cnt = 0;
   float min_val = 1e5;
 
-  int locations[50] = { 20, 40, 60, 80, 100, 120, 140, 160, 180, 200, 220, 240, 260, 280 };
+  int locations[50] = { 20, 42, 63, 84, 105, 126, 147, 168, 189, 200, 221, 242, 263, 280 };
   int window = 4; // 2 * window ms either side [window works from 2 - 37]
   int nci = 300;
 #define SPC 4 // samples per chip
@@ -2191,7 +2460,7 @@ void test_quasi_pilot2() {
   float dop1 = 2000, dop2 = -3000;
   float dop_error = 250;// 10; // full 250 Hz error in wipeoff
   float dop_err_rate = 0.6;// 0.6;//Hz per ms
-  float sigma = 3.5;// 3.5; // noise level
+  float sigma = 10;// 3.5; // noise level
   c32* out = (c32*)malloc(len * sizeof(c32));
   if (out == NULL) {
     fprintf(stderr, "Memory allocation failed for 100 ms I&Q array.\n");
@@ -2458,8 +2727,32 @@ int main(int argc,char* argv[])
     return 0;
   }
 
+  // read 100ms file for bit transition
+  if (0) {
+    // G_2025_09_03_23_04_45.ors G_2025_09_03_23_04_56.ors G_2025_09_03_23_05_33.ors G_2025_09_03_23_04_56.ors G_2025_09_03_23_12_45.ors G_2025_09_03_23_19_10.ors
+    FILE* fp_in = NULL; //output file
+    errno_t er = fopen_s(&fp_in, "C:/work/Baseband/TestData/100ms/bw25/orsFiles.txt", "r");
+    char line[256] = { 0 };
+    while (fgets(line, sizeof(line), fp_in)) {
+      for (int i = 0; i < strlen(line); i++) {
+        if (line[i] == '\\') { line[i] = '/'; } // swap delimiter
+        if (line[i] == '\n') { line[i] = NULL; } // swap terminator 
+      }
+      //printf("about to process %s\n", line);
+      read_ors_btt(line);
+    }
+    if (fp_in != NULL) { fclose(fp_in); }
+    return 0;
+  }
+
+
   if (0) {
     test_quasi_pilot();
+    return 0;
+  }
+
+  if (1) {
+    test_quasi_diff2();
     return 0;
   }
 
@@ -2484,6 +2777,7 @@ int main(int argc,char* argv[])
 
   if (0) {
     //test_quasi_diff_pilot();
+    //test_quasi_diff2();
     //test_quasi_pilot_330Up();
     
     results_s results = {0};
