@@ -270,6 +270,12 @@ float mag(const c32 in) {
   return sqrtf(in.r * in.r + in.i * in.i);
 }
 
+// shift left
+void shiftDown(c32* array, int gap, int size) {
+  for (int i = 0; i < size; i++) {
+    array[i] = array[i + gap];
+  }
+}
 
 double compute_gps_time(int year, int month, int day, int hour, int minute, int second)
 {
@@ -825,6 +831,10 @@ void read_ors(char* input) {
 
 void read_ors_btt(char* input) {
   FILE* fp_msb = NULL;
+  double chipping_rate = 1.023e6;
+#define SPC 4
+#define FFT_DB_SIZE 1024 * SPC // data bit size
+#define FFT_DB_CODE_LEN 1023
   fopen_s(&fp_msb, input, "rb");
   if (fp_msb == NULL) {
     fprintf(stderr, "Failed to open msb file %s\n", input); return;
@@ -832,7 +842,8 @@ void read_ors_btt(char* input) {
   fseek(fp_msb, 0L, SEEK_END);
   size_t bytes_to_read = ftell(fp_msb);
   rewind(fp_msb);
-
+  int found[50] = { 0 };
+  int loc_cnt = 0;
   uint8_t* buffer = (uint8_t*)malloc(bytes_to_read);
   size_t bytesRead;
   bytesRead = fread(buffer, 1, bytes_to_read, fp_msb);
@@ -865,7 +876,7 @@ void read_ors_btt(char* input) {
   top2_pks peaks;
 
   //// Dial in the prn and doppler here ////////////////
-#define SPC  4
+
 #define SIZE 1024*SPC *4 // 16K for Galileo and 4K for GPS
 
   acq_struct prn2acq[30] = { 0 };
@@ -873,11 +884,10 @@ void read_ors_btt(char* input) {
   qsort(prn2acq, cnt, sizeof(acq_struct), compareConstelPRN); // sort by constel & prn for expected order
 
   c32* iandq = (c32*)malloc(payload_size * sizeof(c32));
-  c32* signl = (c32*)malloc(SIZE * sizeof(c32));
-  c32* repli = (c32*)malloc(SIZE * sizeof(c32));
-  c32* prod = (c32*)malloc(SIZE * sizeof(c32));
-  //c32* sums  = (c32*)malloc(SIZE * sizeof(c32));
-  float* sums = (float*)malloc(SIZE * sizeof(c32));
+  c32* signl = (c32*)malloc(1024 * SPC * sizeof(c32));
+  c32* repli = (c32*)malloc(1024 * SPC * sizeof(c32));
+  c32* prod = (c32*)malloc(1024 * SPC * sizeof(c32));
+  float* sums = (float*)malloc(1024 * SPC * sizeof(c32));
 
   if (iandq == NULL || prod == NULL) {
     fprintf(stderr, "Memory allocation failed for q32 array.\n");
@@ -885,97 +895,144 @@ void read_ors_btt(char* input) {
   }
 
   bb_meas_t meas;
-
+  int len = payload_size / 2;
   // use iandq as the main buffer (don't modify)
-  DecodeOrsIQCplx(&buffer[hdrlen], payload_size / 2, iandq);
+  DecodeOrsIQCplx(&buffer[hdrlen], len, iandq);
   free(buffer);
-  static int first_pass[30] = { 0 }, first_pass_cnt = 0;
-  memset(first_pass, 0, sizeof(int) * 30);
-  // on second pass cyclically advance code phase to before pos in 1st pass
-  // NB: do not cycle past the code phase otherswise errors will occur!
-  for (int pass = 0; pass < 2; pass++) {
-    memset(&meas, 0, sizeof(bb_meas_t)); first_pass_cnt = 0;
-    for (int loop = 0; loop < cnt; loop++) {
-      bool is_gps = (prn2acq[loop].constel == 1) ? true : false;
-      int rep_offset = first_pass[first_pass_cnt];
-      int size = is_gps ? 4092 : 16368; // the samples per epoch
-      int fft_size = is_gps ? 4096 : 16384;
-      memset(repli, 0, SIZE * sizeof(c32));
-      memset(sums, 0, SIZE * sizeof(float));
-      if (rep_offset > 200) {
-        rep_offset -= 150;
-      }
 
-      if (is_gps) {
-        synth_gps_prn(prn2acq[loop].prn, -prn2acq[loop].doppler, size, repli, SPC, rep_offset);
-      }
-      else { // Galileo
-        synth_e1b_prn(prn2acq[loop].prn, -prn2acq[loop].doppler, size, repli, SPC, rep_offset);
-      }
+  c32* out = (c32*)malloc(len * sizeof(c32));
+  memcpy(out, iandq, len * sizeof(c32));
 
-      fft_c32(fft_size, repli, true); // F(repli)
-      for (int j = 0; j < 4; j++) {
-        memset(prod, 0, SIZE * sizeof(c32));
-        memset(signl, 0, SIZE * sizeof(c32));
-        memcpy(signl, &iandq[j * size], size * sizeof(c32));
-
-        fft_c32(fft_size, signl, true); // F(iandq) and prod=F(iandq) * conj(F(repli)) below
-        for (int i = 0; i < fft_size; i++) { prod[i] = mult(signl[i], get_conj(repli[i])); }
-        fft_c32(fft_size, prod, false); // in-place inv F(prod) 
-        for (int i = 0; i < fft_size; i++) {
-          sums[i] += mag(prod[i]);// add(sums[i], prod[i]);
-        }
-      }
-
-      snprintf(str, sizeof(str), "C:/Python/out%s-%d.csv", (is_gps) ? "GPS" : "GAL", prn2acq[loop].prn);
-      //errno_t err= fopen_s(&fp_out, str, "w");
-      find_top2_peaks_real(sums, size, 3, &peaks, fp_out); if (fp_out) { fclose(fp_out); }
-      if (false) {//is_gps == false) {
-        c32 sum = { 0 };
-        float c_span = 3;
-        int8_t e1_code[16368];
-        float code_out = 0, freq_out = 0, phase_out = 0;
-        GetE1BCode(prn2acq[loop].prn, SPC, e1_code);
-        estimate_prn_code_and_carrier(&iandq[0], size, SPC * 1.023e6f, c_span, e1_code, 1.023e6f,
-          peaks.idx1, 4.f, 1, -prn2acq[loop].doppler, 3, 1, &code_out, &freq_out, &phase_out, &sum);
-        printf("code_out=%f, freq_out=%f, phase_out=%f \n", code_out, freq_out, phase_out);
-      }
-      // compute noise stats for SNR
-      double BW = 3.1623e3; // Hz
-      double cn0 = compute_snr_real(sums, size, peaks) + 35;// +10 * log(BW)
-      double interp = interpCodePhaseFloat(sums, size, &peaks);
-      float thresh = (pass == 0) ? 1.001 : 1.3;
-      float ratio = (peaks.val1 / peaks.val2);
-      if (ratio > thresh) {
-        meas.sats[meas.num_sat].prn = prn2acq[loop].prn;
-        meas.sats[meas.num_sat].code_phase = float(interp + rep_offset) / (SPC * 1023.0f);
-        meas.sats[meas.num_sat].doppler = prn2acq[loop].doppler;
-        meas.sats[meas.num_sat].cno = (float)cn0;
-        meas.sats[meas.num_sat].constellation = is_gps ? SYS_GPS : SYS_GAL;
-        printf("Acquired %s %d Doppler %f Hz Code %f [ms] Chips %f  C/N0 %f dB-Hz ratio=%f\n", is_gps ? "GPS" : "GAL",
-          prn2acq[loop].prn, -prn2acq[loop].doppler, meas.sats[meas.num_sat].code_phase, meas.sats[meas.num_sat].code_phase * 4092.0, meas.sats[meas.num_sat].cno, ratio * ratio);
-        meas.num_sat++;
-      }
-      first_pass[first_pass_cnt] = (int)interp;
-      first_pass_cnt++; // must increment here for things to stay in syn
-    }
-    printf("Done inner loop\n");
+  int loop = 1;
+  // now use a moving window to find location of peaks
+  bool is_gps = true;
+  int size = is_gps ? 4092 : 16368; // the samples per epoch
+  if (is_gps) {
+    synth_gps_prn(prn2acq[loop].prn, /*-prn2acq[loop].doppler*/0.0, size, repli, SPC, 0);
+  }
+  else { // Galileo
+    synth_e1b_prn(prn2acq[loop].prn, /*-prn2acq[loop].doppler*/0.0, size, repli, SPC, 0); // zero code_Phase
+  }
+   
+  // subtract the Doppler from the samples
+  c32 phase;
+  double dphi = 2.0 * PI_F64 * -prn2acq[loop].doppler / (chipping_rate * SPC); //  radians per sample
+  for (int i = 0; i < len; i++) {
+    double phi = fmod(dphi * i, 2 * PI_F64);
+    phase.r = cos(phi);
+    phase.i = sin(phi);
+    out[i] = mult(out[i], phase);
   }
 
-  char fname[256] = "";
-  strcat_s(fname, 256, input);
-  strcat_s(fname, 256, ".msb");
-  printf("writing to %s \n", fname);
-  int num_bytes = write_msb(&meas, (char*)fname);
-  bb_meas_t check = { 0 };
-  FILE* test = NULL;
-  errno_t er2 = fopen_s(&test, (char*)fname, "rb");
-  uint8_t tbuff[128] = { 0 };
-  fread(tbuff, 1, num_bytes, test);
-  read_bb_msb(tbuff, num_bytes, &check);
-  fclose(test);
+  int window = 10;
+  c32* cache = (c32*)malloc(FFT_DB_SIZE * 21 * sizeof(c32));
+  memset(cache, 0, sizeof(c32) * FFT_DB_SIZE * 21);
+  
+  // Compute circular correlation C_k(τ) = FFT^-1{ FFT[signal] · conj(FFT[replica]) }.
+  c32* fft_repl = (c32*)malloc(sizeof(c32) * FFT_DB_SIZE);
+  c32* fft_data = (c32*)malloc(sizeof(c32) * FFT_DB_SIZE);
+  c32* fft_sum  = (c32*)malloc(sizeof(c32) * FFT_DB_SIZE);
+  c32* fft_prod = (c32*)malloc(sizeof(c32) * FFT_DB_SIZE);
+  memset(fft_repl, 0, sizeof(c32) * FFT_DB_SIZE);
+  if (fft_data == NULL || fft_repl == NULL) { printf("Error allocating fft_data or fft_prod\n"); return; }
 
-  free(iandq); free(repli); free(prod); free(signl); free(sums);
+  memcpy(fft_repl, repli, sizeof(c32) * FFT_DB_CODE_LEN);
+  free(repli);
+  fft_c32(FFT_DB_SIZE, fft_repl, true);
+  auto start = std::chrono::high_resolution_clock::now();////////////////////////////////////////
+  int last_location = 0;
+  int cptr = 0;
+  int num_windows = len / (FFT_DB_CODE_LEN * SPC); // number of whole FFT-sized chunks available in out[]
+  for (int center = window / 2; center <= num_windows - window / 2; center++) {
+    if (center == window / 2) { // priming cache speeds things up 4x
+      for (int windex = center - window / 2; windex < center + window / 2; windex += 1) {
+        memset(&cache[cptr * FFT_DB_SIZE], 0, sizeof(c32) * FFT_DB_SIZE);
+        memcpy(&cache[cptr * FFT_DB_SIZE], &out[FFT_DB_CODE_LEN * SPC * windex], sizeof(c32) * SPC * (FFT_DB_CODE_LEN));
+        fft_c32(FFT_DB_SIZE, &cache[cptr * FFT_DB_SIZE], true); // forward FFT
+        cptr = (cptr + 1) % window;
+      }
+      printf("");
+    } else {
+      int indx = center + window / 2 - 1; // index of new window member entering the window
+      //int indx2 = center + (window / 2) - 1; // index of old window member to be removed
+      memset(&cache[cptr * FFT_DB_SIZE], 0, sizeof(c32) * FFT_DB_SIZE);
+      memcpy(&cache[cptr * FFT_DB_SIZE], &out[FFT_DB_CODE_LEN * SPC * indx], sizeof(c32) * SPC * (FFT_DB_CODE_LEN));
+      fft_c32(FFT_DB_SIZE, &cache[cptr * FFT_DB_SIZE], true); // forward FFT
+      cptr = (cptr + 1) % window;
+
+      //printf("B %f %f %f %f %f %f %f %f \n", cache[0 * FFT_QP_SIZE].r, cache[1 * FFT_QP_SIZE].r, cache[64 * FFT_QP_SIZE].r, cache[65 * FFT_QP_SIZE].r, cache[66 * FFT_QP_SIZE].r, cache[67 * FFT_QP_SIZE].r, cache[68 * FFT_QP_SIZE].r, cache[69 * FFT_QP_SIZE].r);
+      //shiftDown(cache, FFT_DB_SIZE, FFT_DB_SIZE * (window - 1));
+      //printf("A %f %f %f %f %f %f %f %f \n", cache[0 * FFT_QP_SIZE].r, cache[1 * FFT_QP_SIZE].r, cache[64 * FFT_QP_SIZE].r, cache[65 * FFT_QP_SIZE].r, cache[66 * FFT_QP_SIZE].r, cache[67 * FFT_QP_SIZE].r, cache[68 * FFT_QP_SIZE].r, cache[69 * FFT_QP_SIZE].r);
+      //memcpy(&cache[indx * FFT_DB_SIZE], &out[FFT_DB_CODE_LEN * SPC * indx2], sizeof(c32) * SPC * (FFT_DB_CODE_LEN));
+      //fft_c32(FFT_DB_SIZE, &cache[indx * FFT_DB_SIZE], true); // forward FFT
+    }
+
+    //memset(nci_sum, 0, sizeof(float) * FFT_QDBIZE);
+    memset(fft_sum, 0, sizeof(c32) * FFT_DB_SIZE);
+    int tmp_idx = cptr; // cptr now points at the slot holding the oldest (smallest-windex) cached FFT
+    for (int windex = center - window / 2; windex < center + window / 2; windex += 1) {
+      //memset(fft_data, 0, sizeof(c32) * FFT_QP_SIZE);
+      //memcpy(fft_data, &out[E5_QP_CODE_LEN * SPC * windex], sizeof(c32) * SPC * (E5_QP_CODE_LEN));
+      //fft_c32(FFT_QP_SIZE, fft_data, true); // forward FFT
+
+      //for (int lp = 0; lp < FFT_QP_SIZE; lp++) {
+      //  if (fft_data[lp].i != cache[tmp_idx * FFT_QP_SIZE + lp].i) {
+      //    printf("cache and fftp disagree at %d \n", lp);
+      //  }
+      //}
+
+      for (int k = 0; k < FFT_DB_SIZE; k++) { // accumulate pt-wise * with conj of replica
+        c32 fft_data_ins = cache[tmp_idx * FFT_DB_SIZE + k];// cache[tmp_idx * FFT_QP_SIZE + k]; fft_data[k];
+        if (windex < center) { // cheaper method           //get_minus_conj
+          fft_sum[k] = add(fft_sum[k], mult(fft_data_ins, get_minus_conj(fft_repl[k])));
+        }
+        else {
+          fft_sum[k] = add(fft_sum[k], mult(fft_data_ins, get_conj(fft_repl[k])));
+        }
+        //fft_prod[k] = mult(fft_data_ins, get_conj(fft_repl[k]));
+      }
+
+      // parallel track prod and IFFT then square and sum
+      //fft_c32(FFT_DP_SIZE, fft_prod, false);
+      //for (int k = 0; k < FFT_DP_SIZE; k++) { nci_sum[k] += mag(fft_prod[k]); }
+
+      tmp_idx = (tmp_idx + 1) % window;
+    } // for windex 
+
+    // used to have the IFFT here
+    fft_c32(FFT_DB_SIZE, fft_sum, false); // IFFT // cheaper method
+
+    FILE* fp_out = NULL;
+    //if (center == 32) {  errno_t er = fopen_s(&fp_out, "C:/Python/nci_sum4.csv", "w"); }
+    top2_pks peaks;
+    find_top2_peaks_cplx(fft_sum, FFT_DB_SIZE, 4, &peaks, fp_out);
+    if (fp_out != NULL) { fclose(fp_out); }
+    //top2_pks peaks2 = { 0,0,1,0 };
+    //find_top2_peaks_real(nci_sum, E5_DP_CODE_LEN * SPC, 4, &peaks2, fp_out);
+
+
+    bool isMax = findMax(peaks.val1, 7000, 5);
+    int best_code = 0; float best_pwr = 0; float best_dop = 0; double phase_deg = 0;
+    //if (peaks2.idx1 != c_phase && isBT) { num_errors++; printf("code2 %d \n", peaks2.idx1); }
+
+    double ang = atan2(fft_sum[peaks.idx1].i, fft_sum[peaks.idx1].r) * 57.2957795;
+
+    float ratio = peaks.val1 / peaks.val2;
+    //float ratio2 = peaks2.val1 / peaks2.val2;
+    // nix if last max was less than 20 points ago 
+    if (isMax) {
+      found[loc_cnt++] = center - 2;
+      last_location = center - 2;
+    }
+
+    printf("center,%03d, max,%6.1f,p1,%d,ratio,%4.2f,ang,%4.2f,isMax,%d\n", 
+      center, peaks.val1, peaks.idx1, ratio, ang, isMax);
+  } // for center
+
+
+
+  free(iandq); free(prod); free(signl); free(sums); free(out); free(cache); // repli already freed above
+  free(fft_repl); free(fft_data); free(fft_sum); free(fft_prod);
   //////////////////////////////////////////////////////
 }
 
@@ -1637,7 +1694,7 @@ void test_quasi_diff_pilot() {
 // +1/-1 template on raw I would be vulnerable to in a snapshot receiver.
 void test_quasi_diff2() {
   srand((unsigned int)time(NULL)); // randomise seed
-
+  printf("Test quasi pilot differential bit transition detection\n");
 #define SPC 4     // samples per chip
 #define BIT_MS 20 // GPS nav bit period in ms (code epochs per bit)
   int nci = 200;  // 100 ms snapshot
@@ -1647,11 +1704,11 @@ void test_quasi_diff2() {
   float dop1 = 2000, dop2 = -3000;
   float dop_error = 250;    // full 2*250 Hz error in open-loop wipeoff
   float dop_err_rate = 0.6; // Hz per ms residual doppler ramp
-  float sigma = 9.0;        // noise level
+  float sigma = 1.0;        // noise level
 
   // ground-truth bit transitions: deliberately no transition at 40 ms to
   // prove the phase search is not fooled by a "missing" data transition
-  int locations[50] = {  82 };
+  int locations[50] = { 20,41,62,83,104,125,146,167,188 };
 
   c32* out = (c32*)malloc(len * sizeof(c32));
   if (out == NULL) {
@@ -2013,12 +2070,6 @@ void test_quasi_pilot_330Up() {
   free(out); free(fft_data); free(fft_sum); free(fft_repl); free(sum_mag);
 }
 
-// shift left
-void shiftDown(c32* array,int gap, int size) {
-  for (int i = 0; i < size; i++) {
-    array[i] = array[i + gap];
-  }
-}
 
 void gps_data_bits(results_s* results) {
   srand((unsigned int)time(NULL)); // randomise seed
@@ -2616,7 +2667,7 @@ void test_quasi_pilot3() {
  */
 int main(int argc,char* argv[])
 {
-  
+
 
   if (0) {
     // set to 1 above if need to recalculate some of the twiddleCoefs
@@ -2727,8 +2778,8 @@ int main(int argc,char* argv[])
     return 0;
   }
 
-  // read 100ms file for bit transition
-  if (0) {
+  // read 100ms file for GPS bit transition
+  if (1) {
     // G_2025_09_03_23_04_45.ors G_2025_09_03_23_04_56.ors G_2025_09_03_23_05_33.ors G_2025_09_03_23_04_56.ors G_2025_09_03_23_12_45.ors G_2025_09_03_23_19_10.ors
     FILE* fp_in = NULL; //output file
     errno_t er = fopen_s(&fp_in, "C:/work/Baseband/TestData/100ms/bw25/orsFiles.txt", "r");
@@ -2751,7 +2802,7 @@ int main(int argc,char* argv[])
     return 0;
   }
 
-  if (1) {
+  if (0) {
     test_quasi_diff2();
     return 0;
   }
