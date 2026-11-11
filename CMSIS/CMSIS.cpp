@@ -2125,7 +2125,7 @@ void test_quasi_pilot3() {
 int main(int argc,char* argv[])
 {
   float T = (float) (1.0 / 500.0); // Period for the test sine wave (1/500 seconds = 2ms period)
-  const int multK = 1; // multiple of 1K size can be used for 1,2,4,8,or 16 (has not been tested for less than 1K)
+  const int multK = 16; // multiple of 1K size can be used for 1,2,4,8,or 16 (has not been tested for less than 1K)
   float F1 = 50.0f; // Frequency of the first sine wave
   float F2 = 80.0f;// 80.0f; // Frequency of the second sine wave
   float F3 = 155.0f;// 155.0f; // Frequency of the third sine wave (not used in this example, but can be added for more complexity)
@@ -2135,8 +2135,8 @@ int main(int argc,char* argv[])
 //#define DO_FLOAT
 //#define DO_Q15_RADIX2
 //#define DO_Q15_RADIX4
-//#define DO_Q31_RADIX2 
-//#define DO_Q31_RADIX4
+//define DO_Q31_RADIX2 
+#define DO_Q31_RADIX4
 
 
   if (0) {
@@ -2253,7 +2253,7 @@ int main(int argc,char* argv[])
     return 0;
   }
 
-  if (1) {
+  if (0) {
     //test_quasi_diff_pilot();
     //test_quasi_pilot_330Up();
     
